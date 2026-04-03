@@ -1,0 +1,21 @@
+includes:
+	- phpstan-baseline.neon
+	- vendor/szepeviktor/phpstan-wordpress/extension.neon
+
+parameters:
+	level: 5
+
+	paths:
+		- plugin.php
+		- uninstall.php
+		- src/
+
+	excludePaths:
+		- vendor/
+
+	# WP 7.0 classes not yet covered by wordpress-stubs.
+	scanDirectories:
+		- %currentWorkingDirectory%/../../../wp-includes/php-ai-client/src/
+
+	scanFiles:
+		- %currentWorkingDirectory%/../../../wp-includes/class-wp-connector-registry.php

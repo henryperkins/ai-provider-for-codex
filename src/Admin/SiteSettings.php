@@ -1,6 +1,6 @@
 <?php
 /**
- * Site-scoped broker settings.
+ * Site-scoped local runtime settings.
  *
  * @package AIProviderForCodex
  */
@@ -9,11 +9,8 @@ declare( strict_types=1 );
 
 namespace AIProviderForCodex\Admin;
 
-use AIProviderForCodex\Broker\HealthMonitor;
-use AIProviderForCodex\Broker\Settings;
-use AIProviderForCodex\Broker\SiteRegistration;
-use AIProviderForCodex\Provider\ModelCatalogState;
-use RuntimeException;
+use AIProviderForCodex\Runtime\HealthMonitor;
+use AIProviderForCodex\Runtime\Settings;
 
 /**
  * Renders the site settings page.
@@ -43,41 +40,21 @@ final class SiteSettings {
 	public static function register_settings(): void {
 		register_setting(
 			'ai-provider-for-codex',
-			Settings::OPTION_BROKER_BASE_URL,
+			Settings::OPTION_RUNTIME_BASE_URL,
 			[
 				'type'              => 'string',
 				'sanitize_callback' => [ Settings::class, 'sanitize_base_url' ],
-				'default'           => '',
+				'default'           => Settings::DEFAULT_RUNTIME_BASE_URL,
 			]
 		);
 
 		register_setting(
 			'ai-provider-for-codex',
-			Settings::OPTION_SITE_ID,
+			Settings::OPTION_RUNTIME_BEARER,
 			[
 				'type'              => 'string',
-				'sanitize_callback' => 'sanitize_text_field',
+				'sanitize_callback' => [ Settings::class, 'sanitize_bearer_token' ],
 				'default'           => '',
-			]
-		);
-
-		register_setting(
-			'ai-provider-for-codex',
-			Settings::OPTION_SITE_SECRET,
-			[
-				'type'              => 'string',
-				'sanitize_callback' => 'sanitize_text_field',
-				'default'           => '',
-			]
-		);
-
-		register_setting(
-			'ai-provider-for-codex',
-			Settings::OPTION_DEFAULT_MODEL,
-			[
-				'type'              => 'string',
-				'sanitize_callback' => [ Settings::class, 'sanitize_default_model' ],
-				'default'           => Settings::get_default_model(),
 			]
 		);
 
@@ -93,45 +70,6 @@ final class SiteSettings {
 	}
 
 	/**
-	 * Handles installation exchange actions.
-	 *
-	 * @return void
-	 */
-	public static function maybe_handle_actions(): void {
-		if ( ! is_admin() || ! current_user_can( 'manage_options' ) ) {
-			return;
-		}
-
-		$page   = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : '';
-		$action = isset( $_POST['codex_provider_action'] ) ? sanitize_key( wp_unslash( $_POST['codex_provider_action'] ) ) : '';
-
-		if ( 'ai-provider-for-codex' !== $page || 'exchange-installation' !== $action ) {
-			return;
-		}
-
-		check_admin_referer( 'codex-provider-exchange-installation' );
-
-		try {
-			SiteRegistration::exchange_installation_code(
-				(string) wp_unslash( $_POST['installation_code'] ?? '' )
-			);
-
-			// Redirect to user connection page so the admin can link their account next.
-			wp_safe_redirect(
-				add_query_arg(
-					[
-						'codex_provider_notice' => 'site-registered',
-					],
-					UserConnectionPage::page_url()
-				)
-			);
-			exit;
-		} catch ( RuntimeException $exception ) {
-			self::redirect_with_notice( 'site-registration-failed', $exception->getMessage() );
-		}
-	}
-
-	/**
 	 * Renders the page.
 	 *
 	 * @return void
@@ -141,12 +79,14 @@ final class SiteSettings {
 			return;
 		}
 
-		$notice        = self::read_notice();
-		$site_catalog  = ModelCatalogState::get_site_catalog();
-		$broker_status = HealthMonitor::get_status();
-		$is_configured = Settings::has_required_site_configuration();
-		$health_ind    = StatusLabels::status_indicator( (string) $broker_status['status'] );
-		$model_labels  = ModelCatalogState::labels_from_catalog( $site_catalog );
+		$notice          = self::read_notice();
+		$fallback_models = Settings::get_allowed_models();
+		$is_configured   = Settings::has_required_configuration();
+		$runtime_status  = $is_configured ? HealthMonitor::probe() : HealthMonitor::get_status();
+		$runtime_config  = Settings::configuration_metadata();
+		$health_ind      = StatusLabels::status_indicator( (string) $runtime_status['status'] );
+		$base_url_locked = ! empty( $runtime_config['base_url_managed'] );
+		$bearer_locked   = ! empty( $runtime_config['bearer_token_managed'] );
 		?>
 		<style>
 			.codex-status-cards { display: flex; flex-wrap: wrap; gap: 1rem; margin-bottom: 2rem; max-width: 960px; }
@@ -160,18 +100,22 @@ final class SiteSettings {
 			.codex-indicator.error { background: #d63638; }
 			.codex-models-list { display: flex; flex-wrap: wrap; gap: 0.375rem; margin-top: 0.25rem; }
 			.codex-model-pill { display: inline-block; background: #f0f0f1; border-radius: 3px; padding: 2px 8px; font-size: 12px; }
-			.codex-model-pill.default { background: #2271b1; color: #fff; }
 			.codex-how-it-works { background: #f0f6fc; border: 1px solid #c3c4c7; border-left: 4px solid #2271b1; padding: 1rem 1.25rem; max-width: 960px; margin-bottom: 1.5rem; border-radius: 2px; }
 			.codex-how-it-works p { margin: 0.25rem 0; }
-			.codex-advanced-toggle { cursor: pointer; user-select: none; color: #2271b1; font-weight: 600; }
-			.codex-advanced-toggle:hover { color: #135e96; }
 		</style>
 		<div class="wrap">
 			<h1><?php esc_html_e( 'AI Provider for Codex', 'ai-provider-for-codex' ); ?></h1>
 
 			<div class="codex-how-it-works">
+				<p><?php esc_html_e( 'Codex uses a local runtime service that runs on the same host as WordPress. Each user links their own Codex account so access and billing stay user-specific.', 'ai-provider-for-codex' ); ?></p>
 				<p>
-					<?php esc_html_e( 'Codex uses a broker service that connects your WordPress site to Codex AI models. Unlike API-key providers, each user links their own Codex account for billing and access control.', 'ai-provider-for-codex' ); ?>
+					<?php
+					printf(
+						/* translators: %s: absolute shared env file path. */
+						esc_html__( 'For automated installs, the plugin can auto-detect the runtime URL and bearer token from %s.', 'ai-provider-for-codex' ),
+						(string) $runtime_config['shared_env_file']
+					);
+					?>
 				</p>
 				<p>
 					<?php
@@ -190,165 +134,83 @@ final class SiteSettings {
 			</div>
 
 			<?php self::render_notice( $notice ); ?>
+			<?php settings_errors(); ?>
 
 			<div class="codex-status-cards">
 				<div class="codex-status-card">
-					<h3><?php esc_html_e( 'Connection', 'ai-provider-for-codex' ); ?></h3>
+					<h3><?php esc_html_e( 'Runtime', 'ai-provider-for-codex' ); ?></h3>
 					<div class="value">
 						<span class="codex-indicator <?php echo esc_attr( $is_configured ? $health_ind : 'error' ); ?>"></span>
 						<?php
 						if ( ! $is_configured ) {
 							esc_html_e( 'Not configured', 'ai-provider-for-codex' );
 						} else {
-							echo esc_html( StatusLabels::broker_health_label( (string) $broker_status['status'] ) );
+							echo esc_html( StatusLabels::runtime_health_label( (string) $runtime_status['status'] ) );
 						}
 						?>
 					</div>
-					<?php if ( ! empty( $broker_status['checked_at'] ) ) : ?>
-						<div class="meta"><?php echo esc_html( StatusLabels::relative_time( (string) $broker_status['checked_at'] ) ); ?></div>
+					<?php if ( ! empty( $runtime_status['checked_at'] ) ) : ?>
+						<div class="meta"><?php echo esc_html( StatusLabels::relative_time( (string) $runtime_status['checked_at'] ) ); ?></div>
 					<?php endif; ?>
-					<?php if ( ! empty( $broker_status['error'] ) ) : ?>
-						<div class="meta" style="color: #d63638;"><?php echo esc_html( (string) $broker_status['error'] ); ?></div>
+					<?php if ( ! empty( $runtime_status['error'] ) ) : ?>
+						<div class="meta" style="color: #d63638;"><?php echo esc_html( (string) $runtime_status['error'] ); ?></div>
 					<?php endif; ?>
 				</div>
 
 				<div class="codex-status-card">
-					<h3><?php esc_html_e( 'Default Model', 'ai-provider-for-codex' ); ?></h3>
+					<h3><?php esc_html_e( 'Fallback models', 'ai-provider-for-codex' ); ?></h3>
 					<div class="value">
-						<?php
-						$default_model = (string) $site_catalog['default_model'];
-						echo esc_html( '' !== $default_model ? ModelCatalogState::label_for_model_id( $default_model ) : '—' );
-						?>
-					</div>
-					<div class="meta">
 						<?php
 						printf(
 							/* translators: %d: number of models. */
-							esc_html( _n( '%d model available', '%d models available', count( $model_labels ), 'ai-provider-for-codex' ) ),
-							count( $model_labels )
+							esc_html( _n( '%d model configured', '%d models configured', count( $fallback_models ), 'ai-provider-for-codex' ) ),
+							count( $fallback_models )
 						);
 						?>
 					</div>
-				</div>
-
-				<div class="codex-status-card">
-					<h3><?php esc_html_e( 'Catalog', 'ai-provider-for-codex' ); ?></h3>
-					<div class="value"><?php echo esc_html( StatusLabels::catalog_source_label( (string) $site_catalog['source'] ) ); ?></div>
-					<?php if ( ! empty( $site_catalog['checked_at'] ) ) : ?>
-						<div class="meta">
-							<?php
-							printf(
-								/* translators: %s: relative time. */
-								esc_html__( 'Refreshed %s', 'ai-provider-for-codex' ),
-								esc_html( StatusLabels::relative_time( (string) $site_catalog['checked_at'] ) )
-							);
-							?>
-						</div>
-					<?php endif; ?>
+					<div class="meta"><?php esc_html_e( 'Used before a user links a Codex account.', 'ai-provider-for-codex' ); ?></div>
 				</div>
 			</div>
 
-			<?php if ( ! empty( $model_labels ) ) : ?>
+			<?php if ( ! empty( $fallback_models ) ) : ?>
 				<div class="codex-models-list" style="max-width: 960px; margin-bottom: 2rem;">
-					<?php foreach ( $model_labels as $label ) : ?>
-						<span class="codex-model-pill<?php echo $label === ModelCatalogState::label_for_model_id( $default_model ) ? ' default' : ''; ?>">
-							<?php echo esc_html( $label ); ?>
+					<?php foreach ( $fallback_models as $model_id ) : ?>
+						<span class="codex-model-pill">
+							<?php echo esc_html( $model_id ); ?>
 						</span>
 					<?php endforeach; ?>
 				</div>
 			<?php endif; ?>
 
-			<?php if ( ! $is_configured ) : ?>
-				<h2><?php esc_html_e( 'Site Setup', 'ai-provider-for-codex' ); ?></h2>
-				<p><?php esc_html_e( 'Use a one-time installation code from your broker dashboard to connect this site. The code configures the site-to-broker connection shared by all users.', 'ai-provider-for-codex' ); ?></p>
-				<form method="post" action="<?php echo esc_url( self::page_url() ); ?>">
-					<?php wp_nonce_field( 'codex-provider-exchange-installation' ); ?>
-					<input type="hidden" name="codex_provider_action" value="exchange-installation" />
-					<table class="form-table" role="presentation">
-						<tr>
-							<th scope="row">
-								<label for="installation_code"><?php esc_html_e( 'Installation code', 'ai-provider-for-codex' ); ?></label>
-							</th>
-							<td>
-								<input class="regular-text" id="installation_code" name="installation_code" type="text" value="" />
-								<p class="description"><?php esc_html_e( 'Paste the one-time code from your broker onboarding page.', 'ai-provider-for-codex' ); ?></p>
-							</td>
-						</tr>
-					</table>
-					<?php submit_button( __( 'Exchange installation code', 'ai-provider-for-codex' ) ); ?>
-				</form>
-			<?php else : ?>
-				<h2><?php esc_html_e( 'Re-register Site', 'ai-provider-for-codex' ); ?></h2>
-				<p><?php esc_html_e( 'If you need to re-register with a new installation code, paste it here. This replaces the existing site credentials.', 'ai-provider-for-codex' ); ?></p>
-				<form method="post" action="<?php echo esc_url( self::page_url() ); ?>">
-					<?php wp_nonce_field( 'codex-provider-exchange-installation' ); ?>
-					<input type="hidden" name="codex_provider_action" value="exchange-installation" />
-					<table class="form-table" role="presentation">
-						<tr>
-							<th scope="row">
-								<label for="installation_code"><?php esc_html_e( 'Installation code', 'ai-provider-for-codex' ); ?></label>
-							</th>
-							<td>
-								<input class="regular-text" id="installation_code" name="installation_code" type="text" value="" />
-							</td>
-						</tr>
-					</table>
-					<?php submit_button( __( 'Exchange installation code', 'ai-provider-for-codex' ) ); ?>
-				</form>
-			<?php endif; ?>
-
-			<hr />
-
-			<p>
-				<span class="codex-advanced-toggle" onclick="document.getElementById('codex-advanced-settings').style.display = document.getElementById('codex-advanced-settings').style.display === 'none' ? 'block' : 'none';">
-					▸ <?php esc_html_e( 'Advanced configuration', 'ai-provider-for-codex' ); ?>
-				</span>
-			</p>
-
-			<div id="codex-advanced-settings" style="display: none;">
-				<p class="description"><?php esc_html_e( 'These fields are populated automatically by the installation code exchange. Edit them only if you need to override broker settings manually.', 'ai-provider-for-codex' ); ?></p>
-				<form method="post" action="options.php">
-					<?php settings_fields( 'ai-provider-for-codex' ); ?>
-					<table class="form-table" role="presentation">
-						<tr>
-							<th scope="row"><label for="<?php echo esc_attr( Settings::OPTION_BROKER_BASE_URL ); ?>"><?php esc_html_e( 'Broker base URL', 'ai-provider-for-codex' ); ?></label></th>
-							<td>
-								<input class="regular-text code" id="<?php echo esc_attr( Settings::OPTION_BROKER_BASE_URL ); ?>" name="<?php echo esc_attr( Settings::OPTION_BROKER_BASE_URL ); ?>" type="url" value="<?php echo esc_attr( Settings::get_base_url() ); ?>" />
-								<p class="description"><?php esc_html_e( 'The URL of your Codex broker service (provided during onboarding).', 'ai-provider-for-codex' ); ?></p>
-							</td>
-						</tr>
-						<tr>
-							<th scope="row"><label for="<?php echo esc_attr( Settings::OPTION_SITE_ID ); ?>"><?php esc_html_e( 'Site ID', 'ai-provider-for-codex' ); ?></label></th>
-							<td>
-								<input class="regular-text code" id="<?php echo esc_attr( Settings::OPTION_SITE_ID ); ?>" name="<?php echo esc_attr( Settings::OPTION_SITE_ID ); ?>" type="text" value="<?php echo esc_attr( Settings::get_site_id() ); ?>" />
-								<p class="description"><?php esc_html_e( 'Unique identifier assigned to this WordPress site by the broker.', 'ai-provider-for-codex' ); ?></p>
-							</td>
-						</tr>
-						<tr>
-							<th scope="row"><label for="<?php echo esc_attr( Settings::OPTION_SITE_SECRET ); ?>"><?php esc_html_e( 'Site secret', 'ai-provider-for-codex' ); ?></label></th>
-							<td>
-								<input class="regular-text code" id="<?php echo esc_attr( Settings::OPTION_SITE_SECRET ); ?>" name="<?php echo esc_attr( Settings::OPTION_SITE_SECRET ); ?>" type="password" value="<?php echo esc_attr( Settings::get_site_secret() ); ?>" autocomplete="off" />
-								<p class="description"><?php esc_html_e( 'Shared secret for authenticating requests between this site and the broker. Keep this confidential.', 'ai-provider-for-codex' ); ?></p>
-							</td>
-						</tr>
-						<tr>
-							<th scope="row"><label for="<?php echo esc_attr( Settings::OPTION_DEFAULT_MODEL ); ?>"><?php esc_html_e( 'Default model', 'ai-provider-for-codex' ); ?></label></th>
-							<td>
-								<input class="regular-text code" id="<?php echo esc_attr( Settings::OPTION_DEFAULT_MODEL ); ?>" name="<?php echo esc_attr( Settings::OPTION_DEFAULT_MODEL ); ?>" type="text" value="<?php echo esc_attr( Settings::get_default_model() ); ?>" />
-								<p class="description"><?php esc_html_e( 'The model used when no specific model is requested.', 'ai-provider-for-codex' ); ?></p>
-							</td>
-						</tr>
-						<tr>
-							<th scope="row"><label for="<?php echo esc_attr( Settings::OPTION_ALLOWED_MODELS ); ?>"><?php esc_html_e( 'Allowed models', 'ai-provider-for-codex' ); ?></label></th>
-							<td>
-								<textarea class="large-text code" id="<?php echo esc_attr( Settings::OPTION_ALLOWED_MODELS ); ?>" name="<?php echo esc_attr( Settings::OPTION_ALLOWED_MODELS ); ?>" rows="6"><?php echo esc_textarea( Settings::allowed_models_as_text() ); ?></textarea>
-								<p class="description"><?php esc_html_e( 'Fallback model list used until broker snapshots provide a live catalog. One model ID per line.', 'ai-provider-for-codex' ); ?></p>
-							</td>
-						</tr>
-					</table>
-					<?php submit_button( __( 'Save settings', 'ai-provider-for-codex' ) ); ?>
-				</form>
-			</div>
+			<form method="post" action="options.php">
+				<?php settings_fields( 'ai-provider-for-codex' ); ?>
+				<table class="form-table" role="presentation">
+					<tr>
+						<th scope="row"><label for="<?php echo esc_attr( Settings::OPTION_RUNTIME_BASE_URL ); ?>"><?php esc_html_e( 'Runtime URL', 'ai-provider-for-codex' ); ?></label></th>
+						<td>
+							<input class="regular-text code" id="<?php echo esc_attr( Settings::OPTION_RUNTIME_BASE_URL ); ?>" name="<?php echo esc_attr( Settings::OPTION_RUNTIME_BASE_URL ); ?>" type="url" value="<?php echo esc_attr( Settings::get_base_url() ); ?>" <?php disabled( $base_url_locked ); ?> />
+							<p class="description"><?php esc_html_e( 'The base URL of the local Codex runtime service, typically http://127.0.0.1:4317.', 'ai-provider-for-codex' ); ?></p>
+							<p class="description"><?php echo esc_html( (string) $runtime_config['base_url_source'] ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="<?php echo esc_attr( Settings::OPTION_RUNTIME_BEARER ); ?>"><?php esc_html_e( 'Runtime bearer token', 'ai-provider-for-codex' ); ?></label></th>
+						<td>
+							<input class="regular-text code" id="<?php echo esc_attr( Settings::OPTION_RUNTIME_BEARER ); ?>" name="<?php echo esc_attr( Settings::OPTION_RUNTIME_BEARER ); ?>" type="password" value="<?php echo esc_attr( $bearer_locked ? '' : Settings::get_bearer_token() ); ?>" <?php disabled( $bearer_locked ); ?> autocomplete="off" placeholder="<?php echo esc_attr( $bearer_locked ? __( 'Managed automatically', 'ai-provider-for-codex' ) : '' ); ?>" />
+							<p class="description"><?php esc_html_e( 'The shared bearer token used between WordPress and the local Codex runtime.', 'ai-provider-for-codex' ); ?></p>
+							<p class="description"><?php echo esc_html( (string) $runtime_config['bearer_token_source'] ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="<?php echo esc_attr( Settings::OPTION_ALLOWED_MODELS ); ?>"><?php esc_html_e( 'Fallback models', 'ai-provider-for-codex' ); ?></label></th>
+						<td>
+							<textarea class="large-text code" id="<?php echo esc_attr( Settings::OPTION_ALLOWED_MODELS ); ?>" name="<?php echo esc_attr( Settings::OPTION_ALLOWED_MODELS ); ?>" rows="4"><?php echo esc_textarea( Settings::allowed_models_as_text() ); ?></textarea>
+							<p class="description"><?php esc_html_e( 'Model list used before a user links their Codex account. One model ID per line.', 'ai-provider-for-codex' ); ?></p>
+						</td>
+					</tr>
+				</table>
+				<?php submit_button( __( 'Save settings', 'ai-provider-for-codex' ) ); ?>
+			</form>
 		</div>
 		<?php
 	}
@@ -360,26 +222,6 @@ final class SiteSettings {
 	 */
 	public static function page_url(): string {
 		return admin_url( 'options-general.php?page=ai-provider-for-codex' );
-	}
-
-	/**
-	 * Redirects back with a notice.
-	 *
-	 * @param string      $code Notice code.
-	 * @param string|null $message Optional message.
-	 * @return void
-	 */
-	private static function redirect_with_notice( string $code, ?string $message = null ): void {
-		$url = add_query_arg(
-			[
-				'codex_provider_notice'         => $code,
-				'codex_provider_notice_message' => rawurlencode( (string) $message ),
-			],
-			self::page_url()
-		);
-
-		wp_safe_redirect( $url );
-		exit;
 	}
 
 	/**
@@ -412,12 +254,12 @@ final class SiteSettings {
 		$text  = '';
 
 		switch ( $notice['code'] ) {
-			case 'site-registered':
-				$text = __( 'Broker site registration was updated.', 'ai-provider-for-codex' );
+			case 'settings-saved':
+				$text = __( 'Local Codex runtime settings were updated.', 'ai-provider-for-codex' );
 				break;
-			case 'site-registration-failed':
+			case 'settings-failed':
 				$class = 'notice notice-error';
-				$text  = '' !== $notice['message'] ? $notice['message'] : __( 'The broker site registration exchange failed.', 'ai-provider-for-codex' );
+				$text  = '' !== $notice['message'] ? $notice['message'] : __( 'Updating the local Codex runtime settings failed.', 'ai-provider-for-codex' );
 				break;
 		}
 

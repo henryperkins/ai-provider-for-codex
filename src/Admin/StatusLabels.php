@@ -10,7 +10,7 @@ declare( strict_types=1 );
 namespace AIProviderForCodex\Admin;
 
 /**
- * Maps machine-readable status/reason codes to user-friendly labels.
+ * Maps machine-readable status and reason codes to user-friendly labels.
  */
 final class StatusLabels {
 
@@ -24,14 +24,16 @@ final class StatusLabels {
 		switch ( $reason ) {
 			case 'ready':
 				return __( 'Connected and ready', 'ai-provider-for-codex' );
-			case 'broker_unconfigured':
-				return __( 'Broker not configured', 'ai-provider-for-codex' );
+			case 'runtime_unconfigured':
+				return __( 'Runtime not configured', 'ai-provider-for-codex' );
+			case 'runtime_unreachable':
+				return __( 'Runtime unreachable', 'ai-provider-for-codex' );
 			case 'user_unlinked':
 				return __( 'Account not linked', 'ai-provider-for-codex' );
 			case 'connection_expired':
 				return __( 'Connection expired', 'ai-provider-for-codex' );
-			case 'broker_unreachable':
-				return __( 'Broker unreachable', 'ai-provider-for-codex' );
+			case 'login_pending':
+				return __( 'Login pending', 'ai-provider-for-codex' );
 			default:
 				return $reason;
 		}
@@ -44,27 +46,29 @@ final class StatusLabels {
 	 * @return string
 	 */
 	public static function readiness_guidance( string $reason ): string {
-		switch ( $reason ) {
-			case 'broker_unconfigured':
-				return __( 'Complete site setup first.', 'ai-provider-for-codex' );
+			switch ( $reason ) {
+				case 'runtime_unconfigured':
+					return __( 'Add your local Codex runtime URL and bearer token in plugin settings, or provision `/etc/codex-wp-sidecar.env` for automatic detection.', 'ai-provider-for-codex' );
+				case 'runtime_unreachable':
+					return __( 'Check that the local Codex runtime service is running and that WordPress can reach its `/healthz` endpoint.', 'ai-provider-for-codex' );
 			case 'user_unlinked':
 				return __( 'Connect your Codex account to start using AI features.', 'ai-provider-for-codex' );
 			case 'connection_expired':
 				return __( 'Reconnect to restore access.', 'ai-provider-for-codex' );
-			case 'broker_unreachable':
-				return __( 'Check broker URL and network connectivity.', 'ai-provider-for-codex' );
+			case 'login_pending':
+				return __( 'Complete the device-code login and then refresh this page.', 'ai-provider-for-codex' );
 			default:
 				return '';
 		}
 	}
 
 	/**
-	 * Returns a human-readable label for a broker health status.
+	 * Returns a human-readable label for a runtime health status.
 	 *
 	 * @param string $status Health status from HealthMonitor.
 	 * @return string
 	 */
-	public static function broker_health_label( string $status ): string {
+	public static function runtime_health_label( string $status ): string {
 		switch ( $status ) {
 			case 'healthy':
 				return __( 'Healthy', 'ai-provider-for-codex' );
@@ -86,13 +90,9 @@ final class StatusLabels {
 		switch ( $source ) {
 			case 'user_snapshot':
 				return __( 'From your Codex account', 'ai-provider-for-codex' );
-			case 'site_broker_aggregate':
-				return __( 'Auto-refreshed from broker', 'ai-provider-for-codex' );
-			case 'site_snapshot_aggregate':
-				return __( 'From linked accounts', 'ai-provider-for-codex' );
 			case 'settings_fallback':
 			default:
-				return __( 'Configured defaults (no live data)', 'ai-provider-for-codex' );
+				return __( 'Configured defaults', 'ai-provider-for-codex' );
 		}
 	}
 
@@ -110,6 +110,7 @@ final class StatusLabels {
 			case 'connection_expired':
 			case 'user_unlinked':
 			case 'unknown':
+			case 'login_pending':
 				return 'warning';
 			default:
 				return 'error';

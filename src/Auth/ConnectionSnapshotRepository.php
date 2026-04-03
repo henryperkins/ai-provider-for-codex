@@ -10,7 +10,7 @@ declare( strict_types=1 );
 namespace AIProviderForCodex\Auth;
 
 /**
- * Stores broker-derived readiness snapshots.
+ * Stores runtime-derived readiness snapshots.
  */
 final class ConnectionSnapshotRepository {
 
@@ -106,7 +106,7 @@ final class ConnectionSnapshotRepository {
 	 * Inserts or replaces a snapshot row.
 	 *
 	 * @param string               $connection_id Connection ID.
-	 * @param array<string,mixed>  $payload Broker payload.
+	 * @param array<string,mixed>  $payload Runtime payload.
 	 * @param string               $readiness_status Computed readiness state.
 	 * @return void
 	 */
@@ -145,7 +145,7 @@ final class ConnectionSnapshotRepository {
 			$formats = [ '%d' ] + $formats;
 		}
 
-		$wpdb->replace( self::table_name(), $data, array_values( $formats ) );
+		$wpdb->replace( self::table_name(), $data, $formats );
 	}
 
 	/**

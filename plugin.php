@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       AI Provider for Codex
  * Plugin URI:        https://github.com/henryperkins/wp-hperkins-com/tree/main/wp-content/plugins/ai-provider-for-codex
- * Description:       Broker-backed Codex provider scaffold for the WordPress AI Client.
+ * Description:       Codex provider for the WordPress AI Client using a local runtime sidecar.
  * Requires at least: 7.0
  * Requires PHP:      8.0
  * Version:           0.1.0

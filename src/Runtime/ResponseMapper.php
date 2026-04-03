@@ -1,13 +1,13 @@
 <?php
 /**
- * Broker response normalization helpers.
+ * Local runtime response normalization helpers.
  *
  * @package AIProviderForCodex
  */
 
 declare( strict_types=1 );
 
-namespace AIProviderForCodex\Broker;
+namespace AIProviderForCodex\Runtime;
 
 use AIProviderForCodex\Auth\ConnectionRepository;
 use AIProviderForCodex\Auth\ConnectionSnapshotRepository;
@@ -22,44 +22,30 @@ use WordPress\AiClient\Results\DTO\TokenUsage;
 use WordPress\AiClient\Results\Enums\FinishReasonEnum;
 
 /**
- * Maps broker payloads into local storage and AI Client DTOs.
+ * Maps runtime payloads into local storage and AI Client DTOs.
  */
 final class ResponseMapper {
 
 	/**
-	 * Stores a connection exchange payload locally.
+	 * Stores a runtime snapshot locally.
 	 *
 	 * @param int                 $wp_user_id User ID.
-	 * @param array<string,mixed> $payload Broker payload.
+	 * @param string              $connection_id Local connection ID.
+	 * @param array<string,mixed> $payload Runtime payload.
 	 * @return void
 	 */
-	public static function store_connection_exchange( int $wp_user_id, array $payload ): void {
-		ConnectionRepository::upsert( $wp_user_id, $payload );
-
-		if ( ! empty( $payload['connectionId'] ) ) {
-			ConnectionSnapshotRepository::upsert( (string) $payload['connectionId'], $payload, 'ready' );
-		}
-	}
-
-	/**
-	 * Stores a refresh payload locally.
-	 *
-	 * @param int                 $wp_user_id User ID.
-	 * @param string              $connection_id Connection ID.
-	 * @param array<string,mixed> $payload Broker payload.
-	 * @return void
-	 */
-	public static function store_connection_refresh( int $wp_user_id, string $connection_id, array $payload ): void {
+	public static function store_connection_snapshot( int $wp_user_id, string $connection_id, array $payload ): void {
 		$payload['connectionId'] = $connection_id;
+		$payload['status']       = sanitize_text_field( (string) ( $payload['status'] ?? 'linked' ) );
 
 		ConnectionRepository::upsert( $wp_user_id, $payload );
 		ConnectionSnapshotRepository::upsert( $connection_id, $payload, 'ready' );
 	}
 
 	/**
-	 * Creates a GenerativeAiResult from a broker text response.
+	 * Creates a GenerativeAiResult from a runtime text response.
 	 *
-	 * @param array<string,mixed> $payload Broker payload.
+	 * @param array<string,mixed> $payload Runtime payload.
 	 * @param ProviderMetadata    $provider_metadata Provider metadata.
 	 * @param ModelMetadata       $model_metadata Model metadata.
 	 * @return GenerativeAiResult
@@ -99,9 +85,9 @@ final class ResponseMapper {
 	}
 
 	/**
-	 * Extracts text content from a broker payload.
+	 * Extracts text content from a runtime payload.
 	 *
-	 * @param array<string,mixed> $payload Broker payload.
+	 * @param array<string,mixed> $payload Runtime payload.
 	 * @return string
 	 */
 	private static function extract_output_text( array $payload ): string {
@@ -117,11 +103,11 @@ final class ResponseMapper {
 			}
 		}
 
-		throw new RuntimeException( __( 'The broker response did not include text output.', 'ai-provider-for-codex' ) );
+		throw new RuntimeException( __( 'The local Codex runtime response did not include text output.', 'ai-provider-for-codex' ) );
 	}
 
 	/**
-	 * Normalizes broker finish reasons.
+	 * Normalizes runtime finish reasons.
 	 *
 	 * @param string $value Raw finish reason.
 	 * @return FinishReasonEnum

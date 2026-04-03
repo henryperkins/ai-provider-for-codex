@@ -50,7 +50,7 @@ final class CodexProvider extends AbstractProvider {
 		];
 
 		if ( version_compare( AiClient::VERSION, '1.2.0', '>=' ) ) {
-			$provider_metadata[] = __( 'Broker-backed Codex provider for the WordPress AI Client.', 'ai-provider-for-codex' );
+			$provider_metadata[] = __( 'Codex provider for the WordPress AI Client using a local runtime.', 'ai-provider-for-codex' );
 		}
 
 		if ( version_compare( AiClient::VERSION, '1.3.0', '>=' ) ) {

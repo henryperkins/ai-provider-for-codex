@@ -9,16 +9,16 @@ declare( strict_types=1 );
 
 namespace AIProviderForCodex\Admin;
 
-use AIProviderForCodex\Broker\Settings;
+use AIProviderForCodex\Runtime\Settings;
 
 /**
  * Makes the provider visible and actionable in Settings > Connectors.
  */
 final class ConnectorsIntegration {
 
-	private const MODULE_ID      = 'ai-provider-for-codex/connectors';
-	private const SCRIPT_HANDLE  = 'ai-provider-for-codex-connectors';
-	private const CONNECTOR_ID   = 'codex';
+	private const MODULE_ID     = 'ai-provider-for-codex/connectors';
+	private const SCRIPT_HANDLE = 'ai-provider-for-codex-connectors';
+	private const CONNECTOR_ID  = 'codex';
 
 	/**
 	 * Registers richer connector metadata for the Codex provider.
@@ -63,10 +63,13 @@ final class ConnectorsIntegration {
 
 		$config = [
 			'connectorId'       => self::CONNECTOR_ID,
+			'statusUrl'         => rest_url( 'codex-provider/v1/status' ),
 			'statusPath'        => '/codex-provider/v1/status',
+			'startConnectUrl'   => rest_url( 'codex-provider/v1/connect/start' ),
 			'startConnectPath'  => '/codex-provider/v1/connect/start',
 			'siteSettingsUrl'   => SiteSettings::page_url(),
 			'userConnectionUrl' => UserConnectionPage::page_url(),
+			'restNonce'         => wp_create_nonce( 'wp_rest' ),
 		];
 
 		wp_register_script_module(
@@ -133,12 +136,12 @@ final class ConnectorsIntegration {
 	}
 
 	/**
-	 * Renders a setup notice for admins until the broker is configured.
+	 * Renders a setup notice for admins until the runtime is configured.
 	 *
 	 * @return void
 	 */
 	public static function maybe_render_setup_notice(): void {
-		if ( ! current_user_can( 'manage_options' ) || Settings::has_required_site_configuration() ) {
+		if ( ! current_user_can( 'manage_options' ) || Settings::has_required_configuration() ) {
 			return;
 		}
 
@@ -154,7 +157,7 @@ final class ConnectorsIntegration {
 				sprintf(
 					/* translators: 1: Connectors URL, 2: Settings URL. */
 					__(
-						'AI Provider for Codex is active, but the broker is not configured yet. Start on the <a href="%1$s">Connectors</a> screen or go directly to <a href="%2$s">plugin settings</a>.',
+						'AI Provider for Codex is active, but the local runtime is not configured yet. Start on the <a href="%1$s">Connectors</a> screen or go directly to <a href="%2$s">plugin settings</a>.',
 						'ai-provider-for-codex'
 					),
 					esc_url( admin_url( 'options-connectors.php' ) ),
@@ -170,7 +173,7 @@ final class ConnectorsIntegration {
 	 * @return void
 	 */
 	public static function maybe_render_unlinked_notice(): void {
-		if ( ! is_user_logged_in() || ! Settings::has_required_site_configuration() ) {
+		if ( ! is_user_logged_in() || ! Settings::has_required_configuration() ) {
 			return;
 		}
 
@@ -224,7 +227,7 @@ final class ConnectorsIntegration {
 	 * @return void
 	 */
 	public static function maybe_enqueue_dismiss_script(): void {
-		if ( ! is_user_logged_in() || ! Settings::has_required_site_configuration() ) {
+		if ( ! is_user_logged_in() || ! Settings::has_required_configuration() ) {
 			return;
 		}
 

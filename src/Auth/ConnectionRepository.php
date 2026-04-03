@@ -84,7 +84,7 @@ final class ConnectionRepository {
 	 * Inserts or replaces a user connection.
 	 *
 	 * @param int                 $wp_user_id User ID.
-	 * @param array<string,mixed> $payload Broker payload.
+	 * @param array<string,mixed> $payload Runtime payload.
 	 * @return void
 	 */
 	public static function upsert( int $wp_user_id, array $payload ): void {
@@ -97,7 +97,6 @@ final class ConnectionRepository {
 		$data = [
 			'wp_user_id'         => $wp_user_id,
 			'connection_id'      => sanitize_text_field( (string) ( $payload['connectionId'] ?? $existing['connection_id'] ?? '' ) ),
-			'broker_user_id'     => sanitize_text_field( (string) ( $payload['brokerUserId'] ?? $existing['broker_user_id'] ?? '' ) ),
 			'status'             => sanitize_text_field( (string) ( $payload['status'] ?? $existing['status'] ?? 'linked' ) ),
 			'account_email'      => sanitize_email( (string) ( $payload['account']['email'] ?? $existing['account_email'] ?? '' ) ),
 			'plan_type'          => sanitize_text_field( (string) ( $payload['account']['planType'] ?? $existing['plan_type'] ?? '' ) ),
@@ -119,7 +118,6 @@ final class ConnectionRepository {
 			'%s',
 			'%s',
 			'%s',
-			'%s',
 		];
 
 		if ( isset( $existing['id'] ) ) {
@@ -127,7 +125,7 @@ final class ConnectionRepository {
 			$formats = [ '%d' ] + $formats;
 		}
 
-		$wpdb->replace( self::table_name(), $data, array_values( $formats ) );
+		$wpdb->replace( self::table_name(), $data, $formats );
 	}
 
 	/**

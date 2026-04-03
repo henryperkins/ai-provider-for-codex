@@ -17,6 +17,13 @@ if (
 	const { createElement, Fragment, useEffect, useState } = wp.element;
 	const { __ } = wp.i18n;
 	const apiFetch = wp.apiFetch;
+	const restHeaders = config.restNonce ? { 'X-WP-Nonce': config.restNonce } : {};
+
+	const request = ( args ) =>
+		apiFetch( {
+			headers: restHeaders,
+			...args,
+		} );
 
 	function CodexConnector( props ) {
 		const [ status, setStatus ] = useState( null );
@@ -26,7 +33,7 @@ if (
 		const loadStatus = () => {
 			setIsLoading( true );
 
-			return apiFetch( { path: config.statusPath } )
+			return request( { url: config.statusUrl || config.statusPath } )
 				.then( ( response ) => {
 					setStatus( response );
 				} )
@@ -45,15 +52,12 @@ if (
 		const handleConnect = () => {
 			setIsBusy( true );
 
-			apiFetch( {
-				path: config.startConnectPath,
+			request( {
+				url: config.startConnectUrl || config.startConnectPath,
 				method: 'POST',
-				data: { returnUrl: config.userConnectionUrl },
 			} )
-				.then( ( response ) => {
-					if ( response && response.connectUrl ) {
-						window.location.assign( response.connectUrl );
-					}
+				.then( () => {
+					window.location.assign( config.userConnectionUrl );
 				} )
 				.catch( () => {
 					setIsBusy( false );
@@ -64,7 +68,7 @@ if (
 
 		if ( isLoading ) {
 			actionArea = createElement( Spinner );
-		} else if ( ! status || ! status.siteConfigured ) {
+		} else if ( ! status || ! status.runtimeConfigured || status.reason === 'runtime_unconfigured' || status.reason === 'runtime_unreachable' ) {
 			actionArea = createElement(
 				Button,
 				{
@@ -72,6 +76,15 @@ if (
 					href: config.siteSettingsUrl,
 				},
 				__( 'Set up', 'ai-provider-for-codex' )
+			);
+		} else if ( status.reason === 'login_pending' ) {
+			actionArea = createElement(
+				Button,
+				{
+					variant: 'primary',
+					href: config.userConnectionUrl,
+				},
+				__( 'Continue connecting', 'ai-provider-for-codex' )
 			);
 		} else if ( ! status.connection || status.reason === 'connection_expired' ) {
 			actionArea = createElement(
@@ -113,7 +126,7 @@ if (
 						variant: 'secondary',
 						href: config.userConnectionUrl,
 					},
-					__( 'Edit', 'ai-provider-for-codex' )
+					__( 'Manage', 'ai-provider-for-codex' )
 				)
 			);
 		}

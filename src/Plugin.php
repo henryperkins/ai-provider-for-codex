@@ -36,7 +36,6 @@ final class Plugin {
 		add_action( 'admin_menu', [ SiteSettings::class, 'register_page' ] );
 		add_action( 'admin_menu', [ UserConnectionPage::class, 'register_page' ] );
 		add_action( 'admin_init', [ SiteSettings::class, 'register_settings' ] );
-		add_action( 'admin_init', [ SiteSettings::class, 'maybe_handle_actions' ] );
 		add_action( 'admin_init', [ UserConnectionPage::class, 'maybe_handle_actions' ] );
 		add_action( 'admin_enqueue_scripts', [ ConnectorsIntegration::class, 'enqueue_connectors_assets' ] );
 		add_action( 'wp_connectors_init', [ ConnectorsIntegration::class, 'register_connector_metadata' ] );

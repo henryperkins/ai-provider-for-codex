@@ -1,0 +1,14 @@
+[Unit]
+Description=Codex WordPress Sidecar
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/path/to/wp-content/plugins/ai-provider-for-codex
+EnvironmentFile=/etc/codex-wp-sidecar.env
+ExecStart=/usr/bin/python3 /path/to/wp-content/plugins/ai-provider-for-codex/sidecar/app/main.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

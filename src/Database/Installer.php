@@ -9,10 +9,9 @@ declare( strict_types=1 );
 
 namespace AIProviderForCodex\Database;
 
-use AIProviderForCodex\Auth\AuthStateRepository;
 use AIProviderForCodex\Auth\ConnectionRepository;
 use AIProviderForCodex\Auth\ConnectionSnapshotRepository;
-use AIProviderForCodex\Broker\Settings;
+use AIProviderForCodex\Runtime\Settings;
 
 /**
  * Creates plugin tables and seeds defaults.
@@ -20,7 +19,8 @@ use AIProviderForCodex\Broker\Settings;
 final class Installer {
 
 	private const SCHEMA_VERSION_OPTION = 'codex_provider_schema_version';
-	private const SCHEMA_VERSION        = '2';
+	private const SCHEMA_VERSION        = '5';
+	private const LEGACY_DEFAULT_MODEL  = 'codex_runtime_default_model';
 
 	/**
 	 * Runs on plugin activation.
@@ -29,8 +29,10 @@ final class Installer {
 	 */
 	public static function activate(): void {
 		self::create_tables();
+		self::cleanup_legacy_schema();
 		self::seed_defaults();
 		self::normalize_option_storage();
+		self::cleanup_legacy_options();
 		update_option( self::SCHEMA_VERSION_OPTION, self::SCHEMA_VERSION );
 	}
 
@@ -63,14 +65,12 @@ final class Installer {
 
 		$connections = ConnectionRepository::table_name();
 		$snapshots   = ConnectionSnapshotRepository::table_name();
-		$states      = AuthStateRepository::table_name();
 
 		dbDelta(
 			"CREATE TABLE {$connections} (
 				id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 				wp_user_id bigint(20) unsigned NOT NULL,
 				connection_id varchar(191) NOT NULL,
-				broker_user_id varchar(191) NOT NULL DEFAULT '',
 				status varchar(50) NOT NULL DEFAULT 'linked',
 				account_email varchar(190) NOT NULL DEFAULT '',
 				plan_type varchar(50) NOT NULL DEFAULT '',
@@ -85,7 +85,7 @@ final class Installer {
 			) {$charset_collate};"
 		);
 
-		dbDelta(
+			dbDelta(
 			"CREATE TABLE {$snapshots} (
 				id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 				connection_id varchar(191) NOT NULL,
@@ -101,21 +101,30 @@ final class Installer {
 				UNIQUE KEY connection_id (connection_id)
 			) {$charset_collate};"
 		);
+	}
 
-		dbDelta(
-			"CREATE TABLE {$states} (
-				id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-				state varchar(191) NOT NULL,
-				wp_user_id bigint(20) unsigned NOT NULL,
-				return_url text NOT NULL,
-				expires_at datetime NOT NULL,
-				used_at datetime NULL,
-				created_at datetime NOT NULL,
-				PRIMARY KEY  (id),
-				UNIQUE KEY state (state),
-				KEY wp_user_id (wp_user_id)
-			) {$charset_collate};"
+	/**
+	 * Removes schema artifacts left from the old connect flow.
+	 *
+	 * @return void
+	 */
+	private static function cleanup_legacy_schema(): void {
+		global $wpdb;
+
+		$connections = ConnectionRepository::table_name();
+
+		$legacy_column = $wpdb->get_var(
+			$wpdb->prepare(
+				'SHOW COLUMNS FROM ' . $connections . ' LIKE %s',
+				'broker_user_id'
+			)
 		);
+
+		if ( is_string( $legacy_column ) && '' !== $legacy_column ) {
+			$wpdb->query( 'ALTER TABLE ' . $connections . ' DROP COLUMN broker_user_id' ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		}
+
+		$wpdb->query( 'DROP TABLE IF EXISTS ' . $wpdb->prefix . 'codex_provider_auth_states' ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 	}
 
 	/**
@@ -124,8 +133,8 @@ final class Installer {
 	 * @return void
 	 */
 	private static function seed_defaults(): void {
-		add_option( Settings::OPTION_DEFAULT_MODEL, Settings::get_default_model() );
 		add_option( Settings::OPTION_ALLOWED_MODELS, Settings::allowed_models_as_text() );
+		add_option( Settings::OPTION_RUNTIME_BASE_URL, Settings::get_base_url() );
 	}
 
 	/**
@@ -139,5 +148,14 @@ final class Installer {
 		if ( is_array( $allowed_models ) ) {
 			update_option( Settings::OPTION_ALLOWED_MODELS, Settings::allowed_models_as_text() );
 		}
+	}
+
+	/**
+	 * Removes legacy WordPress options that are no longer used.
+	 *
+	 * @return void
+	 */
+	private static function cleanup_legacy_options(): void {
+		delete_option( self::LEGACY_DEFAULT_MODEL );
 	}
 }

@@ -9,7 +9,6 @@ declare( strict_types=1 );
 
 namespace AIProviderForCodex\Admin;
 
-use AIProviderForCodex\Admin\StatusLabels;
 use AIProviderForCodex\Auth\ConnectionService;
 use AIProviderForCodex\Provider\ModelCatalogState;
 use AIProviderForCodex\Provider\SupportChecks;
@@ -45,7 +44,7 @@ final class UserConnectionPage {
 	}
 
 	/**
-	 * Handles page actions and callbacks.
+	 * Handles page actions.
 	 *
 	 * @return void
 	 */
@@ -62,9 +61,9 @@ final class UserConnectionPage {
 
 		$post_action = isset( $_POST['codex_provider_action'] ) ? sanitize_key( wp_unslash( $_POST['codex_provider_action'] ) ) : '';
 
-		if ( 'set-default-model' === $post_action ) {
-			check_admin_referer( 'codex-provider-set-default-model' );
-			self::set_default_model();
+		if ( 'set-model' === $post_action ) {
+			check_admin_referer( 'codex-provider-set-model' );
+			self::set_model();
 		}
 
 		$action = isset( $_GET['action'] ) ? sanitize_key( wp_unslash( $_GET['action'] ) ) : '';
@@ -72,6 +71,11 @@ final class UserConnectionPage {
 		if ( 'start-connect' === $action ) {
 			check_admin_referer( 'codex-provider-start-connect' );
 			self::start_connect();
+		}
+
+		if ( 'check-connect' === $action ) {
+			check_admin_referer( 'codex-provider-check-connect' );
+			self::check_connect();
 		}
 
 		if ( 'disconnect' === $action ) {
@@ -82,10 +86,6 @@ final class UserConnectionPage {
 		if ( 'refresh-status' === $action ) {
 			check_admin_referer( 'codex-provider-refresh-status' );
 			self::refresh_status();
-		}
-
-		if ( isset( $_GET['broker_code'], $_GET['state'] ) ) {
-			self::handle_callback();
 		}
 	}
 
@@ -99,15 +99,15 @@ final class UserConnectionPage {
 			return;
 		}
 
-		$status  = SupportChecks::current_user_status();
-		$catalog = is_array( $status['catalog'] ?? null ) ? $status['catalog'] : ModelCatalogState::get_effective_catalog();
-		$notice  = self::read_notice();
-		$reason  = (string) $status['reason'];
-		$ind     = StatusLabels::status_indicator( $reason );
-		$model_labels = ModelCatalogState::labels_from_catalog( $catalog );
-		$model_ids    = is_array( $catalog['model_ids'] ?? null ) ? $catalog['model_ids'] : [];
-		$default_model = (string) ( $catalog['default_model'] ?? '' );
-		$user_preferred_model = ModelCatalogState::get_user_preferred_model();
+		$status         = SupportChecks::current_user_status();
+		$catalog        = is_array( $status['catalog'] ?? null ) ? $status['catalog'] : ModelCatalogState::get_effective_catalog();
+		$notice         = self::read_notice();
+		$reason         = (string) $status['reason'];
+		$pending        = is_array( $status['pendingConnection'] ?? null ) ? $status['pendingConnection'] : null;
+		$ind            = StatusLabels::status_indicator( $reason );
+		$model_labels   = ModelCatalogState::labels_from_catalog( $catalog );
+		$model_ids      = is_array( $catalog['model_ids'] ?? null ) ? $catalog['model_ids'] : [];
+		$selected_model = (string) ( $catalog['selected_model'] ?? '' );
 		?>
 		<style>
 			.codex-how-box { background: #f0f6fc; border: 1px solid #c3c4c7; border-left: 4px solid #2271b1; padding: 0.75rem 1.25rem; max-width: 960px; margin-bottom: 1.5rem; border-radius: 2px; }
@@ -121,7 +121,9 @@ final class UserConnectionPage {
 			.codex-models-section { margin: 1.5rem 0; max-width: 960px; }
 			.codex-models-list { display: flex; flex-wrap: wrap; gap: 0.375rem; margin-top: 0.5rem; }
 			.codex-model-pill { display: inline-block; background: #f0f0f1; border-radius: 3px; padding: 2px 8px; font-size: 12px; }
-			.codex-model-pill.default { background: #2271b1; color: #fff; }
+			.codex-model-pill.selected { background: #2271b1; color: #fff; }
+			.codex-device-box { background: #fff; border: 1px solid #c3c4c7; border-radius: 4px; padding: 1rem 1.25rem; max-width: 960px; margin-top: 1rem; }
+			.codex-device-code { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 24px; font-weight: 600; letter-spacing: 0.18em; }
 		</style>
 		<div class="wrap">
 			<h1><?php esc_html_e( 'Codex Provider', 'ai-provider-for-codex' ); ?></h1>
@@ -129,15 +131,15 @@ final class UserConnectionPage {
 			<div class="codex-how-box">
 				<p><strong><?php esc_html_e( 'How Codex works', 'ai-provider-for-codex' ); ?></strong></p>
 				<ul>
-					<li><?php esc_html_e( 'Site registration (admin, one-time) — connects this WordPress site to the broker service.', 'ai-provider-for-codex' ); ?></li>
-					<li><?php esc_html_e( 'User account linking (each person) — connects your Codex account so usage is tracked and billed to you.', 'ai-provider-for-codex' ); ?></li>
+					<li><?php esc_html_e( 'This site uses a local Codex runtime running on the same host as WordPress.', 'ai-provider-for-codex' ); ?></li>
+					<li><?php esc_html_e( 'Each person connects their own Codex or ChatGPT account so access and billing stay user-specific.', 'ai-provider-for-codex' ); ?></li>
 				</ul>
 				<p>
 					<?php
 					printf(
 						wp_kses_post(
 							__(
-								'This page manages your personal account link. <a href="%1$s">Plugin settings</a> control the site registration shared by all users. <a href="%2$s">Settings &gt; Connectors</a> shows overall provider status.',
+								'This page manages your personal account link. <a href="%1$s">Plugin settings</a> control the local runtime shared by all users. <a href="%2$s">Settings &gt; Connectors</a> shows overall provider status.',
 								'ai-provider-for-codex'
 							)
 						),
@@ -153,8 +155,8 @@ final class UserConnectionPage {
 			<table class="widefat striped" style="max-width: 960px">
 				<tbody>
 					<tr>
-						<th scope="row"><?php esc_html_e( 'Site configured', 'ai-provider-for-codex' ); ?></th>
-						<td><?php echo $status['siteConfigured'] ? esc_html__( 'Yes', 'ai-provider-for-codex' ) : esc_html__( 'No', 'ai-provider-for-codex' ); ?></td>
+						<th scope="row"><?php esc_html_e( 'Runtime configured', 'ai-provider-for-codex' ); ?></th>
+						<td><?php echo ! empty( $status['runtimeConfigured'] ) ? esc_html__( 'Yes', 'ai-provider-for-codex' ) : esc_html__( 'No', 'ai-provider-for-codex' ); ?></td>
 					</tr>
 					<tr>
 						<th scope="row"><?php esc_html_e( 'Status', 'ai-provider-for-codex' ); ?></th>
@@ -183,80 +185,69 @@ final class UserConnectionPage {
 							<td><?php echo esc_html( (string) $status['connection']['plan_type'] ); ?></td>
 						</tr>
 					<?php endif; ?>
-					<?php if ( ! empty( $catalog['source'] ) ) : ?>
-						<tr>
-							<th scope="row"><?php esc_html_e( 'Model source', 'ai-provider-for-codex' ); ?></th>
-							<td>
-								<?php echo esc_html( StatusLabels::catalog_source_label( (string) $catalog['source'] ) ); ?>
-								<?php if ( ! empty( $catalog['checked_at'] ) ) : ?>
-									<br /><em>
-									<?php
-									printf(
-										/* translators: %s: relative time. */
-										esc_html__( 'Refreshed %s', 'ai-provider-for-codex' ),
-										esc_html( StatusLabels::relative_time( (string) $catalog['checked_at'] ) )
-									);
-									?>
-									</em>
-								<?php endif; ?>
-							</td>
-						</tr>
-					<?php endif; ?>
 				</tbody>
 			</table>
 
-				<?php if ( ! empty( $model_labels ) ) : ?>
-					<div class="codex-models-section">
-						<h3><?php esc_html_e( 'Your Models', 'ai-provider-for-codex' ); ?></h3>
-					<?php if ( '' !== $default_model ) : ?>
+			<?php if ( $pending && ! empty( $pending['authSessionId'] ) ) : ?>
+				<div class="codex-device-box">
+					<h3><?php esc_html_e( 'Complete account connection', 'ai-provider-for-codex' ); ?></h3>
+					<p><?php esc_html_e( 'Open the verification page and enter this code:', 'ai-provider-for-codex' ); ?></p>
+					<p class="codex-device-code"><?php echo esc_html( (string) $pending['userCode'] ); ?></p>
+					<p>
+						<a class="button button-secondary" href="<?php echo esc_url( (string) $pending['verificationUrl'] ); ?>" target="_blank" rel="noopener noreferrer"><?php esc_html_e( 'Open verification page', 'ai-provider-for-codex' ); ?></a>
+						<a class="button button-primary" href="<?php echo esc_url( wp_nonce_url( add_query_arg( 'action', 'check-connect', self::page_url() ), 'codex-provider-check-connect' ) ); ?>"><?php esc_html_e( 'Check connection status', 'ai-provider-for-codex' ); ?></a>
+					</p>
+					<?php if ( ! empty( $pending['error'] ) ) : ?>
+						<p class="description" style="color:#d63638;"><?php echo esc_html( (string) $pending['error'] ); ?></p>
+					<?php endif; ?>
+				</div>
+			<?php endif; ?>
+
+			<?php if ( ! empty( $model_labels ) ) : ?>
+				<div class="codex-models-section">
+					<h3><?php esc_html_e( 'Model', 'ai-provider-for-codex' ); ?></h3>
+					<?php if ( '' !== $selected_model ) : ?>
 						<p>
 							<?php
 							printf(
 								/* translators: %s: model name. */
-								esc_html__( 'Default: %s', 'ai-provider-for-codex' ),
-								esc_html( ModelCatalogState::label_for_model_id( $default_model ) )
+								esc_html__( 'Using: %s', 'ai-provider-for-codex' ),
+								'<strong>' . esc_html( ModelCatalogState::label_for_model_id( $selected_model ) ) . '</strong>'
 							);
 							?>
 						</p>
 					<?php endif; ?>
 					<div class="codex-models-list">
 						<?php foreach ( $model_labels as $label ) : ?>
-							<span class="codex-model-pill<?php echo $label === ModelCatalogState::label_for_model_id( $default_model ) ? ' default' : ''; ?>">
+							<span class="codex-model-pill<?php echo $label === ModelCatalogState::label_for_model_id( $selected_model ) ? ' selected' : ''; ?>">
 								<?php echo esc_html( $label ); ?>
 							</span>
 						<?php endforeach; ?>
 					</div>
-						<?php if ( 'settings_fallback' === ( $catalog['source'] ?? '' ) ) : ?>
-							<p class="description"><?php esc_html_e( 'Using configured defaults — connect an account for live model discovery.', 'ai-provider-for-codex' ); ?></p>
-						<?php endif; ?>
-						<form method="post" action="<?php echo esc_url( self::page_url() ); ?>" style="margin-top: 1rem;">
-							<?php wp_nonce_field( 'codex-provider-set-default-model' ); ?>
-							<input type="hidden" name="codex_provider_action" value="set-default-model" />
-							<label for="codex_provider_default_model"><strong><?php esc_html_e( 'Preferred default model', 'ai-provider-for-codex' ); ?></strong></label><br />
-							<select
-								id="codex_provider_default_model"
-								name="codex_provider_default_model"
-								<?php disabled( [] === $model_ids ); ?>
-							>
-								<option value=""><?php esc_html_e( 'Use site default / broker default', 'ai-provider-for-codex' ); ?></option>
-								<?php foreach ( $model_ids as $model_id ) : ?>
-									<option value="<?php echo esc_attr( (string) $model_id ); ?>" <?php selected( $user_preferred_model, (string) $model_id ); ?>>
-										<?php echo esc_html( ModelCatalogState::label_for_model_id( (string) $model_id ) ); ?>
-									</option>
-								<?php endforeach; ?>
-							</select>
-							<?php submit_button( __( 'Save preferred model', 'ai-provider-for-codex' ), 'secondary', 'submit', false, [ 'style' => 'margin-left: 0.5rem;' ] ); ?>
-							<p class="description">
-								<?php esc_html_e( 'Choose which discovered model this site should prefer for your Codex-backed requests. Leave blank to follow the site or broker default.', 'ai-provider-for-codex' ); ?>
-							</p>
-						</form>
-					</div>
-				<?php endif; ?>
+					<?php if ( 'settings_fallback' === ( $catalog['source'] ?? '' ) ) : ?>
+						<p class="description"><?php esc_html_e( 'Using configured defaults — connect an account for live model discovery.', 'ai-provider-for-codex' ); ?></p>
+					<?php endif; ?>
+					<form method="post" action="<?php echo esc_url( self::page_url() ); ?>" style="margin-top: 1rem;">
+						<?php wp_nonce_field( 'codex-provider-set-model' ); ?>
+						<input type="hidden" name="codex_provider_action" value="set-model" />
+						<label for="codex_provider_model"><strong><?php esc_html_e( 'Choose model', 'ai-provider-for-codex' ); ?></strong></label><br />
+						<select id="codex_provider_model" name="codex_provider_model" <?php disabled( [] === $model_ids ); ?>>
+							<?php foreach ( $model_ids as $model_id ) : ?>
+								<option value="<?php echo esc_attr( (string) $model_id ); ?>" <?php selected( $selected_model, (string) $model_id ); ?>>
+									<?php echo esc_html( ModelCatalogState::label_for_model_id( (string) $model_id ) ); ?>
+								</option>
+							<?php endforeach; ?>
+						</select>
+						<?php submit_button( __( 'Set model', 'ai-provider-for-codex' ), 'secondary', 'submit', false, [ 'style' => 'margin-left: 0.5rem;' ] ); ?>
+						<p class="description"><?php esc_html_e( 'This model will be used for all your Codex requests until you change it.', 'ai-provider-for-codex' ); ?></p>
+					</form>
+				</div>
+			<?php endif; ?>
 
 			<p style="margin-top: 1.5rem;">
-				<?php if ( ! $status['siteConfigured'] ) : ?>
-					<a class="button button-secondary" href="<?php echo esc_url( SiteSettings::page_url() ); ?>"><?php esc_html_e( 'Configure site broker settings', 'ai-provider-for-codex' ); ?></a>
-				<?php elseif ( empty( $status['connection'] ) ) : ?>
+				<?php if ( empty( $status['runtimeConfigured'] ) ) : ?>
+					<a class="button button-secondary" href="<?php echo esc_url( SiteSettings::page_url() ); ?>"><?php esc_html_e( 'Configure local runtime', 'ai-provider-for-codex' ); ?></a>
+				<?php elseif ( empty( $status['connection'] ) && ! $pending ) : ?>
 					<a class="button button-primary" href="<?php echo esc_url( wp_nonce_url( add_query_arg( 'action', 'start-connect', self::page_url() ), 'codex-provider-start-connect' ) ); ?>"><?php esc_html_e( 'Connect Codex account', 'ai-provider-for-codex' ); ?></a>
 				<?php else : ?>
 					<a class="button button-secondary" href="<?php echo esc_url( wp_nonce_url( add_query_arg( 'action', 'refresh-status', self::page_url() ), 'codex-provider-refresh-status' ) ); ?>"><?php esc_html_e( 'Refresh status', 'ai-provider-for-codex' ); ?></a>
@@ -274,29 +265,33 @@ final class UserConnectionPage {
 	 */
 	private static function start_connect(): void {
 		try {
-			$service     = new ConnectionService();
-			$connect_url = $service->start_connect( get_current_user_id(), self::page_url() );
-
-			wp_redirect( esc_url_raw( $connect_url ) );
-			exit;
+			$service = new ConnectionService();
+			$service->start_connect( get_current_user_id() );
+			self::redirect_with_notice( 'connect-started' );
 		} catch ( RuntimeException $exception ) {
 			self::redirect_with_notice( 'connect-failed', $exception->getMessage() );
 		}
 	}
 
 	/**
-	 * Handles the broker callback.
+	 * Checks the pending connect status.
 	 *
 	 * @return void
 	 */
-	private static function handle_callback(): void {
-		$broker_code = sanitize_text_field( (string) wp_unslash( $_GET['broker_code'] ) );
-		$state       = sanitize_text_field( (string) wp_unslash( $_GET['state'] ) );
-
+	private static function check_connect(): void {
 		try {
 			$service = new ConnectionService();
-			$service->exchange_code( get_current_user_id(), $state, $broker_code );
-			self::redirect_with_notice( 'connected' );
+			$result  = $service->poll_connect_status( get_current_user_id() );
+
+			if ( 'connected' === (string) ( $result['status'] ?? '' ) ) {
+				self::redirect_with_notice( 'connected' );
+			}
+
+			if ( 'error' === (string) ( $result['status'] ?? '' ) ) {
+				self::redirect_with_notice( 'connect-failed', (string) ( $result['error'] ?? __( 'The local Codex runtime reported a login error.', 'ai-provider-for-codex' ) ) );
+			}
+
+			self::redirect_with_notice( 'connect-pending' );
 		} catch ( RuntimeException $exception ) {
 			self::redirect_with_notice( 'connect-failed', $exception->getMessage() );
 		}
@@ -330,24 +325,24 @@ final class UserConnectionPage {
 	}
 
 	/**
-	 * Stores the current user's preferred default model.
+	 * Stores the current user's chosen model.
 	 *
 	 * @return void
 	 */
-	private static function set_default_model(): void {
-		$wp_user_id     = get_current_user_id();
-		$selected_model = isset( $_POST['codex_provider_default_model'] )
-			? sanitize_text_field( (string) wp_unslash( $_POST['codex_provider_default_model'] ) )
+	private static function set_model(): void {
+		$wp_user_id = get_current_user_id();
+		$model_id   = isset( $_POST['codex_provider_model'] )
+			? sanitize_text_field( (string) wp_unslash( $_POST['codex_provider_model'] ) )
 			: '';
-		$catalog        = ModelCatalogState::get_effective_catalog( $wp_user_id );
-		$model_ids      = is_array( $catalog['model_ids'] ?? null ) ? $catalog['model_ids'] : [];
+		$catalog    = ModelCatalogState::get_effective_catalog( $wp_user_id );
+		$model_ids  = $catalog['model_ids'];
 
-		if ( '' !== $selected_model && ! in_array( $selected_model, $model_ids, true ) ) {
-			self::redirect_with_notice( 'default-model-failed', __( 'That model is not available in your current Codex catalog.', 'ai-provider-for-codex' ) );
+		if ( '' !== $model_id && ! in_array( $model_id, $model_ids, true ) ) {
+			self::redirect_with_notice( 'model-failed', __( 'That model is not available in your current Codex catalog.', 'ai-provider-for-codex' ) );
 		}
 
-		ModelCatalogState::update_user_preferred_model( $wp_user_id, $selected_model );
-		self::redirect_with_notice( 'default-model-updated' );
+		ModelCatalogState::update_user_preferred_model( $wp_user_id, $model_id );
+		self::redirect_with_notice( 'model-updated' );
 	}
 
 	/**
@@ -400,9 +395,12 @@ final class UserConnectionPage {
 		$text  = '';
 
 		switch ( $notice['code'] ) {
-			case 'site-registered':
-				$class = 'notice notice-success';
-				$text  = __( 'Site configured — connect your Codex account to start using AI features.', 'ai-provider-for-codex' );
+			case 'connect-started':
+				$text = __( 'The local Codex runtime started a device-code login for your account.', 'ai-provider-for-codex' );
+				break;
+			case 'connect-pending':
+				$class = 'notice notice-info';
+				$text  = __( 'The login is still pending. Complete the device-code step and check status again.', 'ai-provider-for-codex' );
 				break;
 			case 'connected':
 				$text = __( 'Your Codex account is now linked.', 'ai-provider-for-codex' );
@@ -413,14 +411,14 @@ final class UserConnectionPage {
 			case 'status-refreshed':
 				$text = __( 'The local Codex snapshot was refreshed.', 'ai-provider-for-codex' );
 				break;
-			case 'default-model-updated':
-				$text = __( 'Your preferred Codex model was updated.', 'ai-provider-for-codex' );
+			case 'model-updated':
+				$text = __( 'Your model has been updated.', 'ai-provider-for-codex' );
 				break;
 			case 'connect-failed':
 			case 'refresh-failed':
-			case 'default-model-failed':
+			case 'model-failed':
 				$class = 'notice notice-error';
-				$text  = '' !== $notice['message'] ? $notice['message'] : __( 'The Codex broker request failed.', 'ai-provider-for-codex' );
+				$text  = '' !== $notice['message'] ? $notice['message'] : __( 'The local Codex runtime request failed.', 'ai-provider-for-codex' );
 				break;
 		}
 

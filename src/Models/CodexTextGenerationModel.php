@@ -1,6 +1,6 @@
 <?php
 /**
- * Broker-backed Codex text model.
+ * Local-runtime-backed Codex text model.
  *
  * @package AIProviderForCodex
  */
@@ -10,9 +10,9 @@ declare( strict_types=1 );
 namespace AIProviderForCodex\Models;
 
 use AIProviderForCodex\Auth\ConnectionRepository;
-use AIProviderForCodex\Broker\Client;
-use AIProviderForCodex\Broker\ResponseMapper;
 use AIProviderForCodex\Provider\ModelCatalogState;
+use AIProviderForCodex\Runtime\Client;
+use AIProviderForCodex\Runtime\ResponseMapper;
 use RuntimeException;
 use WordPress\AiClient\Messages\DTO\Message;
 use WordPress\AiClient\Providers\ApiBasedImplementation\AbstractApiBasedModel;
@@ -20,12 +20,12 @@ use WordPress\AiClient\Providers\Models\TextGeneration\Contracts\TextGenerationM
 use WordPress\AiClient\Results\DTO\GenerativeAiResult;
 
 /**
- * Sends text-generation requests to the Codex broker.
+ * Sends text-generation requests to the local Codex runtime.
  */
 final class CodexTextGenerationModel extends AbstractApiBasedModel implements TextGenerationModelInterface {
 
 	/**
-	 * Generates a text result through the broker API.
+	 * Generates a text result through the local runtime API.
 	 *
 	 * @param array<int,Message> $prompt Prompt messages.
 	 * @return GenerativeAiResult
@@ -43,14 +43,10 @@ final class CodexTextGenerationModel extends AbstractApiBasedModel implements Te
 			throw new RuntimeException( __( 'Connect a Codex account before requesting text generation.', 'ai-provider-for-codex' ) );
 		}
 
-		$snapshot_catalog = ModelCatalogState::get_user_snapshot_catalog( $wp_user_id );
-		$model_id         = $this->metadata()->getId();
+		$catalog  = ModelCatalogState::get_effective_catalog( $wp_user_id );
+		$model_id = $this->metadata()->getId();
 
-		if (
-			[] !== $snapshot_catalog['model_ids'] &&
-			ModelCatalogState::is_catalog_fresh( $snapshot_catalog ) &&
-			! in_array( $model_id, $snapshot_catalog['model_ids'], true )
-		) {
+		if ( [] !== $catalog['model_ids'] && ! in_array( $model_id, $catalog['model_ids'], true ) ) {
 			throw new RuntimeException(
 				sprintf(
 					/* translators: 1: requested model ID, 2: comma-separated available models */
@@ -59,7 +55,7 @@ final class CodexTextGenerationModel extends AbstractApiBasedModel implements Te
 						'ai-provider-for-codex'
 					),
 					$model_id,
-					implode( ', ', ModelCatalogState::labels_from_catalog( $snapshot_catalog ) )
+					implode( ', ', ModelCatalogState::labels_from_catalog( $catalog ) )
 				)
 			);
 		}
@@ -67,11 +63,10 @@ final class CodexTextGenerationModel extends AbstractApiBasedModel implements Te
 		$client   = new Client();
 		$config   = $this->getConfig();
 		$response = $client->post(
-			'/v1/wordpress/responses/text',
+			'/v1/responses/text',
 			array_filter(
 				[
 					'wpUserId'          => $wp_user_id,
-					'connectionId'      => (string) $connection['connection_id'],
 					'requestId'         => wp_generate_uuid4(),
 					'input'             => $this->flatten_prompt( $prompt ),
 					'systemInstruction' => $config->getSystemInstruction(),
@@ -98,7 +93,7 @@ final class CodexTextGenerationModel extends AbstractApiBasedModel implements Te
 	}
 
 	/**
-	 * Flattens a prompt to the broker's text input field.
+	 * Flattens a prompt to the runtime text input field.
 	 *
 	 * @param array<int,Message> $prompt Prompt messages.
 	 * @return string
@@ -126,7 +121,7 @@ final class CodexTextGenerationModel extends AbstractApiBasedModel implements Te
 	}
 
 	/**
-	 * Maps JSON output settings to the broker contract.
+	 * Maps JSON output settings to the runtime contract.
 	 *
 	 * @return array<string,mixed>|null
 	 */

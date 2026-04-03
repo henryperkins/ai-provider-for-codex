@@ -11,30 +11,28 @@ namespace AIProviderForCodex\Provider;
 
 use AIProviderForCodex\Auth\ConnectionRepository;
 use AIProviderForCodex\Auth\ConnectionSnapshotRepository;
-use AIProviderForCodex\Broker\Client;
-use AIProviderForCodex\Broker\Settings;
-use RuntimeException;
+use AIProviderForCodex\Runtime\Settings;
 
 /**
- * Normalizes model data for per-user and site-scoped catalog views.
+ * Resolves the model list and selected model for the current user.
+ *
+	 * Two sources, no cascade:
+	 *  1. User's local runtime snapshot (if the user has a linked account with models).
+	 *  2. Settings fallback (admin-configured allowed-models list).
+ *
+ * Selected model: user's explicit choice (user meta) → first available.
  */
 final class ModelCatalogState {
 
-	private const REFRESH_TTL           = 10 * MINUTE_IN_SECONDS;
-	private const REFRESH_TRANSIENT_KEY = 'codex_provider_site_catalog_refresh_attempt';
 	private const USER_META_PREFERRED_MODEL = 'codex_provider_preferred_model';
 
 	/**
-	 * Returns the current request's effective model catalog.
-	 *
-	 * Prefers the current user's broker snapshot when available, then falls back
-	 * to the site-wide snapshot aggregate, and finally the settings-backed
-	 * bootstrap list.
+	 * Returns the current user's effective model catalog.
 	 *
 	 * @param int|null $wp_user_id Optional user ID.
 	 * @return array{
 	 *     source:string,
-	 *     default_model:string,
+	 *     selected_model:string,
 	 *     checked_at:?string,
 	 *     models:list<array{id:string,label:string}>,
 	 *     model_ids:list<string>
@@ -51,63 +49,16 @@ final class ModelCatalogState {
 			}
 		}
 
-		return self::get_site_catalog();
+		return self::get_settings_catalog( $wp_user_id );
 	}
 
 	/**
-	 * Returns the site-scoped model catalog.
-	 *
-	 * Aggregates all active broker snapshots so the AI Client has a broker-backed
-	 * site catalog even when no current user context is available. When linked
-	 * account snapshots are missing or stale, the plugin refreshes them from the
-	 * broker's per-user `/v1/wordpress/models` endpoint before aggregating them.
-	 *
-	 * @return array{
-	 *     source:string,
-	 *     default_model:string,
-	 *     checked_at:?string,
-	 *     models:list<array{id:string,label:string}>,
-	 *     model_ids:list<string>
-	 * }
-	 */
-	public static function get_site_catalog(): array {
-		$active_connections = ConnectionRepository::list_active_for_site_catalog();
-		$stored_catalog     = self::get_snapshot_aggregate_catalog();
-
-		if ( [] === $active_connections ) {
-			return [] !== $stored_catalog['model_ids'] ? $stored_catalog : self::get_settings_catalog();
-		}
-
-		if (
-			Settings::has_required_site_configuration() &&
-			self::site_catalog_requires_refresh( $active_connections ) &&
-			! self::has_recent_refresh_attempt()
-		) {
-			self::record_refresh_attempt();
-
-			$live_catalog = self::refresh_site_catalog_from_broker( $active_connections );
-
-			if ( [] !== $live_catalog['model_ids'] ) {
-				return $live_catalog;
-			}
-
-			$stored_catalog = self::get_snapshot_aggregate_catalog();
-		}
-
-		if ( [] !== $stored_catalog['model_ids'] ) {
-			return $stored_catalog;
-		}
-
-		return self::get_settings_catalog();
-	}
-
-	/**
-	 * Returns the current user's stored snapshot-backed catalog.
+	 * Returns the user's runtime-snapshot-backed catalog.
 	 *
 	 * @param int $wp_user_id User ID.
 	 * @return array{
 	 *     source:string,
-	 *     default_model:string,
+	 *     selected_model:string,
 	 *     checked_at:?string,
 	 *     models:list<array{id:string,label:string}>,
 	 *     model_ids:list<string>
@@ -132,30 +83,22 @@ final class ModelCatalogState {
 			return self::empty_catalog( 'user_snapshot' );
 		}
 
-		$model_ids = array_values(
-			array_map(
-				static function ( array $model ): string {
-					return $model['id'];
-				},
-				$models
-			)
+		$model_ids = array_map(
+			static function ( array $model ): string {
+				return $model['id'];
+			},
+			$models
 		);
 
-		$default_model = self::resolve_default_model(
-			$model_ids,
-			[
-				(string) ( $snapshot['default_model'] ?? '' ),
-			],
-			$wp_user_id
-		);
-		$models        = self::prioritize_default_model( $models, $default_model );
+		$selected = self::resolve_selected_model( $model_ids, $wp_user_id );
+		$models   = self::prioritize_selected_model( $models, $selected );
 
 		return [
-			'source'        => 'user_snapshot',
-			'default_model' => $default_model,
-			'checked_at'    => ! empty( $snapshot['checked_at'] ) ? (string) $snapshot['checked_at'] : null,
-			'models'        => $models,
-			'model_ids'     => $model_ids,
+			'source'         => 'user_snapshot',
+			'selected_model' => $selected,
+			'checked_at'     => ! empty( $snapshot['checked_at'] ) ? (string) $snapshot['checked_at'] : null,
+			'models'         => $models,
+			'model_ids'      => $model_ids,
 		];
 	}
 
@@ -193,7 +136,7 @@ final class ModelCatalogState {
 	}
 
 	/**
-	 * Returns the current user's preferred model when one is stored.
+	 * Returns the user's explicitly chosen model.
 	 *
 	 * @param int|null $wp_user_id Optional user ID.
 	 * @return string
@@ -209,10 +152,10 @@ final class ModelCatalogState {
 	}
 
 	/**
-	 * Stores the current user's preferred model.
+	 * Stores the user's model choice.
 	 *
 	 * @param int    $wp_user_id User ID.
-	 * @param string $model_id Preferred model ID.
+	 * @param string $model_id Model ID (empty string clears the choice).
 	 * @return void
 	 */
 	public static function update_user_preferred_model( int $wp_user_id, string $model_id ): void {
@@ -231,7 +174,7 @@ final class ModelCatalogState {
 	}
 
 	/**
-	 * Deletes the current user's preferred model.
+	 * Deletes the user's model choice.
 	 *
 	 * @param int $wp_user_id User ID.
 	 * @return void
@@ -242,26 +185,6 @@ final class ModelCatalogState {
 		}
 
 		delete_user_meta( $wp_user_id, self::USER_META_PREFERRED_MODEL );
-	}
-
-	/**
-	 * Returns a readable label for a catalog source.
-	 *
-	 * @param string $source Source identifier.
-	 * @return string
-	 */
-	public static function label_for_source( string $source ): string {
-		switch ( $source ) {
-			case 'user_snapshot':
-				return __( 'Current account snapshot', 'ai-provider-for-codex' );
-			case 'site_broker_aggregate':
-				return __( 'Broker-refreshed site aggregate', 'ai-provider-for-codex' );
-			case 'site_snapshot_aggregate':
-				return __( 'Site snapshot aggregate', 'ai-provider-for-codex' );
-			case 'settings_fallback':
-			default:
-				return __( 'Site settings fallback', 'ai-provider-for-codex' );
-		}
 	}
 
 	/**
@@ -279,33 +202,18 @@ final class ModelCatalogState {
 	}
 
 	/**
-	 * Returns whether a catalog timestamp is still fresh.
+	 * Returns the settings-backed fallback catalog.
 	 *
-	 * @param array<string,mixed> $catalog Catalog payload.
-	 * @return bool
-	 */
-	public static function is_catalog_fresh( array $catalog ): bool {
-		if ( empty( $catalog['checked_at'] ) ) {
-			return false;
-		}
-
-		$checked_at = strtotime( (string) $catalog['checked_at'] );
-
-		return false !== $checked_at && $checked_at >= ( time() - self::REFRESH_TTL );
-	}
-
-	/**
-	 * Returns the settings-backed bootstrap catalog.
-	 *
+	 * @param int|null $wp_user_id Optional user ID for selected-model resolution.
 	 * @return array{
 	 *     source:string,
-	 *     default_model:string,
+	 *     selected_model:string,
 	 *     checked_at:?string,
 	 *     models:list<array{id:string,label:string}>,
 	 *     model_ids:list<string>
 	 * }
 	 */
-	private static function get_settings_catalog(): array {
+	private static function get_settings_catalog( ?int $wp_user_id = null ): array {
 		$models = array_map(
 			static function ( string $model_id ): array {
 				return [
@@ -316,86 +224,22 @@ final class ModelCatalogState {
 			Settings::get_allowed_models()
 		);
 
-		$model_ids = array_values(
-			array_map(
-				static function ( array $model ): string {
-					return $model['id'];
-				},
-				$models
-			)
+		$model_ids = array_map(
+			static function ( array $model ): string {
+				return $model['id'];
+			},
+			$models
 		);
 
-		$default_model = self::resolve_default_model( $model_ids, [] );
-		$models        = self::prioritize_default_model( $models, $default_model );
+		$selected = self::resolve_selected_model( $model_ids, $wp_user_id );
+		$models   = self::prioritize_selected_model( $models, $selected );
 
 		return [
-			'source'        => 'settings_fallback',
-			'default_model' => $default_model,
-			'checked_at'    => null,
-			'models'        => $models,
-			'model_ids'     => $model_ids,
-		];
-	}
-
-	/**
-	 * Returns the current site aggregate from stored snapshots without fallback.
-	 *
-	 * @param string $source Source label for the returned catalog.
-	 * @return array{
-	 *     source:string,
-	 *     default_model:string,
-	 *     checked_at:?string,
-	 *     models:list<array{id:string,label:string}>,
-	 *     model_ids:list<string>
-	 * }
-	 */
-	private static function get_snapshot_aggregate_catalog( string $source = 'site_snapshot_aggregate' ): array {
-		$snapshots = ConnectionSnapshotRepository::list_active_for_site_catalog();
-
-		if ( [] === $snapshots ) {
-			return self::empty_catalog( $source );
-		}
-
-		$models_map        = [];
-		$latest_checked_at = null;
-		$snapshot_defaults = [];
-
-		foreach ( $snapshots as $snapshot ) {
-			foreach ( self::normalize_models( $snapshot['models'] ?? [] ) as $model ) {
-				$models_map[ $model['id'] ] = $model;
-			}
-
-			$default_model = sanitize_text_field( (string) ( $snapshot['default_model'] ?? '' ) );
-
-			if ( '' !== $default_model ) {
-				$snapshot_defaults[] = $default_model;
-			}
-
-			if ( ! empty( $snapshot['checked_at'] ) ) {
-				$checked_at = (string) $snapshot['checked_at'];
-
-				if ( null === $latest_checked_at || $checked_at > $latest_checked_at ) {
-					$latest_checked_at = $checked_at;
-				}
-			}
-		}
-
-		if ( [] === $models_map ) {
-			return self::empty_catalog( $source );
-		}
-
-		ksort( $models_map );
-
-		$model_ids = array_keys( $models_map );
-		$default_model = self::resolve_default_model( $model_ids, $snapshot_defaults );
-		$models        = self::prioritize_default_model( array_values( $models_map ), $default_model );
-
-		return [
-			'source'        => $source,
-			'default_model' => $default_model,
-			'checked_at'    => $latest_checked_at,
-			'models'        => $models,
-			'model_ids'     => array_values( $model_ids ),
+			'source'         => 'settings_fallback',
+			'selected_model' => $selected,
+			'checked_at'     => null,
+			'models'         => $models,
+			'model_ids'      => $model_ids,
 		];
 	}
 
@@ -429,7 +273,7 @@ final class ModelCatalogState {
 	}
 
 	/**
-	 * Extracts a model ID from a broker payload item.
+	 * Extracts a model ID from a runtime payload item.
 	 *
 	 * @param mixed $model Raw model entry.
 	 * @return string
@@ -453,7 +297,7 @@ final class ModelCatalogState {
 	}
 
 	/**
-	 * Extracts a readable model label from a broker payload item.
+	 * Extracts a readable model label from a runtime payload item.
 	 *
 	 * @param mixed  $model Raw model entry.
 	 * @param string $model_id Normalized model ID.
@@ -472,70 +316,48 @@ final class ModelCatalogState {
 	}
 
 	/**
-	 * Resolves the effective default model for a catalog.
+	 * Resolves which model is selected.
 	 *
-	 * @param string[] $model_ids Catalog model IDs.
-	 * @param string[] $candidate_defaults Candidate defaults from snapshots.
+	 * User's explicit choice wins. Falls back to first available.
+	 *
+	 * @param string[] $model_ids Available model IDs.
+	 * @param int|null $wp_user_id Optional user ID.
 	 * @return string
 	 */
-	private static function resolve_default_model( array $model_ids, array $candidate_defaults, ?int $wp_user_id = null ): string {
-		$user_preferred_model = self::get_user_preferred_model( $wp_user_id );
+	private static function resolve_selected_model( array $model_ids, ?int $wp_user_id = null ): string {
+		$preferred = self::get_user_preferred_model( $wp_user_id );
 
-		if ( '' !== $user_preferred_model && in_array( $user_preferred_model, $model_ids, true ) ) {
-			return $user_preferred_model;
+		if ( '' !== $preferred && in_array( $preferred, $model_ids, true ) ) {
+			return $preferred;
 		}
 
-		$site_default = sanitize_text_field( Settings::get_default_model() );
-
-		if ( '' !== $site_default && in_array( $site_default, $model_ids, true ) ) {
-			return $site_default;
-		}
-
-		$counts = [];
-
-		foreach ( $candidate_defaults as $candidate ) {
-			$candidate = sanitize_text_field( (string) $candidate );
-
-			if ( '' === $candidate || ! in_array( $candidate, $model_ids, true ) ) {
-				continue;
-			}
-
-			$counts[ $candidate ] = ( $counts[ $candidate ] ?? 0 ) + 1;
-		}
-
-		if ( [] !== $counts ) {
-			arsort( $counts );
-
-			return (string) array_key_first( $counts );
-		}
-
-		return $model_ids[0] ?? $site_default;
+		return $model_ids[0] ?? '';
 	}
 
 	/**
-	 * Reorders model entries so the effective default model is evaluated first.
+	 * Reorders model entries so the selected model comes first.
 	 *
 	 * @param list<array{id:string,label:string}> $models Model entries.
-	 * @param string                              $default_model Effective default model.
+	 * @param string                              $selected Selected model ID.
 	 * @return list<array{id:string,label:string}>
 	 */
-	private static function prioritize_default_model( array $models, string $default_model ): array {
-		if ( '' === $default_model || [] === $models ) {
+	private static function prioritize_selected_model( array $models, string $selected ): array {
+		if ( '' === $selected || [] === $models ) {
 			return $models;
 		}
 
 		usort(
 			$models,
-			static function ( array $left, array $right ) use ( $default_model ): int {
+			static function ( array $left, array $right ) use ( $selected ): int {
 				if ( $left['id'] === $right['id'] ) {
 					return 0;
 				}
 
-				if ( $left['id'] === $default_model ) {
+				if ( $left['id'] === $selected ) {
 					return -1;
 				}
 
-				if ( $right['id'] === $default_model ) {
+				if ( $right['id'] === $selected ) {
 					return 1;
 				}
 
@@ -547,97 +369,12 @@ final class ModelCatalogState {
 	}
 
 	/**
-	 * Returns whether the site catalog should refresh from the broker.
-	 *
-	 * @param array<int,array<string,mixed>> $active_connections Active connection rows.
-	 * @return bool
-	 */
-	private static function site_catalog_requires_refresh( array $active_connections ): bool {
-		foreach ( $active_connections as $connection ) {
-			$snapshot = ConnectionSnapshotRepository::get( (string) $connection['connection_id'] );
-
-			if ( ! $snapshot || ! self::is_catalog_fresh( $snapshot ) || empty( $snapshot['models'] ) ) {
-				return true;
-			}
-		}
-
-		return false;
-	}
-
-	/**
-	 * Returns whether a recent refresh attempt already ran.
-	 *
-	 * @return bool
-	 */
-	private static function has_recent_refresh_attempt(): bool {
-		return false !== get_transient( self::REFRESH_TRANSIENT_KEY );
-	}
-
-	/**
-	 * Records a site-catalog refresh attempt.
-	 *
-	 * @return void
-	 */
-	private static function record_refresh_attempt(): void {
-		set_transient( self::REFRESH_TRANSIENT_KEY, gmdate( 'Y-m-d H:i:s' ), self::REFRESH_TTL );
-	}
-
-	/**
-	 * Refreshes active connection snapshots from the broker models endpoint.
-	 *
-	 * @param array<int,array<string,mixed>> $active_connections Active connection rows.
-	 * @return array{
-	 *     source:string,
-	 *     default_model:string,
-	 *     checked_at:?string,
-	 *     models:list<array{id:string,label:string}>,
-	 *     model_ids:list<string>
-	 * }
-	 */
-	private static function refresh_site_catalog_from_broker( array $active_connections ): array {
-		$client      = new Client();
-		$did_refresh = false;
-
-		foreach ( $active_connections as $connection ) {
-			try {
-				$payload = $client->get(
-					'/v1/wordpress/models',
-					[
-						'wpUserId'     => (int) $connection['wp_user_id'],
-						'connectionId' => (string) $connection['connection_id'],
-					]
-				);
-
-				if ( ! isset( $payload['checkedAt'] ) ) {
-					$payload['checkedAt'] = gmdate( 'c' );
-				}
-
-				ConnectionSnapshotRepository::upsert(
-					(string) $connection['connection_id'],
-					$payload,
-					sanitize_text_field( (string) ( $payload['readinessStatus'] ?? 'ready' ) )
-				);
-
-				$did_refresh = true;
-			} catch ( RuntimeException $exception ) {
-				continue;
-			}
-		}
-
-		if ( ! $did_refresh ) {
-			return self::empty_catalog( 'site_broker_aggregate' );
-		}
-
-		return self::get_snapshot_aggregate_catalog( 'site_broker_aggregate' );
-	}
-
-	/**
 	 * Returns an empty catalog shell.
 	 *
 	 * @param string $source Source identifier.
 	 * @return array{
 	 *     source:string,
-	 *     default_model:string,
+	 *     selected_model:string,
 	 *     checked_at:?string,
 	 *     models:list<array{id:string,label:string}>,
 	 *     model_ids:list<string>
@@ -645,11 +382,11 @@ final class ModelCatalogState {
 	 */
 	private static function empty_catalog( string $source ): array {
 		return [
-			'source'        => $source,
-			'default_model' => '',
-			'checked_at'    => null,
-			'models'        => [],
-			'model_ids'     => [],
+			'source'         => $source,
+			'selected_model' => '',
+			'checked_at'     => null,
+			'models'         => [],
+			'model_ids'      => [],
 		];
 	}
 }

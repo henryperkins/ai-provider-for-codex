@@ -11,8 +11,9 @@ namespace AIProviderForCodex\Provider;
 
 use AIProviderForCodex\Auth\ConnectionRepository;
 use AIProviderForCodex\Auth\ConnectionSnapshotRepository;
-use AIProviderForCodex\Broker\HealthMonitor;
-use AIProviderForCodex\Broker\Settings;
+use AIProviderForCodex\Auth\PendingConnectionRepository;
+use AIProviderForCodex\Runtime\HealthMonitor;
+use AIProviderForCodex\Runtime\Settings;
 
 /**
  * Computes user-aware provider status from local state.
@@ -28,33 +29,60 @@ final class SupportChecks {
 	public static function current_user_status( ?int $wp_user_id = null ): array {
 		$wp_user_id = $wp_user_id ?? get_current_user_id();
 		$catalog    = ModelCatalogState::get_effective_catalog( $wp_user_id );
-		$site_catalog = ModelCatalogState::get_site_catalog();
+		$pending    = $wp_user_id > 0 ? PendingConnectionRepository::get_for_user( $wp_user_id ) : null;
+		$connection = $wp_user_id > 0 ? ConnectionRepository::get_for_user( $wp_user_id ) : null;
 
-		if ( ! Settings::has_required_site_configuration() ) {
+		if ( ! Settings::has_required_configuration() ) {
 			return [
-				'ready'           => false,
-				'reason'          => 'broker_unconfigured',
-				'broker'          => HealthMonitor::get_status(),
-				'siteConfigured'  => false,
-				'connection'      => null,
-				'snapshot'        => null,
-				'catalog'         => $catalog,
-				'siteCatalog'     => $site_catalog,
+				'ready'             => false,
+				'reason'            => 'runtime_unconfigured',
+				'runtime'           => HealthMonitor::get_status(),
+				'runtimeConfigured' => false,
+				'connection'        => null,
+				'snapshot'          => null,
+				'catalog'           => $catalog,
+				'pendingConnection' => $pending,
 			];
 		}
 
-		$connection = $wp_user_id > 0 ? ConnectionRepository::get_for_user( $wp_user_id ) : null;
+		$runtime = HealthMonitor::probe();
+
+		if ( 'unreachable' === (string) $runtime['status'] ) {
+			return [
+				'ready'             => false,
+				'reason'            => 'runtime_unreachable',
+				'runtime'           => $runtime,
+				'runtimeConfigured' => true,
+				'connection'        => $connection,
+				'snapshot'          => null,
+				'catalog'           => $catalog,
+				'pendingConnection' => $pending,
+			];
+		}
+
+		if ( $pending && ! empty( $pending['authSessionId'] ) ) {
+			return [
+				'ready'             => false,
+				'reason'            => 'login_pending',
+				'runtime'           => $runtime,
+				'runtimeConfigured' => true,
+				'connection'        => null,
+				'snapshot'          => null,
+				'catalog'           => $catalog,
+				'pendingConnection' => $pending,
+			];
+		}
 
 		if ( ! $connection ) {
 			return [
-				'ready'           => false,
-				'reason'          => 'user_unlinked',
-				'broker'          => HealthMonitor::get_status(),
-				'siteConfigured'  => true,
-				'connection'      => null,
-				'snapshot'        => null,
-				'catalog'         => $catalog,
-				'siteCatalog'     => $site_catalog,
+				'ready'             => false,
+				'reason'            => 'user_unlinked',
+				'runtime'           => $runtime,
+				'runtimeConfigured' => true,
+				'connection'        => null,
+				'snapshot'          => null,
+				'catalog'           => $catalog,
+				'pendingConnection' => null,
 			];
 		}
 
@@ -63,14 +91,14 @@ final class SupportChecks {
 
 			if ( false !== $expires_at && $expires_at < time() ) {
 				return [
-					'ready'          => false,
-					'reason'         => 'connection_expired',
-					'broker'         => HealthMonitor::get_status(),
-					'siteConfigured' => true,
-					'connection'     => $connection,
-					'snapshot'       => null,
-					'catalog'        => $catalog,
-					'siteCatalog'    => $site_catalog,
+					'ready'             => false,
+					'reason'            => 'connection_expired',
+					'runtime'           => $runtime,
+					'runtimeConfigured' => true,
+					'connection'        => $connection,
+					'snapshot'          => null,
+					'catalog'           => $catalog,
+					'pendingConnection' => null,
 				];
 			}
 		}
@@ -79,28 +107,28 @@ final class SupportChecks {
 
 		if ( ! $snapshot ) {
 			return [
-				'ready'          => false,
-				'reason'         => 'broker_unreachable',
-				'broker'         => HealthMonitor::get_status(),
-				'siteConfigured' => true,
-				'connection'     => $connection,
-				'snapshot'       => null,
-				'catalog'        => $catalog,
-				'siteCatalog'    => $site_catalog,
+				'ready'             => false,
+				'reason'            => 'runtime_unreachable',
+				'runtime'           => $runtime,
+				'runtimeConfigured' => true,
+				'connection'        => $connection,
+				'snapshot'          => null,
+				'catalog'           => $catalog,
+				'pendingConnection' => null,
 			];
 		}
 
 		$reason = (string) ( $snapshot['readiness_status'] ?? 'ready' );
 
 		return [
-			'ready'          => 'ready' === $reason,
-			'reason'         => $reason,
-			'broker'         => HealthMonitor::get_status(),
-			'siteConfigured' => true,
-			'connection'     => $connection,
-			'snapshot'       => $snapshot,
-			'catalog'        => $catalog,
-			'siteCatalog'    => $site_catalog,
+			'ready'             => 'ready' === $reason,
+			'reason'            => $reason,
+			'runtime'           => $runtime,
+			'runtimeConfigured' => true,
+			'connection'        => $connection,
+			'snapshot'          => $snapshot,
+			'catalog'           => $catalog,
+			'pendingConnection' => null,
 		];
 	}
 }

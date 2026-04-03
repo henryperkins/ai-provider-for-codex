@@ -1,0 +1,1796 @@
+╭─── Claude Code v2.1.91 ──────────────────────────────────────────────────────╮
+│                                                    │ Tips for getting        │
+│                 Welcome back Henry!                │ started                 │
+│                                                    │ Run /init to create a … │
+│                       ▐▛███▜▌                      │ ─────────────────────── │
+│                      ▝▜█████▛▘                     │ Recent activity         │
+│                        ▘▘ ▝▝                       │ No recent activity      │
+│   Sonnet 4.6 · Claude Pro · hp1229@icloud.com's    │                         │
+│   Organization                                     │                         │
+│    /…/wp-content/plugins/ai-provider-for-codex     │                         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+❯ /effort max                                                                   
+  ⎿  Set effort level to max (this session only): Maximum capability with
+     deepest reasoning (Opus 4.6 only)
+
+❯ /wp-phpstan                                                                   
+
+● Let me start by exploring the plugin and checking for existing PHPStan setup.
+
+  Searched for 3 patterns, listed 1 directory (ctrl+o to expand)
+
+● No PHPStan or Composer setup exists yet. Let me read the key files and the
+  skill references to set this up properly.
+
+  Searched for 1 pattern, read 6 files (ctrl+o to expand)
+
+● Now let me read the remaining source files to understand all dependencies and
+  type usage.
+
+● Explore(Read all plugin source files)
+  ⎿  Done (26 tool uses · 87.8k tokens · 53s)
+  (ctrl+o to expand)
+
+● Let me check if the WordPress AI Client package is available in the WordPress
+  installation, and look for PHPStan inspector script.
+
+  Searched for 2 patterns, listed 1 directory (ctrl+o to expand)
+
+● Bash(php -v 2>/dev/null; which composer 2>/dev/null || echo "composer not
+      found")
+  ⎿  PHP 8.4.19 (cli) (built: Mar 12 2026 07:08:08) (NTS)
+     Copyright (c) The PHP Group
+     Built by Debian
+     … +3 lines (ctrl+o to expand)
+
+  Searched for 2 patterns, listed 1 directory (ctrl+o to expand)
+
+● Bash(node
+      /home/azureuser/.claude/skills/wp-phpstan/scripts/phpstan_inspect.mjs
+      2>&1)
+  ⎿  {
+       "tool": {
+         "name": "phpstan_inspect",
+     … +32 lines (ctrl+o to expand)
+
+● Clean slate. I'll set up PHPStan from scratch. Two questions before I proceed:
+
+  1. Composer dev dependencies — I need to add phpstan/phpstan and
+  szepeviktor/phpstan-wordpress (WP core stubs). OK to create composer.json and
+  install?
+  2. Baseline — Since this is the initial setup, I'll generate a baseline for
+  any pre-existing issues. OK?
+
+  Also worth noting: the WordPress\AiClient and WP_Connector_Registry classes
+  are WP 7.0-beta additions not covered by standard stubs — I'll configure
+  PHPStan to scan them directly from your WP installation.
+
+  Let me know if you'd like me to proceed, or if you have constraints on either
+  point.
+
+✻ Cooked for 2m 5s
+
+❯ /wp-plugin-development                                                        
+
+● Let me run the triage and plugin detection scripts.
+
+● Bash(node /home/azureuser/.claude/skills/wp-project-triage/scripts/detect_wp_p
+      roject.mjs 2>&1)
+  ⎿  {
+       "tool": {
+         "name": "detect_wp_project",
+     … +33 lines (ctrl+o to expand)
+
+● Bash(node /home/azureuser/.claude/skills/wp-plugin-development/scripts/detect_
+      plugins.mjs 2>&1)
+  ⎿  {
+       "tool": {
+         "name": "detect_plugins",
+     … +8 lines (ctrl+o to expand)
+
+● The detection scripts run against the plugin root (not a full WP checkout), so
+   they can't auto-detect everything. No matter — I have the full picture from
+  the source analysis. Let me set up PHPStan now.
+● Write(composer.json)
+  ⎿  Wrote 27 lines to composer.json
+       1 {
+       2        "name": "lakefront-digital/ai-provider-for-codex",
+       3        "description": "Broker-backed Codex provider scaffold for the Wo
+
+         rdPress AI Client.",
+       4        "type": "wordpress-plugin",
+       5        "license": "GPL-2.0-or-later",
+       6        "require": {
+       7                "php": ">=8.0"
+       8        },
+       9        "require-dev": {
+      10                "phpstan/phpstan": "^2.1",
+     … +17 lines (ctrl+o to expand)
+
+● Now let me check exactly what the AI Client source tree looks like to
+  configure scan paths correctly.
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+● Write(phpstan.neon)
+  ⎿  Wrote 20 lines to phpstan.neon
+       1 includes:
+       2        - vendor/szepeviktor/phpstan-wordpress/extension.neon
+       3 
+       4 parameters:
+       5        level: 5
+       6 
+       7        paths:
+       8                - plugin.php
+       9                - uninstall.php
+      10                - src/
+     … +10 lines (ctrl+o to expand)
+
+● Let me fix the scan paths — %rootDir% refers to PHPStan's install dir, not the
+   project root.
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(phpstan.neon)
+  ⎿  Added 2 lines, removed 2 lines
+      14  
+      15    # WP 7.0 classes not yet covered by wordpress-stubs.
+      16    scanDirectories:
+      17 -    - %rootDir%/../../../wp-includes/php-ai-client/src/        
+      17 +    - %currentWorkingDirectory%/../../../wp-includes/php-ai-cli
+         +ent/src/                                                       
+      18  
+      19    scanFiles:
+      20 -    - %rootDir%/../../../wp-includes/class-wp-connector-registr
+         -y.php                                                          
+      20 +    - %currentWorkingDirectory%/../../../wp-includes/class-wp-c
+         +onnector-registry.php                                          
+
+● Bash(composer install --no-interaction 2>&1)
+  ⎿  No composer.lock file present. Updating dependencies to latest instead
+      of installing from lock file. See https://getcomposer.org/install for
+      more information.
+     … +17 lines (ctrl+o to expand)
+
+● Bash(composer run phpstan 2>&1)
+  ⎿  Error: Exit code 1
+     > phpstan analyse --memory-limit=512M
+     Note: Using configuration file /home/hperkins-wp/htdocs/wp.hperkins.com/wp-
+     content/plugins/ai-provider-for-codex/phpstan.neon.
+       0/27 [░░░░░░░░░░░░░░░░░░░░░░░░░░░░]   0% 27/27 
+     [▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓] 100%
+
+      -- 
+     -------------------------------------------------------------------------- 
+          Error                                                                 
+         
+      -- 
+     -------------------------------------------------------------------------- 
+          Child process error: PHPStan process crashed because it reached       
+         
+          configured PHP memory limit: 512M                                     
+         
+     … +13 lines (ctrl+o to see all)
+
+● Memory limit hit — scanning the full AI Client tree is heavy. Let me increase
+  memory and check the scan scope.
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+● Bash(vendor/bin/phpstan analyse --memory-limit=2G --no-progress 2>&1)  ⎿  Error: Exit code 1
+     Note: Using configuration file /home/hperkins-wp/htdocs/wp.hperkins.com/wp-
+     content/plugins/ai-provider-for-codex/phpstan.neon.
+     Instructions for interpreting errors
+     ---------
+
+     Each error has an associated identifier, like `argument.type`
+     or `return.missing`.
+
+     Each error identifier has documentation at URL 
+     https://phpstan.org/error-identifiers/<identifier>
+     This page contains code example, explanation why is this an error
+     … +83 lines (ctrl+o to see all)
+
+● Only 10 errors at level 5. Let me read the affected code to decide which to
+  fix vs baseline.
+
+  Read 6 files (ctrl+o to expand)
+
+● All 10 errors are either intentional runtime guards (version_compare checks
+  that must exist for production but are always-true during static analysis) or
+  harmless defensive array_values() / is_array() calls. These are appropriate
+  for a baseline.
+
+  Let me generate the baseline.
+
+● Bash(vendor/bin/phpstan analyse --memory-limit=2G --generate-baseline
+      phpstan-baseline.neon --no-progress 2>&1)
+  ⎿  Note: Using configuration file /home/hperkins-wp/htdocs/wp.hperkins.co
+     m/wp-content/plugins/ai-provider-for-codex/phpstan.neon.
+
+      [OK] Baseline generated with 10 errors.
+
+● Now update phpstan.neon to include the baseline and verify clean pass.
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(phpstan.neon)
+  ⎿  Added 1 line
+      1  includes:
+      2 +  - phpstan-baseline.neon                                       
+      3    - vendor/szepeviktor/phpstan-wordpress/extension.neon
+      4  
+      5  parameters:
+
+● Bash(vendor/bin/phpstan analyse --memory-limit=2G --no-progress 2>&1)
+  ⎿  Note: Using configuration file /home/hperkins-wp/htdocs/wp.hperkins.co
+     m/wp-content/plugins/ai-provider-for-codex/phpstan.neon.
+
+      [OK] No errors
+
+● Clean pass. Let me also update the Composer script to use the higher memory
+  limit.
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(composer.json)
+  ⎿  Added 1 line, removed 1 line
+      22      "sort-packages": true
+      23    },
+      24    "scripts": {
+      25 -    "phpstan": "phpstan analyse --memory-limit=512M"           
+      25 +    "phpstan": "phpstan analyse --memory-limit=2G"             
+      26    }
+      27  }
+
+● Let me verify the baseline contents and final state of all files.
+
+  Read 1 file (ctrl+o to expand)
+
+● PHPStan is fully set up. Here's a summary:
+
+  Files created:
+  - composer.json — dev dependencies: phpstan/phpstan ^2.1,
+  szepeviktor/phpstan-wordpress ^2.0
+  - phpstan.neon — level 5, scans plugin.php, uninstall.php, src/; includes WP
+  AI Client + Connector Registry via scanDirectories/scanFiles
+  - phpstan-baseline.neon — 10 baselined errors (all intentional runtime guards
+  or defensive no-ops)
+  - vendor/ + composer.lock — installed dependencies
+
+  Run it with:
+  composer run phpstan
+
+  Baselined errors (10):
+
+  ┌────────────────────────────────┬───────┬────────────────────────────────┐
+  │            Category            │ Count │             Files              │
+  ├────────────────────────────────┼───────┼────────────────────────────────┤
+  │ if.alwaysTrue —                │ 3     │ plugin.php, CodexProvider.php  │
+  │ version_compare runtime guards │       │                                │
+  ├────────────────────────────────┼───────┼────────────────────────────────┤
+  │ deadCode.unreachable —         │ 1     │ plugin.php                     │
+  │ consequence of above           │       │                                │
+  ├────────────────────────────────┼───────┼────────────────────────────────┤
+  │ arrayValues.list — defensive   │       │ ConnectionRepository,          │
+  │ array_values() on lists        │ 4     │ ConnectionSnapshotRepository,  │
+  │                                │       │ ModelCatalogState              │
+  ├────────────────────────────────┼───────┼────────────────────────────────┤
+  │ function.alreadyNarrowedType + │       │                                │
+  │  nullCoalesce.offset —         │ 2     │ UserConnectionPage.php         │
+  │ defensive is_array() / ??      │       │                                │
+  └────────────────────────────────┴───────┴────────────────────────────────┘
+
+  All are safe to chip away at later. Any new code that introduces a PHPStan
+  error will fail immediately — the baseline only covers these specific
+  pre-existing patterns.
+
+✻ Sautéed for 3m 24s
+
+❯ This plugin has one purpose, to act as a provider surface to be plugged into  
+the abilities API and other WordPress sleeves that require a LLM - See the      
+wordpress.org official OpenAI and Anthropic plugins for model iterations.       
+
+● Let me check if the reference plugins are installed locally and capture this
+  context.
+
+  Listed 1 directory (ctrl+o to expand)
+
+● Explore(Explore OpenAI provider plugin)
+  ⎿  Done (13 tool uses · 55.7k tokens · 45s)
+  (ctrl+o to expand)
+
+● Good context. The OpenAI reference is much leaner — 4 classes, no DB, no admin
+   UI, pure API wrapper. Your Codex plugin is significantly more complex due to
+  the broker-based auth flow (site registration, per-user OAuth connections,
+  snapshots, health monitoring, admin pages).
+
+  Let me save this as project context.
+
+  Recalled 1 memory, wrote 2 memories (ctrl+o to expand)
+
+● Got it. The Codex plugin provides the same provider surface as the official
+  OpenAI plugin (extends AbstractProvider, registers models via
+  AiClient::defaultRegistry()) but adds a broker authentication layer on top.
+  The core provider/model/metadata classes mirror the official pattern; the
+  Broker/, Auth/, Admin/, REST/, and Database/ namespaces handle the
+  broker-specific concerns that a simple API-key plugin like OpenAI doesn't
+  need.
+
+  What would you like to do next with this plugin?
+
+✻ Brewed for 1m 30s
+
+❯ Model selection is confusing.                                                 
+
+● Let me trace the full model selection flow to understand what's tangled.
+
+  Read 7 files (ctrl+o to expand)
+● I see the problem. Here's the current model selection flow:
+
+  4 catalog sources with nested fallbacks:
+  get_effective_catalog()
+  ├── 1. user_snapshot        (per-user broker snapshot)
+  └── 2. get_site_catalog()
+      ├── 2a. site_snapshot_aggregate  (union of ALL users' snapshots)
+      ├── 2b. site_broker_aggregate    (live refresh from broker)
+      └── 2c. settings_fallback        (hardcoded defaults + textarea)
+
+  4 layers of "default model" resolution (resolve_default_model()):
+  1. User preferred model (user meta)
+  2. Site admin default (option)
+  3. Most-popular across snapshot defaults (voting)
+  4. First model in list
+
+  Compare to the OpenAI reference: it has one ModelMetadataDirectory with a
+  hardcoded capability map. Discovery comes from one API call. No cascades, no
+  snapshots, no aggregation.
+
+  The confusing parts:
+
+  ┌─────────────────────────────────────────────┬────────────────────────────┐
+  │                    Issue                    │           Where            │
+  ├─────────────────────────────────────────────┼────────────────────────────┤
+  │ Snapshot aggregate unions models across     │ ModelCatalogState:352-400  │
+  │ unrelated users' plans                      │                            │
+  ├─────────────────────────────────────────────┼────────────────────────────┤
+  │ Admin "default model" is a free text input, │ SiteSettings:335-338       │
+  │  not a select                               │                            │
+  ├─────────────────────────────────────────────┼────────────────────────────┤
+  │ Admin model list is a raw textarea behind   │ SiteSettings:342-345       │
+  │ "Advanced" toggle                           │                            │
+  ├─────────────────────────────────────────────┼────────────────────────────┤
+  │ Catalog source labels leak into UI          │ UserConnectionPage:186-204 │
+  │ (site_snapshot_aggregate)                   │                            │
+  ├─────────────────────────────────────────────┼────────────────────────────┤
+  │ User can't tell which "default" actually    │ UserConnectionPage:211-221 │
+  │ won                                         │                            │
+  ├─────────────────────────────────────────────┼────────────────────────────┤
+  │ Snapshot voting for default model adds a    │ ModelCatalogState:494-509  │
+  │ layer nobody asked for                      │                            │
+  └─────────────────────────────────────────────┴────────────────────────────┘
+
+  The broker is the authority on what models are available. How would you like
+  to simplify this — flatten the catalog to broker-or-fallback (drop the
+  aggregate), clean up the default resolution, or something else?
+
+✻ Churned for 54s
+
+❯ Can the model availability just act as it does in the Codex CLI? We just      
+choose the model we want to use, and until we change it, that is the model that 
+ is used.                                                                       
+
+● Yes. That's much simpler. Here's the plan:
+
+  Available models — two sources, no cascade:
+  1. User has a broker snapshot → those models
+  2. No snapshot → Settings::get_allowed_models() fallback
+
+  Selected model — one stored choice:
+  1. User's explicitly chosen model (user meta, already exists)
+  2. Not set or no longer available → first in the list
+
+  That eliminates: snapshot aggregation across users, broker-side live refresh,
+  default-model voting, site admin default layered on user preference, and the
+  4-source catalog cascade.
+
+  Let me map the blast radius before I start cutting.
+
+  Searched for 1 pattern, read 3 files (ctrl+o to expand)
+
+● Good. Now I have the full picture. Let me set up tasks and start cutting.
+
+● Write(src/Provider/ModelCatalogState.php)
+  ⎿  Added 67 lines, removed 330 lines
+      11  
+      12  use AIProviderForCodex\Auth\ConnectionRepository;
+      13  use AIProviderForCodex\Auth\ConnectionSnapshotRepository;
+      14 -use AIProviderForCodex\Broker\Client;                          
+      14  use AIProviderForCodex\Broker\Settings;
+      16 -use RuntimeException;                                          
+      15  
+      16  /**
+      19 - * Normalizes model data for per-user and site-scoped catalog v
+         -iews.                                                          
+      17 + * Resolves the model list and selected model for the current u
+         +ser.                                                           
+      18 + *                                                             
+      19 + * Two sources, no cascade:                                    
+      20 + *  1. User's broker snapshot (if the user has a linked account
+         + with models).                                                 
+      21 + *  2. Settings fallback (admin-configured allowed-models list)
+         +.                                                              
+      22 + *                                                             
+      23 + * Selected model: user's explicit choice (user meta) → first a
+         +vailable.                                                      
+      24   */
+      25  final class ModelCatalogState {
+      26  
+      23 -  private const REFRESH_TTL           = 10 * MINUTE_IN_SECONDS;
+      24 -  private const REFRESH_TRANSIENT_KEY = 'codex_provider_site_ca
+         -talog_refresh_attempt';                                        
+      27    private const USER_META_PREFERRED_MODEL = 'codex_provider_pre
+          ferred_model';
+      28  
+      29    /**
+      28 -   * Returns the current request's effective model catalog.    
+      30 +   * Returns the current user's effective model catalog.       
+      31     *
+      30 -   * Prefers the current user's broker snapshot when available,
+         - then falls back                                               
+      31 -   * to the site-wide snapshot aggregate, and finally the setti
+         -ngs-backed                                                     
+      32 -   * bootstrap list.                                           
+      33 -   *                                                           
+      32     * @param int|null $wp_user_id Optional user ID.
+      33     * @return array{
+      34     *     source:string,
+      37 -   *     default_model:string,                                 
+      35 +   *     selected_model:string,                                
+      36     *     checked_at:?string,
+      37     *     models:list<array{id:string,label:string}>,
+      38     *     model_ids:list<string>
+     ...
+       49        }
+       50      }
+       51  
+       54 -    return self::get_site_catalog();                          
+       52 +    return self::get_settings_catalog( $wp_user_id );         
+       53    }
+       54  
+       55    /**
+       58 -   * Returns the site-scoped model catalog.                   
+       56 +   * Returns the user's broker-snapshot-backed catalog.       
+       57     *
+       60 -   * Aggregates all active broker snapshots so the AI Client h
+          -as a broker-backed                                            
+       61 -   * site catalog even when no current user context is availab
+          -le. When linked                                               
+       62 -   * account snapshots are missing or stale, the plugin refres
+          -hes them from the                                             
+       63 -   * broker's per-user `/v1/wordpress/models` endpoint before 
+          -aggregating them.                                             
+       64 -   *                                                          
+       65 -   * @return array{                                           
+       66 -   *     source:string,                                       
+       67 -   *     default_model:string,                                
+       68 -   *     checked_at:?string,                                  
+       69 -   *     models:list<array{id:string,label:string}>,          
+       70 -   *     model_ids:list<string>                               
+       71 -   * }                                                        
+       72 -   */                                                         
+       73 -  public static function get_site_catalog(): array {          
+       74 -    $active_connections = ConnectionRepository::list_active_fo
+          -r_site_catalog();                                             
+       75 -    $stored_catalog     = self::get_snapshot_aggregate_catalog
+          -();                                                           
+       76 -                                                              
+       77 -    if ( [] === $active_connections ) {                       
+       78 -      return [] !== $stored_catalog['model_ids'] ? $stored_cat
+          -alog : self::get_settings_catalog();                          
+       79 -    }                                                         
+       80 -                                                              
+       81 -    if (                                                      
+       82 -      Settings::has_required_site_configuration() &&          
+       83 -      self::site_catalog_requires_refresh( $active_connections
+          - ) &&                                                         
+       84 -      ! self::has_recent_refresh_attempt()                    
+       85 -    ) {                                                       
+       86 -      self::record_refresh_attempt();                         
+       87 -                                                              
+       88 -      $live_catalog = self::refresh_site_catalog_from_broker( 
+          -$active_connections );                                        
+       89 -                                                              
+       90 -      if ( [] !== $live_catalog['model_ids'] ) {              
+       91 -        return $live_catalog;                                 
+       92 -      }                                                       
+       93 -                                                              
+       94 -      $stored_catalog = self::get_snapshot_aggregate_catalog()
+          -;                                                             
+       95 -    }                                                         
+       96 -                                                              
+       97 -    if ( [] !== $stored_catalog['model_ids'] ) {              
+       98 -      return $stored_catalog;                                 
+       99 -    }                                                         
+      100 -                                                              
+      101 -    return self::get_settings_catalog();                      
+      102 -  }                                                           
+      103 -                                                              
+      104 -  /**                                                         
+      105 -   * Returns the current user's stored snapshot-backed catalog
+          -.                                                             
+      106 -   *                                                          
+       58     * @param int $wp_user_id User ID.
+       59     * @return array{
+       60     *     source:string,
+      110 -   *     default_model:string,                                
+       61 +   *     selected_model:string,                               
+       62     *     checked_at:?string,
+       63     *     models:list<array{id:string,label:string}>,
+       64     *     model_ids:list<string>
+     ...
+       83        return self::empty_catalog( 'user_snapshot' );
+       84      }
+       85  
+      135 -    $model_ids = array_values(                                
+      136 -      array_map(                                              
+      137 -        static function ( array $model ): string {            
+      138 -          return $model['id'];                                
+      139 -        },                                                    
+      140 -        $models                                               
+      141 -      )                                                       
+       86 +    $model_ids = array_map(                                   
+       87 +      static function ( array $model ): string {              
+       88 +        return $model['id'];                                  
+       89 +      },                                                      
+       90 +      $models                                                 
+       91      );
+       92  
+      144 -    $default_model = self::resolve_default_model(             
+      145 -      $model_ids,                                             
+      146 -      [                                                       
+      147 -        (string) ( $snapshot['default_model'] ?? '' ),        
+      148 -      ],                                                      
+      149 -      $wp_user_id                                             
+      150 -    );                                                        
+      151 -    $models        = self::prioritize_default_model( $models, 
+          -$default_model );                                             
+       93 +    $selected = self::resolve_selected_model( $model_ids, $wp_
+          +user_id );                                                    
+       94 +    $models   = self::prioritize_selected_model( $models, $sel
+          +ected );                                                      
+       95  
+       96      return [
+      154 -      'source'        => 'user_snapshot',                     
+      155 -      'default_model' => $default_model,                      
+      156 -      'checked_at'    => ! empty( $snapshot['checked_at'] ) ? 
+          -(string) $snapshot['checked_at'] : null,                      
+      157 -      'models'        => $models,                             
+      158 -      'model_ids'     => $model_ids,                          
+       97 +      'source'         => 'user_snapshot',                    
+       98 +      'selected_model' => $selected,                          
+       99 +      'checked_at'     => ! empty( $snapshot['checked_at'] ) ?
+          + (string) $snapshot['checked_at'] : null,                     
+      100 +      'models'         => $models,                            
+      101 +      'model_ids'      => $model_ids,                         
+      102      ];
+      103    }
+      104  
+     ...
+      136    }
+      137  
+      138    /**
+      196 -   * Returns the current user's preferred model when one is st
+          -ored.                                                         
+      139 +   * Returns the user's explicitly chosen model.              
+      140     *
+      141     * @param int|null $wp_user_id Optional user ID.
+      142     * @return string
+     ...
+      152    }
+      153  
+      154    /**
+      212 -   * Stores the current user's preferred model.               
+      155 +   * Stores the user's model choice.                          
+      156     *
+      157     * @param int    $wp_user_id User ID.
+      215 -   * @param string $model_id Preferred model ID.              
+      158 +   * @param string $model_id Model ID (empty string clears the
+          + choice).                                                     
+      159     * @return void
+      160     */
+      161    public static function update_user_preferred_model( int $wp_
+           user_id, string $model_id ): void {
+     ...
+      174    }
+      175  
+      176    /**
+      234 -   * Deletes the current user's preferred model.              
+      177 +   * Deletes the user's model choice.                         
+      178     *
+      179     * @param int $wp_user_id User ID.
+      180     * @return void
+     ...
+      188    }
+      189  
+      190    /**
+      248 -   * Returns a readable label for a catalog source.           
+      249 -   *                                                          
+      250 -   * @param string $source Source identifier.                 
+      251 -   * @return string                                           
+      252 -   */                                                         
+      253 -  public static function label_for_source( string $source ): s
+          -tring {                                                       
+      254 -    switch ( $source ) {                                      
+      255 -      case 'user_snapshot':                                   
+      256 -        return __( 'Current account snapshot', 'ai-provider-fo
+          -r-codex' );                                                   
+      257 -      case 'site_broker_aggregate':                           
+      258 -        return __( 'Broker-refreshed site aggregate', 'ai-prov
+          -ider-for-codex' );                                            
+      259 -      case 'site_snapshot_aggregate':                         
+      260 -        return __( 'Site snapshot aggregate', 'ai-provider-for
+          --codex' );                                                    
+      261 -      case 'settings_fallback':                               
+      262 -      default:                                                
+      263 -        return __( 'Site settings fallback', 'ai-provider-for-
+          -codex' );                                                     
+      264 -    }                                                         
+      265 -  }                                                           
+      266 -                                                              
+      267 -  /**                                                         
+      191     * Returns a readable label for a model ID.
+      192     *
+      193     * @param string $model_id Model ID.
+     ...
+      202    }
+      203  
+      204    /**
+      282 -   * Returns whether a catalog timestamp is still fresh.      
+      205 +   * Returns the settings-backed fallback catalog.            
+      206     *
+      284 -   * @param array<string,mixed> $catalog Catalog payload.     
+      285 -   * @return bool                                             
+      286 -   */                                                         
+      287 -  public static function is_catalog_fresh( array $catalog ): b
+          -ool {                                                         
+      288 -    if ( empty( $catalog['checked_at'] ) ) {                  
+      289 -      return false;                                           
+      290 -    }                                                         
+      291 -                                                              
+      292 -    $checked_at = strtotime( (string) $catalog['checked_at'] )
+          -;                                                             
+      293 -                                                              
+      294 -    return false !== $checked_at && $checked_at >= ( time() - 
+          -self::REFRESH_TTL );                                          
+      295 -  }                                                           
+      296 -                                                              
+      297 -  /**                                                         
+      298 -   * Returns the settings-backed bootstrap catalog.           
+      299 -   *                                                          
+      207 +   * @param int|null $wp_user_id Optional user ID for selected
+          +-model resolution.                                            
+      208     * @return array{
+      209     *     source:string,
+      302 -   *     default_model:string,                                
+      210 +   *     selected_model:string,                               
+      211     *     checked_at:?string,
+      212     *     models:list<array{id:string,label:string}>,
+      213     *     model_ids:list<string>
+      214     * }
+      215     */
+      308 -  private static function get_settings_catalog(): array {     
+      216 +  private static function get_settings_catalog( ?int $wp_user_
+          +id = null ): array {                                          
+      217      $models = array_map(
+      218        static function ( string $model_id ): array {
+      219          return [
+     ...
+      224        Settings::get_allowed_models()
+      225      );
+      226  
+      319 -    $model_ids = array_values(                                
+      320 -      array_map(                                              
+      321 -        static function ( array $model ): string {            
+      322 -          return $model['id'];                                
+      323 -        },                                                    
+      324 -        $models                                               
+      325 -      )                                                       
+      227 +    $model_ids = array_map(                                   
+      228 +      static function ( array $model ): string {              
+      229 +        return $model['id'];                                  
+      230 +      },                                                      
+      231 +      $models                                                 
+      232      );
+      233  
+      328 -    $default_model = self::resolve_default_model( $model_ids, 
+          -[] );                                                         
+      329 -    $models        = self::prioritize_default_model( $models, 
+          -$default_model );                                             
+      234 +    $selected = self::resolve_selected_model( $model_ids, $wp_
+          +user_id );                                                    
+      235 +    $models   = self::prioritize_selected_model( $models, $sel
+          +ected );                                                      
+      236  
+      237      return [
+      332 -      'source'        => 'settings_fallback',                 
+      333 -      'default_model' => $default_model,                      
+      334 -      'checked_at'    => null,                                
+      335 -      'models'        => $models,                             
+      336 -      'model_ids'     => $model_ids,                          
+      238 +      'source'         => 'settings_fallback',                
+      239 +      'selected_model' => $selected,                          
+      240 +      'checked_at'     => null,                               
+      241 +      'models'         => $models,                            
+      242 +      'model_ids'      => $model_ids,                         
+      243      ];
+      244    }
+      245  
+      246    /**
+      341 -   * Returns the current site aggregate from stored snapshots 
+          -without fallback.                                             
+      342 -   *                                                          
+      343 -   * @param string $source Source label for the returned catal
+          -og.                                                           
+      344 -   * @return array{                                           
+      345 -   *     source:string,                                       
+      346 -   *     default_model:string,                                
+      347 -   *     checked_at:?string,                                  
+      348 -   *     models:list<array{id:string,label:string}>,          
+      349 -   *     model_ids:list<string>                               
+      350 -   * }                                                        
+      351 -   */                                                         
+      352 -  private static function get_snapshot_aggregate_catalog( stri
+          -ng $source = 'site_snapshot_aggregate' ): array {             
+      353 -    $snapshots = ConnectionSnapshotRepository::list_active_for
+          -_site_catalog();                                              
+      354 -                                                              
+      355 -    if ( [] === $snapshots ) {                                
+      356 -      return self::empty_catalog( $source );                  
+      357 -    }                                                         
+      358 -                                                              
+      359 -    $models_map        = [];                                  
+      360 -    $latest_checked_at = null;                                
+      361 -    $snapshot_defaults = [];                                  
+      362 -                                                              
+      363 -    foreach ( $snapshots as $snapshot ) {                     
+      364 -      foreach ( self::normalize_models( $snapshot['models'] ??
+          - [] ) as $model ) {                                           
+      365 -        $models_map[ $model['id'] ] = $model;                 
+      366 -      }                                                       
+      367 -                                                              
+      368 -      $default_model = sanitize_text_field( (string) ( $snapsh
+          -ot['default_model'] ?? '' ) );                                
+      369 -                                                              
+      370 -      if ( '' !== $default_model ) {                          
+      371 -        $snapshot_defaults[] = $default_model;                
+      372 -      }                                                       
+      373 -                                                              
+      374 -      if ( ! empty( $snapshot['checked_at'] ) ) {             
+      375 -        $checked_at = (string) $snapshot['checked_at'];       
+      376 -                                                              
+      377 -        if ( null === $latest_checked_at || $checked_at > $lat
+          -est_checked_at ) {                                            
+      378 -          $latest_checked_at = $checked_at;                   
+      379 -        }                                                     
+      380 -      }                                                       
+      381 -    }                                                         
+      382 -                                                              
+      383 -    if ( [] === $models_map ) {                               
+      384 -      return self::empty_catalog( $source );                  
+      385 -    }                                                         
+      386 -                                                              
+      387 -    ksort( $models_map );                                     
+      388 -                                                              
+      389 -    $model_ids = array_keys( $models_map );                   
+      390 -    $default_model = self::resolve_default_model( $model_ids, 
+          -$snapshot_defaults );                                         
+      391 -    $models        = self::prioritize_default_model( array_val
+          -ues( $models_map ), $default_model );                         
+      392 -                                                              
+      393 -    return [                                                  
+      394 -      'source'        => $source,                             
+      395 -      'default_model' => $default_model,                      
+      396 -      'checked_at'    => $latest_checked_at,                  
+      397 -      'models'        => $models,                             
+      398 -      'model_ids'     => array_values( $model_ids ),          
+      399 -    ];                                                        
+      400 -  }                                                           
+      401 -                                                              
+      402 -  /**                                                         
+      247     * Normalizes raw model payload data into catalog entries.
+      248     *
+      249     * @param mixed $models Raw model list.
+     ...
+      316    }
+      317  
+      318    /**
+      475 -   * Resolves the effective default model for a catalog.      
+      319 +   * Resolves which model is selected.                        
+      320     *
+      477 -   * @param string[] $model_ids Catalog model IDs.            
+      478 -   * @param string[] $candidate_defaults Candidate defaults fr
+          -om snapshots.                                                 
+      321 +   * User's explicit choice wins. Falls back to first availabl
+          +e.                                                            
+      322 +   *                                                          
+      323 +   * @param string[] $model_ids Available model IDs.          
+      324 +   * @param int|null $wp_user_id Optional user ID.            
+      325     * @return string
+      326     */
+      481 -  private static function resolve_default_model( array $model_
+          -ids, array $candidate_defaults, ?int $wp_user_id = null ): str
+          -ing {                                                         
+      482 -    $user_preferred_model = self::get_user_preferred_model( $w
+          -p_user_id );                                                  
+      327 +  private static function resolve_selected_model( array $model
+          +_ids, ?int $wp_user_id = null ): string {                     
+      328 +    $preferred = self::get_user_preferred_model( $wp_user_id )
+          +;                                                             
+      329  
+      484 -    if ( '' !== $user_preferred_model && in_array( $user_prefe
+          -rred_model, $model_ids, true ) ) {                            
+      485 -      return $user_preferred_model;                           
+      330 +    if ( '' !== $preferred && in_array( $preferred, $model_ids
+          +, true ) ) {                                                  
+      331 +      return $preferred;                                      
+      332      }
+      333  
+      488 -    $site_default = sanitize_text_field( Settings::get_default
+          -_model() );                                                   
+      489 -                                                              
+      490 -    if ( '' !== $site_default && in_array( $site_default, $mod
+          -el_ids, true ) ) {                                            
+      491 -      return $site_default;                                   
+      492 -    }                                                         
+      493 -                                                              
+      494 -    $counts = [];                                             
+      495 -                                                              
+      496 -    foreach ( $candidate_defaults as $candidate ) {           
+      497 -      $candidate = sanitize_text_field( (string) $candidate );
+      498 -                                                              
+      499 -      if ( '' === $candidate || ! in_array( $candidate, $model
+          -_ids, true ) ) {                                              
+      500 -        continue;                                             
+      501 -      }                                                       
+      502 -                                                              
+      503 -      $counts[ $candidate ] = ( $counts[ $candidate ] ?? 0 ) +
+          - 1;                                                           
+      504 -    }                                                         
+      505 -                                                              
+      506 -    if ( [] !== $counts ) {                                   
+      507 -      arsort( $counts );                                      
+      508 -                                                              
+      509 -      return (string) array_key_first( $counts );             
+      510 -    }                                                         
+      511 -                                                              
+      512 -    return $model_ids[0] ?? $site_default;                    
+      334 +    return $model_ids[0] ?? '';                               
+      335    }
+      336  
+      337    /**
+      516 -   * Reorders model entries so the effective default model is 
+          -evaluated first.                                              
+      338 +   * Reorders model entries so the selected model comes first.
+      339     *
+      340     * @param list<array{id:string,label:string}> $models Model 
+           entries.
+      519 -   * @param string                              $default_model
+          - Effective default model.                                     
+      341 +   * @param string                              $selected Sele
+          +cted model ID.                                                
+      342     * @return list<array{id:string,label:string}>
+      343     */
+      522 -  private static function prioritize_default_model( array $mod
+          -els, string $default_model ): array {                         
+      523 -    if ( '' === $default_model || [] === $models ) {          
+      344 +  private static function prioritize_selected_model( array $mo
+          +dels, string $selected ): array {                             
+      345 +    if ( '' === $selected || [] === $models ) {               
+      346        return $models;
+      347      }
+      348  
+      349      usort(
+      350        $models,
+      529 -      static function ( array $left, array $right ) use ( $def
+          -ault_model ): int {                                           
+      351 +      static function ( array $left, array $right ) use ( $sel
+          +ected ): int {                                                
+      352          if ( $left['id'] === $right['id'] ) {
+      353            return 0;
+      354          }
+      355  
+      534 -        if ( $left['id'] === $default_model ) {               
+      356 +        if ( $left['id'] === $selected ) {                    
+      357            return -1;
+      358          }
+      359  
+      538 -        if ( $right['id'] === $default_model ) {              
+      360 +        if ( $right['id'] === $selected ) {                   
+      361            return 1;
+      362          }
+      363  
+     ...
+      369    }
+      370  
+      371    /**
+      550 -   * Returns whether the site catalog should refresh from the 
+          -broker.                                                       
+      551 -   *                                                          
+      552 -   * @param array<int,array<string,mixed>> $active_connections
+          - Active connection rows.                                      
+      553 -   * @return bool                                             
+      554 -   */                                                         
+      555 -  private static function site_catalog_requires_refresh( array
+          - $active_connections ): bool {                                
+      556 -    foreach ( $active_connections as $connection ) {          
+      557 -      $snapshot = ConnectionSnapshotRepository::get( (string) 
+          -$connection['connection_id'] );                               
+      558 -                                                              
+      559 -      if ( ! $snapshot || ! self::is_catalog_fresh( $snapshot 
+          -) || empty( $snapshot['models'] ) ) {                         
+      560 -        return true;                                          
+      561 -      }                                                       
+      562 -    }                                                         
+      563 -                                                              
+      564 -    return false;                                             
+      565 -  }                                                           
+      566 -                                                              
+      567 -  /**                                                         
+      568 -   * Returns whether a recent refresh attempt already ran.    
+      569 -   *                                                          
+      570 -   * @return bool                                             
+      571 -   */                                                         
+      572 -  private static function has_recent_refresh_attempt(): bool {
+      573 -    return false !== get_transient( self::REFRESH_TRANSIENT_KE
+          -Y );                                                          
+      574 -  }                                                           
+      575 -                                                              
+      576 -  /**                                                         
+      577 -   * Records a site-catalog refresh attempt.                  
+      578 -   *                                                          
+      579 -   * @return void                                             
+      580 -   */                                                         
+      581 -  private static function record_refresh_attempt(): void {    
+      582 -    set_transient( self::REFRESH_TRANSIENT_KEY, gmdate( 'Y-m-d
+          - H:i:s' ), self::REFRESH_TTL );                               
+      583 -  }                                                           
+      584 -                                                              
+      585 -  /**                                                         
+      586 -   * Refreshes active connection snapshots from the broker mod
+          -els endpoint.                                                 
+      587 -   *                                                          
+      588 -   * @param array<int,array<string,mixed>> $active_connections
+          - Active connection rows.                                      
+      589 -   * @return array{                                           
+      590 -   *     source:string,                                       
+      591 -   *     default_model:string,                                
+      592 -   *     checked_at:?string,                                  
+      593 -   *     models:list<array{id:string,label:string}>,          
+      594 -   *     model_ids:list<string>                               
+      595 -   * }                                                        
+      596 -   */                                                         
+      597 -  private static function refresh_site_catalog_from_broker( ar
+          -ray $active_connections ): array {                            
+      598 -    $client      = new Client();                              
+      599 -    $did_refresh = false;                                     
+      600 -                                                              
+      601 -    foreach ( $active_connections as $connection ) {          
+      602 -      try {                                                   
+      603 -        $payload = $client->get(                              
+      604 -          '/v1/wordpress/models',                             
+      605 -          [                                                   
+      606 -            'wpUserId'     => (int) $connection['wp_user_id'],
+      607 -            'connectionId' => (string) $connection['connection
+          -_id'],                                                        
+      608 -          ]                                                   
+      609 -        );                                                    
+      610 -                                                              
+      611 -        if ( ! isset( $payload['checkedAt'] ) ) {             
+      612 -          $payload['checkedAt'] = gmdate( 'c' );              
+      613 -        }                                                     
+      614 -                                                              
+      615 -        ConnectionSnapshotRepository::upsert(                 
+      616 -          (string) $connection['connection_id'],              
+      617 -          $payload,                                           
+      618 -          sanitize_text_field( (string) ( $payload['readinessS
+          -tatus'] ?? 'ready' ) )                                        
+      619 -        );                                                    
+      620 -                                                              
+      621 -        $did_refresh = true;                                  
+      622 -      } catch ( RuntimeException $exception ) {               
+      623 -        continue;                                             
+      624 -      }                                                       
+      625 -    }                                                         
+      626 -                                                              
+      627 -    if ( ! $did_refresh ) {                                   
+      628 -      return self::empty_catalog( 'site_broker_aggregate' );  
+      629 -    }                                                         
+      630 -                                                              
+      631 -    return self::get_snapshot_aggregate_catalog( 'site_broker_
+          -aggregate' );                                                 
+      632 -  }                                                           
+      633 -                                                              
+      634 -  /**                                                         
+      372     * Returns an empty catalog shell.
+      373     *
+      374     * @param string $source Source identifier.
+      375     * @return array{
+      376     *     source:string,
+      640 -   *     default_model:string,                                
+      377 +   *     selected_model:string,                               
+      378     *     checked_at:?string,
+      379     *     models:list<array{id:string,label:string}>,
+      380     *     model_ids:list<string>
+     ...
+      382     */
+      383    private static function empty_catalog( string $source ): arr
+           ay {
+      384      return [
+      648 -      'source'        => $source,                             
+      649 -      'default_model' => '',                                  
+      650 -      'checked_at'    => null,                                
+      651 -      'models'        => [],                                  
+      652 -      'model_ids'     => [],                                  
+      385 +      'source'         => $source,                            
+      386 +      'selected_model' => '',                                 
+      387 +      'checked_at'     => null,                               
+      388 +      'models'         => [],                                 
+      389 +      'model_ids'      => [],                                 
+      390      ];
+      391    }
+      392  }
+
+● Now update SupportChecks — drop the separate site catalog call.
+
+● Write(src/Provider/SupportChecks.php)
+  ⎿  Added 14 lines, removed 20 lines
+      28    public static function current_user_status( ?int $wp_user_id 
+          = null ): array {
+      29      $wp_user_id = $wp_user_id ?? get_current_user_id();
+      30      $catalog    = ModelCatalogState::get_effective_catalog( $wp
+          _user_id );
+      31 -    $site_catalog = ModelCatalogState::get_site_catalog();     
+      31  
+      32      if ( ! Settings::has_required_site_configuration() ) {
+      33        return [
+      35 -        'ready'           => false,                            
+      36 -        'reason'          => 'broker_unconfigured',            
+      37 -        'broker'          => HealthMonitor::get_status(),      
+      38 -        'siteConfigured'  => false,                            
+      39 -        'connection'      => null,                             
+      40 -        'snapshot'        => null,                             
+      41 -        'catalog'         => $catalog,                         
+      42 -        'siteCatalog'     => $site_catalog,                    
+      34 +        'ready'          => false,                             
+      35 +        'reason'         => 'broker_unconfigured',             
+      36 +        'broker'         => HealthMonitor::get_status(),       
+      37 +        'siteConfigured' => false,                             
+      38 +        'connection'     => null,                              
+      39 +        'snapshot'       => null,                              
+      40 +        'catalog'        => $catalog,                          
+      41        ];
+      42      }
+      43  
+     ...
+      45  
+      46      if ( ! $connection ) {
+      47        return [
+      50 -        'ready'           => false,                            
+      51 -        'reason'          => 'user_unlinked',                  
+      52 -        'broker'          => HealthMonitor::get_status(),      
+      53 -        'siteConfigured'  => true,                             
+      54 -        'connection'      => null,                             
+      55 -        'snapshot'        => null,                             
+      56 -        'catalog'         => $catalog,                         
+      57 -        'siteCatalog'     => $site_catalog,                    
+      48 +        'ready'          => false,                             
+      49 +        'reason'         => 'user_unlinked',                   
+      50 +        'broker'         => HealthMonitor::get_status(),       
+      51 +        'siteConfigured' => true,                              
+      52 +        'connection'     => null,                              
+      53 +        'snapshot'       => null,                              
+      54 +        'catalog'        => $catalog,                          
+      55        ];
+      56      }
+      57  
+     ...
+      67            'connection'     => $connection,
+      68            'snapshot'       => null,
+      69            'catalog'        => $catalog,
+      73 -          'siteCatalog'    => $site_catalog,                   
+      70          ];
+      71        }
+      72      }
+     ...
+      82          'connection'     => $connection,
+      83          'snapshot'       => null,
+      84          'catalog'        => $catalog,
+      89 -        'siteCatalog'    => $site_catalog,                     
+      85        ];
+      86      }
+      87  
+     ...
+       95        'connection'     => $connection,
+       96        'snapshot'       => $snapshot,
+       97        'catalog'        => $catalog,
+      103 -      'siteCatalog'    => $site_catalog,                      
+       98      ];
+       99    }
+      100  }
+
+● Now simplify the SiteSettings page. Remove default model and allowed models
+  from advanced config (the broker provides models now), keep only broker
+  connection fields.
+
+  Searched for 1 pattern, read 2 files (ctrl+o to expand)
+● The catalog key renamed from default_model to selected_model. Let me update
+  all consumers now.
+
+● Write(src/Admin/SiteSettings.php)
+  ⎿  Added 16 lines, removed 50 lines
+      73  
+      74      register_setting(
+      75        'ai-provider-for-codex',
+      76 -      Settings::OPTION_DEFAULT_MODEL,                          
+      77 -      [                                                        
+      78 -        'type'              => 'string',                       
+      79 -        'sanitize_callback' => [ Settings::class, 'sanitize_def
+         -ault_model' ],                                                 
+      80 -        'default'           => Settings::get_default_model(),  
+      81 -      ]                                                        
+      82 -    );                                                         
+      83 -                                                               
+      84 -    register_setting(                                          
+      85 -      'ai-provider-for-codex',                                 
+      76        Settings::OPTION_ALLOWED_MODELS,
+      77        [
+      78          'type'              => 'string',
+     ...
+      132      }
+      133  
+      134      $notice        = self::read_notice();
+      145 -    $site_catalog  = ModelCatalogState::get_site_catalog();   
+      135 +    $catalog       = ModelCatalogState::get_effective_catalog(
+          +);                                                            
+      136      $broker_status = HealthMonitor::get_status();
+      137      $is_configured = Settings::has_required_site_configuration
+           ();
+      138      $health_ind    = StatusLabels::status_indicator( (string) 
+           $broker_status['status'] );
+      149 -    $model_labels  = ModelCatalogState::labels_from_catalog( $
+          -site_catalog );                                               
+      139 +    $model_labels  = ModelCatalogState::labels_from_catalog( $
+          +catalog );                                                    
+      140      ?>
+      141      <style>
+      142        .codex-status-cards { display: flex; flex-wrap: wrap; ga
+           p: 1rem; margin-bottom: 2rem; max-width: 960px; }
+     ...
+      150        .codex-indicator.error { background: #d63638; }
+      151        .codex-models-list { display: flex; flex-wrap: wrap; gap
+           : 0.375rem; margin-top: 0.25rem; }
+      152        .codex-model-pill { display: inline-block; background: #
+           f0f0f1; border-radius: 3px; padding: 2px 8px; font-size: 12px;
+            }
+      163 -      .codex-model-pill.default { background: #2271b1; color: 
+          -#fff; }                                                       
+      153 +      .codex-model-pill.selected { background: #2271b1; color:
+          + #fff; }                                                      
+      154        .codex-how-it-works { background: #f0f6fc; border: 1px s
+           olid #c3c4c7; border-left: 4px solid #2271b1; padding: 1rem 1.
+           25rem; max-width: 960px; margin-bottom: 1.5rem; border-radius:
+            2px; }
+      155        .codex-how-it-works p { margin: 0.25rem 0; }
+      156        .codex-advanced-toggle { cursor: pointer; user-select: n
+           one; color: #2271b1; font-weight: 600; }
+     ...
+      203          </div>
+      204  
+      205          <div class="codex-status-card">
+      216 -          <h3><?php esc_html_e( 'Default Model', 'ai-provider-
+          -for-codex' ); ?></h3>                                         
+      206 +          <h3><?php esc_html_e( 'Models', 'ai-provider-for-cod
+          +ex' ); ?></h3>                                                
+      207            <div class="value">
+      208              <?php
+      219 -            $default_model = (string) $site_catalog['default_m
+          -odel'];                                                       
+      220 -            echo esc_html( '' !== $default_model ? ModelCatalo
+          -gState::label_for_model_id( $default_model ) : '—' );         
+      221 -            ?>                                                
+      222 -          </div>                                              
+      223 -          <div class="meta">                                  
+      224 -            <?php                                             
+      209              printf(
+      210                /* translators: %d: number of models. */
+      211                esc_html( _n( '%d model available', '%d models a
+           vailable', count( $model_labels ), 'ai-provider-for-codex' ) )
+           ,
+     ...
+      213              );
+      214              ?>
+      215            </div>
+      216 +          <div class="meta">                                  
+      217 +            <?php                                             
+      218 +            $source = (string) $catalog['source'];            
+      219 +            echo esc_html( StatusLabels::catalog_source_label(
+          + $source ) );                                                 
+      220 +            ?>                                                
+      221 +          </div>                                              
+      222          </div>
+      233 -                                                              
+      234 -        <div class="codex-status-card">                       
+      235 -          <h3><?php esc_html_e( 'Catalog', 'ai-provider-for-co
+          -dex' ); ?></h3>                                               
+      236 -          <div class="value"><?php echo esc_html( StatusLabels
+          -::catalog_source_label( (string) $site_catalog['source'] ) ); 
+          -?></div>                                                      
+      237 -          <?php if ( ! empty( $site_catalog['checked_at'] ) ) 
+          -: ?>                                                          
+      238 -            <div class="meta">                                
+      239 -              <?php                                           
+      240 -              printf(                                         
+      241 -                /* translators: %s: relative time. */         
+      242 -                esc_html__( 'Refreshed %s', 'ai-provider-for-c
+          -odex' ),                                                      
+      243 -                esc_html( StatusLabels::relative_time( (string
+          -) $site_catalog['checked_at'] ) )                             
+      244 -              );                                              
+      245 -              ?>                                              
+      246 -            </div>                                            
+      247 -          <?php endif; ?>                                     
+      248 -        </div>                                                
+      223        </div>
+      224  
+      225        <?php if ( ! empty( $model_labels ) ) : ?>
+      226 +        <?php $selected = (string) $catalog['selected_model'];
+          + ?>                                                           
+      227          <div class="codex-models-list" style="max-width: 960px
+           ; margin-bottom: 2rem;">
+      228            <?php foreach ( $model_labels as $label ) : ?>
+      254 -            <span class="codex-model-pill<?php echo $label ===
+          - ModelCatalogState::label_for_model_id( $default_model ) ? ' d
+          -efault' : ''; ?>">                                            
+      229 +            <span class="codex-model-pill<?php echo $label ===
+          + ModelCatalogState::label_for_model_id( $selected ) ? ' select
+          +ed' : ''; ?>">                                                
+      230                <?php echo esc_html( $label ); ?>
+      231              </span>
+      232            <?php endforeach; ?>
+     ...
+      276  
+      277        <p>
+      278          <span class="codex-advanced-toggle" onclick="document.
+           getElementById('codex-advanced-settings').style.display = docu
+           ment.getElementById('codex-advanced-settings').style.display =
+           == 'none' ? 'block' : 'none';">
+      304 -          ▸ <?php esc_html_e( 'Advanced configuration', 'ai-pr
+          -ovider-for-codex' ); ?>                                       
+      279 +          &#x25B8; <?php esc_html_e( 'Advanced configuration',
+          + 'ai-provider-for-codex' ); ?>                                
+      280          </span>
+      281        </p>
+      282  
+     ...
+      296                <th scope="row"><label for="<?php echo esc_attr(
+            Settings::OPTION_SITE_ID ); ?>"><?php esc_html_e( 'Site ID', 
+           'ai-provider-for-codex' ); ?></label></th>
+      297                <td>
+      298                  <input class="regular-text code" id="<?php ech
+           o esc_attr( Settings::OPTION_SITE_ID ); ?>" name="<?php echo e
+           sc_attr( Settings::OPTION_SITE_ID ); ?>" type="text" value="<?
+           php echo esc_attr( Settings::get_site_id() ); ?>" />
+      324 -                <p class="description"><?php esc_html_e( 'Uniq
+          -ue identifier assigned to this WordPress site by the broker.',
+          - 'ai-provider-for-codex' ); ?></p>                            
+      299                </td>
+      300              </tr>
+      301              <tr>
+      302                <th scope="row"><label for="<?php echo esc_attr(
+            Settings::OPTION_SITE_SECRET ); ?>"><?php esc_html_e( 'Site s
+           ecret', 'ai-provider-for-codex' ); ?></label></th>
+      303                <td>
+      304                  <input class="regular-text code" id="<?php ech
+           o esc_attr( Settings::OPTION_SITE_SECRET ); ?>" name="<?php ec
+           ho esc_attr( Settings::OPTION_SITE_SECRET ); ?>" type="passwor
+           d" value="<?php echo esc_attr( Settings::get_site_secret() ); 
+           ?>" autocomplete="off" />
+      331 -                <p class="description"><?php esc_html_e( 'Shar
+          -ed secret for authenticating requests between this site and th
+          -e broker. Keep this confidential.', 'ai-provider-for-codex' );
+          - ?></p>                                                       
+      305                </td>
+      306              </tr>
+      307              <tr>
+      335 -              <th scope="row"><label for="<?php echo esc_attr(
+          - Settings::OPTION_DEFAULT_MODEL ); ?>"><?php esc_html_e( 'Defa
+          -ult model', 'ai-provider-for-codex' ); ?></label></th>        
+      308 +              <th scope="row"><label for="<?php echo esc_attr(
+          + Settings::OPTION_ALLOWED_MODELS ); ?>"><?php esc_html_e( 'Fal
+          +lback models', 'ai-provider-for-codex' ); ?></label></th>     
+      309                <td>
+      337 -                <input class="regular-text code" id="<?php ech
+          -o esc_attr( Settings::OPTION_DEFAULT_MODEL ); ?>" name="<?php 
+          -echo esc_attr( Settings::OPTION_DEFAULT_MODEL ); ?>" type="tex
+          -t" value="<?php echo esc_attr( Settings::get_default_model() )
+          -; ?>" />                                                      
+      338 -                <p class="description"><?php esc_html_e( 'The 
+          -model used when no specific model is requested.', 'ai-provider
+          --for-codex' ); ?></p>                                         
+      310 +                <textarea class="large-text code" id="<?php ec
+          +ho esc_attr( Settings::OPTION_ALLOWED_MODELS ); ?>" name="<?ph
+          +p echo esc_attr( Settings::OPTION_ALLOWED_MODELS ); ?>" rows="
+          +4"><?php echo esc_textarea( Settings::allowed_models_as_text()
+          + ); ?></textarea>                                             
+      311 +                <p class="description"><?php esc_html_e( 'Mode
+          +l list used before a user links their Codex account. One model
+          + ID per line.', 'ai-provider-for-codex' ); ?></p>             
+      312                </td>
+      313              </tr>
+      341 -            <tr>                                              
+      342 -              <th scope="row"><label for="<?php echo esc_attr(
+          - Settings::OPTION_ALLOWED_MODELS ); ?>"><?php esc_html_e( 'All
+          -owed models', 'ai-provider-for-codex' ); ?></label></th>      
+      343 -              <td>                                            
+      344 -                <textarea class="large-text code" id="<?php ec
+          -ho esc_attr( Settings::OPTION_ALLOWED_MODELS ); ?>" name="<?ph
+          -p echo esc_attr( Settings::OPTION_ALLOWED_MODELS ); ?>" rows="
+          -6"><?php echo esc_textarea( Settings::allowed_models_as_text()
+          - ); ?></textarea>                                             
+      345 -                <p class="description"><?php esc_html_e( 'Fall
+          -back model list used until broker snapshots provide a live cat
+          -alog. One model ID per line.', 'ai-provider-for-codex' ); ?></
+          -p>                                                            
+      346 -              </td>                                           
+      347 -            </tr>                                             
+      314            </table>
+      315            <?php submit_button( __( 'Save settings', 'ai-provid
+           er-for-codex' ) ); ?>
+      316          </form>
+
+● Now simplify the UserConnectionPage — rename to "Model" instead of "Preferred
+  default model", use selected_model key, cleaner language.
+
+● Write(src/Admin/UserConnectionPage.php)
+  ⎿  Added 58 lines, removed 80 lines
+       9  
+      10  namespace AIProviderForCodex\Admin;
+      11  
+      12 -use AIProviderForCodex\Admin\StatusLabels;                     
+      12  use AIProviderForCodex\Auth\ConnectionService;
+      13  use AIProviderForCodex\Provider\ModelCatalogState;
+      14  use AIProviderForCodex\Provider\SupportChecks;
+     ...
+      61  
+      62      $post_action = isset( $_POST['codex_provider_action'] ) ? s
+          anitize_key( wp_unslash( $_POST['codex_provider_action'] ) ) : 
+          '';
+      63  
+      65 -    if ( 'set-default-model' === $post_action ) {              
+      66 -      check_admin_referer( 'codex-provider-set-default-model' )
+         -;                                                              
+      67 -      self::set_default_model();                               
+      64 +    if ( 'set-model' === $post_action ) {                      
+      65 +      check_admin_referer( 'codex-provider-set-model' );       
+      66 +      self::set_model();                                       
+      67      }
+      68  
+      69      $action = isset( $_GET['action'] ) ? sanitize_key( wp_unsla
+          sh( $_GET['action'] ) ) : '';
+     ...
+       98        return;
+       99      }
+      100  
+      102 -    $status  = SupportChecks::current_user_status();          
+      103 -    $catalog = is_array( $status['catalog'] ?? null ) ? $statu
+          -s['catalog'] : ModelCatalogState::get_effective_catalog();    
+      104 -    $notice  = self::read_notice();                           
+      105 -    $reason  = (string) $status['reason'];                    
+      106 -    $ind     = StatusLabels::status_indicator( $reason );     
+      107 -    $model_labels = ModelCatalogState::labels_from_catalog( $c
+          -atalog );                                                     
+      108 -    $model_ids    = is_array( $catalog['model_ids'] ?? null ) 
+          -? $catalog['model_ids'] : [];                                 
+      109 -    $default_model = (string) ( $catalog['default_model'] ?? '
+          -' );                                                          
+      110 -    $user_preferred_model = ModelCatalogState::get_user_prefer
+          -red_model();                                                  
+      101 +    $status         = SupportChecks::current_user_status();   
+      102 +    $catalog        = is_array( $status['catalog'] ?? null ) ?
+          + $status['catalog'] : ModelCatalogState::get_effective_catalog
+          +();                                                           
+      103 +    $notice         = self::read_notice();                    
+      104 +    $reason         = (string) $status['reason'];             
+      105 +    $ind            = StatusLabels::status_indicator( $reason 
+          +);                                                            
+      106 +    $model_labels   = ModelCatalogState::labels_from_catalog( 
+          +$catalog );                                                   
+      107 +    $model_ids      = is_array( $catalog['model_ids'] ?? null 
+          +) ? $catalog['model_ids'] : [];                               
+      108 +    $selected_model = (string) ( $catalog['selected_model'] ??
+          + '' );                                                        
+      109      ?>
+      110      <style>
+      111        .codex-how-box { background: #f0f6fc; border: 1px solid 
+           #c3c4c7; border-left: 4px solid #2271b1; padding: 0.75rem 1.25
+           rem; max-width: 960px; margin-bottom: 1.5rem; border-radius: 2
+           px; }
+     ...
+      119        .codex-models-section { margin: 1.5rem 0; max-width: 960
+           px; }
+      120        .codex-models-list { display: flex; flex-wrap: wrap; gap
+           : 0.375rem; margin-top: 0.5rem; }
+      121        .codex-model-pill { display: inline-block; background: #
+           f0f0f1; border-radius: 3px; padding: 2px 8px; font-size: 12px;
+            }
+      124 -      .codex-model-pill.default { background: #2271b1; color: 
+          -#fff; }                                                       
+      122 +      .codex-model-pill.selected { background: #2271b1; color:
+          + #fff; }                                                      
+      123      </style>
+      124      <div class="wrap">
+      125        <h1><?php esc_html_e( 'Codex Provider', 'ai-provider-for
+           -codex' ); ?></h1>
+     ...
+      181                <td><?php echo esc_html( (string) $status['conne
+           ction']['plan_type'] ); ?></td>
+      182              </tr>
+      183            <?php endif; ?>
+      186 -          <?php if ( ! empty( $catalog['source'] ) ) : ?>     
+      187 -            <tr>                                              
+      188 -              <th scope="row"><?php esc_html_e( 'Model source'
+          -, 'ai-provider-for-codex' ); ?></th>                          
+      189 -              <td>                                            
+      190 -                <?php echo esc_html( StatusLabels::catalog_sou
+          -rce_label( (string) $catalog['source'] ) ); ?>                
+      191 -                <?php if ( ! empty( $catalog['checked_at'] ) )
+          - : ?>                                                         
+      192 -                  <br /><em>                                  
+      193 -                  <?php                                       
+      194 -                  printf(                                     
+      195 -                    /* translators: %s: relative time. */     
+      196 -                    esc_html__( 'Refreshed %s', 'ai-provider-f
+          -or-codex' ),                                                  
+      197 -                    esc_html( StatusLabels::relative_time( (st
+          -ring) $catalog['checked_at'] ) )                              
+      198 -                  );                                          
+      199 -                  ?>                                          
+      200 -                  </em>                                       
+      201 -                <?php endif; ?>                               
+      202 -              </td>                                           
+      203 -            </tr>                                             
+      204 -          <?php endif; ?>                                     
+      184          </tbody>
+      185        </table>
+      186  
+      208 -        <?php if ( ! empty( $model_labels ) ) : ?>            
+      209 -          <div class="codex-models-section">                  
+      210 -            <h3><?php esc_html_e( 'Your Models', 'ai-provider-
+          -for-codex' ); ?></h3>                                         
+      211 -          <?php if ( '' !== $default_model ) : ?>             
+      187 +      <?php if ( ! empty( $model_labels ) ) : ?>              
+      188 +        <div class="codex-models-section">                    
+      189 +          <h3><?php esc_html_e( 'Model', 'ai-provider-for-code
+          +x' ); ?></h3>                                                 
+      190 +          <?php if ( '' !== $selected_model ) : ?>            
+      191              <p>
+      192                <?php
+      193                printf(
+      194                  /* translators: %s: model name. */
+      216 -                esc_html__( 'Default: %s', 'ai-provider-for-co
+          -dex' ),                                                       
+      217 -                esc_html( ModelCatalogState::label_for_model_i
+          -d( $default_model ) )                                         
+      195 +                esc_html__( 'Using: %s', 'ai-provider-for-code
+          +x' ),                                                         
+      196 +                '<strong>' . esc_html( ModelCatalogState::labe
+          +l_for_model_id( $selected_model ) ) . '</strong>'             
+      197                );
+      198                ?>
+      199              </p>
+      200            <?php endif; ?>
+      201            <div class="codex-models-list">
+      202              <?php foreach ( $model_labels as $label ) : ?>
+      224 -              <span class="codex-model-pill<?php echo $label =
+          -== ModelCatalogState::label_for_model_id( $default_model ) ? '
+          - default' : ''; ?>">                                          
+      203 +              <span class="codex-model-pill<?php echo $label =
+          +== ModelCatalogState::label_for_model_id( $selected_model ) ? 
+          +' selected' : ''; ?>">                                        
+      204                  <?php echo esc_html( $label ); ?>
+      205                </span>
+      206              <?php endforeach; ?>
+      207            </div>
+      229 -            <?php if ( 'settings_fallback' === ( $catalog['sou
+          -rce'] ?? '' ) ) : ?>                                          
+      230 -              <p class="description"><?php esc_html_e( 'Using 
+          -configured defaults — connect an account for live model discov
+          -ery.', 'ai-provider-for-codex' ); ?></p>                      
+      231 -            <?php endif; ?>                                   
+      232 -            <form method="post" action="<?php echo esc_url( se
+          -lf::page_url() ); ?>" style="margin-top: 1rem;">              
+      233 -              <?php wp_nonce_field( 'codex-provider-set-defaul
+          -t-model' ); ?>                                                
+      234 -              <input type="hidden" name="codex_provider_action
+          -" value="set-default-model" />                                
+      235 -              <label for="codex_provider_default_model"><stron
+          -g><?php esc_html_e( 'Preferred default model', 'ai-provider-fo
+          -r-codex' ); ?></strong></label><br />                         
+      236 -              <select                                         
+      237 -                id="codex_provider_default_model"             
+      238 -                name="codex_provider_default_model"           
+      239 -                <?php disabled( [] === $model_ids ); ?>       
+      240 -              >                                               
+      241 -                <option value=""><?php esc_html_e( 'Use site d
+          -efault / broker default', 'ai-provider-for-codex' ); ?></optio
+          -n>                                                            
+      242 -                <?php foreach ( $model_ids as $model_id ) : ?>
+      243 -                  <option value="<?php echo esc_attr( (string)
+          - $model_id ); ?>" <?php selected( $user_preferred_model, (stri
+          -ng) $model_id ); ?>>                                          
+      244 -                    <?php echo esc_html( ModelCatalogState::la
+          -bel_for_model_id( (string) $model_id ) ); ?>                  
+      245 -                  </option>                                   
+      246 -                <?php endforeach; ?>                          
+      247 -              </select>                                       
+      248 -              <?php submit_button( __( 'Save preferred model',
+          - 'ai-provider-for-codex' ), 'secondary', 'submit', false, [ 's
+          -tyle' => 'margin-left: 0.5rem;' ] ); ?>                       
+      249 -              <p class="description">                         
+      250 -                <?php esc_html_e( 'Choose which discovered mod
+          -el this site should prefer for your Codex-backed requests. Lea
+          -ve blank to follow the site or broker default.', 'ai-provider-
+          -for-codex' ); ?>                                              
+      251 -              </p>                                            
+      252 -            </form>                                           
+      253 -          </div>                                              
+      254 -        <?php endif; ?>                                       
+      208 +          <?php if ( 'settings_fallback' === ( $catalog['sourc
+          +e'] ?? '' ) ) : ?>                                            
+      209 +            <p class="description"><?php esc_html_e( 'Using co
+          +nfigured defaults — connect an account for live model discover
+          +y.', 'ai-provider-for-codex' ); ?></p>                        
+      210 +          <?php endif; ?>                                     
+      211 +          <form method="post" action="<?php echo esc_url( self
+          +::page_url() ); ?>" style="margin-top: 1rem;">                
+      212 +            <?php wp_nonce_field( 'codex-provider-set-model' )
+          +; ?>                                                          
+      213 +            <input type="hidden" name="codex_provider_action" 
+          +value="set-model" />                                          
+      214 +            <label for="codex_provider_model"><strong><?php es
+          +c_html_e( 'Choose model', 'ai-provider-for-codex' ); ?></stron
+          +g></label><br />                                              
+      215 +            <select                                           
+      216 +              id="codex_provider_model"                       
+      217 +              name="codex_provider_model"                     
+      218 +              <?php disabled( [] === $model_ids ); ?>         
+      219 +            >                                                 
+      220 +              <?php foreach ( $model_ids as $model_id ) : ?>  
+      221 +                <option value="<?php echo esc_attr( (string) $
+          +model_id ); ?>" <?php selected( $selected_model, (string) $mod
+          +el_id ); ?>>                                                  
+      222 +                  <?php echo esc_html( ModelCatalogState::labe
+          +l_for_model_id( (string) $model_id ) ); ?>                    
+      223 +                </option>                                     
+      224 +              <?php endforeach; ?>                            
+      225 +            </select>                                         
+      226 +            <?php submit_button( __( 'Set model', 'ai-provider
+          +-for-codex' ), 'secondary', 'submit', false, [ 'style' => 'mar
+          +gin-left: 0.5rem;' ] ); ?>                                    
+      227 +            <p class="description">                           
+      228 +              <?php esc_html_e( 'This model will be used for a
+          +ll your Codex requests until you change it.', 'ai-provider-for
+          +-codex' ); ?>                                                 
+      229 +            </p>                                              
+      230 +          </form>                                             
+      231 +        </div>                                                
+      232 +      <?php endif; ?>                                         
+      233  
+      234        <p style="margin-top: 1.5rem;">
+      235          <?php if ( ! $status['siteConfigured'] ) : ?>
+     ...
+      308    }
+      309  
+      310    /**
+      333 -   * Stores the current user's preferred default model.       
+      311 +   * Stores the current user's chosen model.                  
+      312     *
+      313     * @return void
+      314     */
+      337 -  private static function set_default_model(): void {         
+      338 -    $wp_user_id     = get_current_user_id();                  
+      339 -    $selected_model = isset( $_POST['codex_provider_default_mo
+          -del'] )                                                       
+      340 -      ? sanitize_text_field( (string) wp_unslash( $_POST['code
+          -x_provider_default_model'] ) )                                
+      315 +  private static function set_model(): void {                 
+      316 +    $wp_user_id = get_current_user_id();                      
+      317 +    $model_id   = isset( $_POST['codex_provider_model'] )     
+      318 +      ? sanitize_text_field( (string) wp_unslash( $_POST['code
+          +x_provider_model'] ) )                                        
+      319        : '';
+      342 -    $catalog        = ModelCatalogState::get_effective_catalog
+          -( $wp_user_id );                                              
+      343 -    $model_ids      = is_array( $catalog['model_ids'] ?? null 
+          -) ? $catalog['model_ids'] : [];                               
+      320 +    $catalog    = ModelCatalogState::get_effective_catalog( $w
+          +p_user_id );                                                  
+      321 +    $model_ids  = $catalog['model_ids'];                      
+      322  
+      345 -    if ( '' !== $selected_model && ! in_array( $selected_model
+          -, $model_ids, true ) ) {                                      
+      346 -      self::redirect_with_notice( 'default-model-failed', __( 
+          -'That model is not available in your current Codex catalog.', 
+          -'ai-provider-for-codex' ) );                                  
+      323 +    if ( '' !== $model_id && ! in_array( $model_id, $model_ids
+          +, true ) ) {                                                  
+      324 +      self::redirect_with_notice( 'model-failed', __( 'That mo
+          +del is not available in your current Codex catalog.', 'ai-prov
+          +ider-for-codex' ) );                                          
+      325      }
+      326  
+      349 -    ModelCatalogState::update_user_preferred_model( $wp_user_i
+          -d, $selected_model );                                         
+      350 -    self::redirect_with_notice( 'default-model-updated' );    
+      327 +    ModelCatalogState::update_user_preferred_model( $wp_user_i
+          +d, $model_id );                                               
+      328 +    self::redirect_with_notice( 'model-updated' );            
+      329    }
+      330  
+      331    /**
+     ...
+      391        case 'status-refreshed':
+      392          $text = __( 'The local Codex snapshot was refreshed.',
+            'ai-provider-for-codex' );
+      393          break;
+      416 -      case 'default-model-updated':                           
+      417 -        $text = __( 'Your preferred Codex model was updated.',
+          - 'ai-provider-for-codex' );                                   
+      394 +      case 'model-updated':                                   
+      395 +        $text = __( 'Your model has been updated.', 'ai-provid
+          +er-for-codex' );                                              
+      396          break;
+      397        case 'connect-failed':
+      398        case 'refresh-failed':
+      421 -      case 'default-model-failed':                            
+      399 +      case 'model-failed':                                    
+      400          $class = 'notice notice-error';
+      401          $text  = '' !== $notice['message'] ? $notice['message'
+           ] : __( 'The Codex broker request failed.', 'ai-provider-for-c
+           odex' );
+      402          break;
+
+● Now update StatusLabels (clean up removed source labels), ModelCatalog (use
+  selected_model), CodexTextGenerationModel (simplify availability check), and
+  verify.php.
+
+● Update(src/Admin/StatusLabels.php)
+  ⎿  Added 1 line, removed 5 lines
+      86      switch ( $source ) {
+      87        case 'user_snapshot':
+      88          return __( 'From your Codex account', 'ai-provider-for-
+          codex' );
+      89 -      case 'site_broker_aggregate':                            
+      90 -        return __( 'Auto-refreshed from broker', 'ai-provider-f
+         -or-codex' );                                                   
+      91 -      case 'site_snapshot_aggregate':                          
+      92 -        return __( 'From linked accounts', 'ai-provider-for-cod
+         -ex' );                                                         
+      89        case 'settings_fallback':
+      90        default:
+      95 -        return __( 'Configured defaults (no live data)', 'ai-pr
+         -ovider-for-codex' );                                           
+      91 +        return __( 'Configured defaults', 'ai-provider-for-code
+         +x' );                                                          
+      92      }
+      93    }
+      94  
+
+● Now update ModelCatalog — it reads default_model which is now selected_model:
+
+  Read 1 file (ctrl+o to expand)
+
+● ModelCatalog only reads models and model_ids keys — no changes needed there.
+  Let me simplify the generation model's availability check:
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(src/Models/CodexTextGenerationModel.php)
+  ⎿  Added 4 lines, removed 8 lines
+      43        throw new RuntimeException( __( 'Connect a Codex account 
+          before requesting text generation.', 'ai-provider-for-codex' ) 
+          );
+      44      }
+      45  
+      46 -    $snapshot_catalog = ModelCatalogState::get_user_snapshot_ca
+         -talog( $wp_user_id );                                          
+      47 -    $model_id         = $this->metadata()->getId();            
+      46 +    $catalog  = ModelCatalogState::get_effective_catalog( $wp_u
+         +ser_id );                                                      
+      47 +    $model_id = $this->metadata()->getId();                    
+      48  
+      49 -    if (                                                       
+      50 -      [] !== $snapshot_catalog['model_ids'] &&                 
+      51 -      ModelCatalogState::is_catalog_fresh( $snapshot_catalog ) 
+         -&&                                                             
+      52 -      ! in_array( $model_id, $snapshot_catalog['model_ids'], tr
+         -ue )                                                           
+      53 -    ) {                                                        
+      49 +    if ( [] !== $catalog['model_ids'] && ! in_array( $model_id,
+         + $catalog['model_ids'], true ) ) {                             
+      50        throw new RuntimeException(
+      51          sprintf(
+      52            /* translators: 1: requested model ID, 2: comma-separ
+          ated available models */
+     ...
+      55              'ai-provider-for-codex'
+      56            ),
+      57            $model_id,
+      62 -          implode( ', ', ModelCatalogState::labels_from_catalog
+         -( $snapshot_catalog ) )                                        
+      58 +          implode( ', ', ModelCatalogState::labels_from_catalog
+         +( $catalog ) )                                                 
+      59          )
+      60        );
+      61      }
+
+● Now update the verify script — remove the site catalog aggregate assertion,
+  update the catalog key names:
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(scripts/verify.php)
+  ⎿  Added 2 lines, removed 8 lines
+      153      'User catalog did not include snapshot models.'
+      154    );
+      155    $assert(
+      156 -    $temporary_model_a === (string) $user_catalog['default_mod
+          -el'],                                                         
+      157 -    'User catalog default model was not preserved.'           
+      156 +    $temporary_model_a === (string) $user_catalog['selected_mo
+          +del'],                                                        
+      157 +    'User catalog selected model did not default to first avai
+          +lable.'                                                       
+      158    );
+      159  
+      160 -  $site_catalog = ModelCatalogState::get_site_catalog();      
+      161 -  $assert(                                                    
+      162 -    in_array( $temporary_model_a, $site_catalog['model_ids'], 
+          -true ) && in_array( $temporary_model_b, $site_catalog['model_i
+          -ds'], true ),                                                 
+      163 -    'Site catalog did not aggregate active snapshot models.'  
+      164 -  );                                                          
+      165 -                                                              
+      160    $server = rest_get_server();
+      161    $routes = $server->get_routes();
+      162  
+
+● Bash(vendor/bin/phpstan analyse --memory-limit=2G --no-progress 2>&1)
+  ⎿  Error: Exit code 1
+     Note: Using configuration file /home/hperkins-wp/htdocs/wp.hperkins.com/wp-
+     content/plugins/ai-provider-for-codex/phpstan.neon.
+     Instructions for interpreting errors
+     ---------
+
+     Each error has an associated identifier, like `argument.type`
+     or `return.missing`.
+
+     Each error identifier has documentation at URL 
+     https://phpstan.org/error-identifiers/<identifier>
+     This page contains code example, explanation why is this an error
+     … +42 lines (ctrl+o to see all)
+
+● Baseline entries for code I removed. Regenerate the baseline.
+
+● Bash(vendor/bin/phpstan analyse --memory-limit=2G --generate-baseline
+      phpstan-baseline.neon --no-progress 2>&1)
+  ⎿  Note: Using configuration file /home/hperkins-wp/htdocs/wp.hperkins.co
+     m/wp-content/plugins/ai-provider-for-codex/phpstan.neon.
+
+      [OK] Baseline generated with 6 errors.
+  ⎿  You're out of extra usage · resets 10am (UTC)
+     /upgrade or /extra-usage to finish what you’re working on.
+
+✻ Brewed for 5m 52s

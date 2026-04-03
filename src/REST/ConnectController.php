@@ -1,6 +1,6 @@
 <?php
 /**
- * Local connection REST endpoints.
+ * Local runtime connection REST endpoints.
  *
  * @package AIProviderForCodex
  */
@@ -9,14 +9,13 @@ declare( strict_types=1 );
 
 namespace AIProviderForCodex\REST;
 
-use AIProviderForCodex\Admin\UserConnectionPage;
 use AIProviderForCodex\Auth\ConnectionService;
+use AIProviderForCodex\Provider\ModelCatalogState;
 use RuntimeException;
-use WP_REST_Request;
 use WP_REST_Response;
 
 /**
- * Exposes local connect/disconnect endpoints for future admin UI work.
+ * Exposes local connect, poll, disconnect, and refresh endpoints.
  */
 final class ConnectController {
 
@@ -33,14 +32,16 @@ final class ConnectController {
 				'methods'             => 'POST',
 				'permission_callback' => [ self::class, 'can_manage_connection' ],
 				'callback'            => [ self::class, 'start_connect' ],
-				'args'                => [
-					'returnUrl' => [
-						'type'              => 'string',
-						'required'          => false,
-						'sanitize_callback' => 'esc_url_raw',
-						'validate_callback' => [ self::class, 'validate_return_url' ],
-					],
-				],
+			]
+		);
+
+		register_rest_route(
+			'codex-provider/v1',
+			'/connect/status',
+			[
+				'methods'             => 'GET',
+				'permission_callback' => [ self::class, 'can_manage_connection' ],
+				'callback'            => [ self::class, 'status' ],
 			]
 		);
 
@@ -75,24 +76,16 @@ final class ConnectController {
 	}
 
 	/**
-	 * Starts the broker connect flow.
+	 * Starts the local runtime connect flow.
 	 *
-	 * @param WP_REST_Request $request REST request.
 	 * @return WP_REST_Response
 	 */
-	public static function start_connect( WP_REST_Request $request ): WP_REST_Response {
+	public static function start_connect(): WP_REST_Response {
 		try {
 			$service = new ConnectionService();
-			$url     = $service->start_connect(
-				get_current_user_id(),
-				(string) $request->get_param( 'returnUrl' ) ?: UserConnectionPage::page_url()
-			);
+			$data    = $service->start_connect( get_current_user_id() );
 
-			return new WP_REST_Response(
-				[
-					'connectUrl' => $url,
-				]
-			);
+			return new WP_REST_Response( $data );
 		} catch ( RuntimeException $exception ) {
 			return new WP_REST_Response(
 				[
@@ -106,21 +99,30 @@ final class ConnectController {
 	}
 
 	/**
-	 * Validates an optional return URL.
+	 * Returns the current connect status.
 	 *
-	 * @param mixed           $value Parameter value.
-	 * @param WP_REST_Request $request REST request.
-	 * @param string          $param Parameter name.
-	 * @return bool
+	 * @return WP_REST_Response
 	 */
-	public static function validate_return_url( $value, WP_REST_Request $request, string $param ): bool {
-		unset( $request, $param );
+	public static function status(): WP_REST_Response {
+		try {
+			$service = new ConnectionService();
+			$status  = $service->poll_connect_status( get_current_user_id() );
 
-		if ( null === $value || '' === $value ) {
-			return true;
+			if ( 'connected' === (string) ( $status['status'] ?? '' ) ) {
+				$status['catalog'] = ModelCatalogState::get_effective_catalog( get_current_user_id() );
+			}
+
+			return new WP_REST_Response( $status );
+		} catch ( RuntimeException $exception ) {
+			return new WP_REST_Response(
+				[
+					'error' => [
+						'message' => $exception->getMessage(),
+					],
+				],
+				400
+			);
 		}
-
-		return false !== wp_http_validate_url( (string) $value );
 	}
 
 	/**
@@ -131,6 +133,7 @@ final class ConnectController {
 	public static function disconnect(): WP_REST_Response {
 		$service = new ConnectionService();
 		$service->disconnect( get_current_user_id() );
+		ModelCatalogState::delete_user_preferred_model( get_current_user_id() );
 
 		return new WP_REST_Response(
 			[
@@ -140,7 +143,7 @@ final class ConnectController {
 	}
 
 	/**
-	 * Refreshes the current user's broker snapshot.
+	 * Refreshes the current user's local runtime snapshot.
 	 *
 	 * @return WP_REST_Response
 	 */
@@ -153,7 +156,7 @@ final class ConnectController {
 				[
 					'status' => 'refreshed',
 					'data'   => $status,
-				]
+				],
 			);
 		} catch ( RuntimeException $exception ) {
 			return new WP_REST_Response(
