@@ -1,0 +1,19 @@
+# Dependencies
+vendor/
+node_modules/
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Session state
+.remember/
+
+# Environment
+.env

@@ -1,0 +1,164 @@
+<?php
+/**
+ * Broker-backed Codex text model.
+ *
+ * @package AIProviderForCodex
+ */
+
+declare( strict_types=1 );
+
+namespace AIProviderForCodex\Models;
+
+use AIProviderForCodex\Auth\ConnectionRepository;
+use AIProviderForCodex\Broker\Client;
+use AIProviderForCodex\Broker\ResponseMapper;
+use AIProviderForCodex\Provider\ModelCatalogState;
+use RuntimeException;
+use WordPress\AiClient\Messages\DTO\Message;
+use WordPress\AiClient\Providers\ApiBasedImplementation\AbstractApiBasedModel;
+use WordPress\AiClient\Providers\Models\TextGeneration\Contracts\TextGenerationModelInterface;
+use WordPress\AiClient\Results\DTO\GenerativeAiResult;
+
+/**
+ * Sends text-generation requests to the Codex broker.
+ */
+final class CodexTextGenerationModel extends AbstractApiBasedModel implements TextGenerationModelInterface {
+
+	/**
+	 * Generates a text result through the broker API.
+	 *
+	 * @param array<int,Message> $prompt Prompt messages.
+	 * @return GenerativeAiResult
+	 */
+	public function generateTextResult( array $prompt ): GenerativeAiResult {
+		$wp_user_id = get_current_user_id();
+
+		if ( $wp_user_id <= 0 ) {
+			throw new RuntimeException( __( 'Codex generation requires a logged-in WordPress user.', 'ai-provider-for-codex' ) );
+		}
+
+		$connection = ConnectionRepository::get_for_user( $wp_user_id );
+
+		if ( ! $connection ) {
+			throw new RuntimeException( __( 'Connect a Codex account before requesting text generation.', 'ai-provider-for-codex' ) );
+		}
+
+		$snapshot_catalog = ModelCatalogState::get_user_snapshot_catalog( $wp_user_id );
+		$model_id         = $this->metadata()->getId();
+
+		if (
+			[] !== $snapshot_catalog['model_ids'] &&
+			ModelCatalogState::is_catalog_fresh( $snapshot_catalog ) &&
+			! in_array( $model_id, $snapshot_catalog['model_ids'], true )
+		) {
+			throw new RuntimeException(
+				sprintf(
+					/* translators: 1: requested model ID, 2: comma-separated available models */
+					__(
+						'The model "%1$s" is not available for your Codex account. Available models: %2$s.',
+						'ai-provider-for-codex'
+					),
+					$model_id,
+					implode( ', ', ModelCatalogState::labels_from_catalog( $snapshot_catalog ) )
+				)
+			);
+		}
+
+		$client   = new Client();
+		$config   = $this->getConfig();
+		$response = $client->post(
+			'/v1/wordpress/responses/text',
+			array_filter(
+				[
+					'wpUserId'          => $wp_user_id,
+					'connectionId'      => (string) $connection['connection_id'],
+					'requestId'         => wp_generate_uuid4(),
+					'input'             => $this->flatten_prompt( $prompt ),
+					'systemInstruction' => $config->getSystemInstruction(),
+					'model'             => $model_id,
+					'modelPreferences'  => [ $model_id ],
+					'reasoningEffort'   => $this->extract_reasoning_effort(),
+					'responseFormat'    => $this->build_response_format(),
+					'context'           => [
+						'surface'    => 'wordpress-ai-client',
+						'pluginSlug' => 'ai-provider-for-codex',
+					],
+				],
+				static function ( $value ): bool {
+					return null !== $value && '' !== $value && [] !== $value;
+				}
+			)
+		);
+
+		return ResponseMapper::to_generative_ai_result(
+			$response,
+			$this->providerMetadata(),
+			$this->metadata()
+		);
+	}
+
+	/**
+	 * Flattens a prompt to the broker's text input field.
+	 *
+	 * @param array<int,Message> $prompt Prompt messages.
+	 * @return string
+	 */
+	private function flatten_prompt( array $prompt ): string {
+		$lines = [];
+
+		foreach ( $prompt as $message ) {
+			$parts = [];
+
+			foreach ( $message->getParts() as $part ) {
+				if ( null !== $part->getText() ) {
+					$parts[] = $part->getText();
+				}
+			}
+
+			if ( [] === $parts ) {
+				continue;
+			}
+
+			$lines[] = strtoupper( $message->getRole()->value ) . ': ' . implode( "\n", $parts );
+		}
+
+		return implode( "\n\n", $lines );
+	}
+
+	/**
+	 * Maps JSON output settings to the broker contract.
+	 *
+	 * @return array<string,mixed>|null
+	 */
+	private function build_response_format(): ?array {
+		$config = $this->getConfig();
+
+		if ( 'application/json' !== $config->getOutputMimeType() || ! $config->getOutputSchema() ) {
+			return null;
+		}
+
+		return [
+			'type'   => 'json_schema',
+			'schema' => $config->getOutputSchema(),
+		];
+	}
+
+	/**
+	 * Extracts a reasoning effort from custom options when present.
+	 *
+	 * @return string|null
+	 */
+	private function extract_reasoning_effort(): ?string {
+		$custom_options = $this->getConfig()->getCustomOptions();
+
+		if ( isset( $custom_options['reasoningEffort'] ) ) {
+			return sanitize_text_field( (string) $custom_options['reasoningEffort'] );
+		}
+
+		if ( isset( $custom_options['reasoning_effort'] ) ) {
+			return sanitize_text_field( (string) $custom_options['reasoning_effort'] );
+		}
+
+		return null;
+	}
+}
