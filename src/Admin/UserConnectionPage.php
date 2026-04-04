@@ -14,6 +14,10 @@ use AIProviderForCodex\Provider\ModelCatalogState;
 use AIProviderForCodex\Provider\SupportChecks;
 use RuntimeException;
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 /**
  * Renders the current user's Codex connection page.
  */
@@ -63,7 +67,10 @@ final class UserConnectionPage {
 
 		if ( 'set-model' === $post_action ) {
 			check_admin_referer( 'codex-provider-set-model' );
-			self::set_model();
+			$model_id = isset( $_POST['codex_provider_model'] )
+				? sanitize_text_field( (string) wp_unslash( $_POST['codex_provider_model'] ) )
+				: '';
+			self::set_model( $model_id );
 		}
 
 		$action = isset( $_GET['action'] ) ? sanitize_key( wp_unslash( $_GET['action'] ) ) : '';
@@ -135,12 +142,13 @@ final class UserConnectionPage {
 					<li><?php esc_html_e( 'Each person connects their own Codex or ChatGPT account so access and billing stay user-specific.', 'ai-provider-for-codex' ); ?></li>
 				</ul>
 				<p>
-					<?php
-					printf(
-						wp_kses_post(
-							__(
-								'This page manages your personal account link. <a href="%1$s">Plugin settings</a> control the local runtime shared by all users. <a href="%2$s">Settings &gt; Connectors</a> shows overall provider status.',
-								'ai-provider-for-codex'
+						<?php
+						printf(
+							wp_kses_post(
+								/* translators: 1: site settings URL, 2: connectors settings URL. */
+								__(
+									'This page manages your personal account link. <a href="%1$s">Plugin settings</a> control the local runtime shared by all users. <a href="%2$s">Settings &gt; Connectors</a> shows overall provider status.',
+									'ai-provider-for-codex'
 							)
 						),
 						esc_url( SiteSettings::page_url() ),
@@ -208,13 +216,13 @@ final class UserConnectionPage {
 					<h3><?php esc_html_e( 'Model', 'ai-provider-for-codex' ); ?></h3>
 					<?php if ( '' !== $selected_model ) : ?>
 						<p>
-							<?php
-							printf(
-								/* translators: %s: model name. */
-								esc_html__( 'Using: %s', 'ai-provider-for-codex' ),
-								'<strong>' . esc_html( ModelCatalogState::label_for_model_id( $selected_model ) ) . '</strong>'
-							);
-							?>
+								<?php
+								printf(
+									/* translators: %s: model name. */
+									wp_kses( __( 'Using: %s', 'ai-provider-for-codex' ), [ 'strong' => [] ] ),
+									'<strong>' . esc_html( ModelCatalogState::label_for_model_id( $selected_model ) ) . '</strong>'
+								);
+								?>
 						</p>
 					<?php endif; ?>
 					<div class="codex-models-list">
@@ -329,11 +337,8 @@ final class UserConnectionPage {
 	 *
 	 * @return void
 	 */
-	private static function set_model(): void {
+	private static function set_model( string $model_id ): void {
 		$wp_user_id = get_current_user_id();
-		$model_id   = isset( $_POST['codex_provider_model'] )
-			? sanitize_text_field( (string) wp_unslash( $_POST['codex_provider_model'] ) )
-			: '';
 		$catalog    = ModelCatalogState::get_effective_catalog( $wp_user_id );
 		$model_ids  = $catalog['model_ids'];
 
@@ -371,7 +376,9 @@ final class UserConnectionPage {
 	 * @return array{code:string,message:string}
 	 */
 	private static function read_notice(): array {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reads display-only notice query args added by this screen's redirects.
 		$code    = isset( $_GET['codex_provider_notice'] ) ? sanitize_key( wp_unslash( $_GET['codex_provider_notice'] ) ) : '';
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reads display-only notice query args added by this screen's redirects.
 		$message = isset( $_GET['codex_provider_notice_message'] ) ? rawurldecode( sanitize_text_field( wp_unslash( $_GET['codex_provider_notice_message'] ) ) ) : '';
 
 		return [

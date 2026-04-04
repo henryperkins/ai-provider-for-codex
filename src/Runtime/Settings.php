@@ -9,6 +9,10 @@ declare( strict_types=1 );
 
 namespace AIProviderForCodex\Runtime;
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 /**
  * Centralizes plugin option names and normalization.
  */
@@ -340,7 +344,7 @@ final class Settings {
 		$value = getenv( $key );
 
 		if ( false === $value && isset( $_ENV[ $key ] ) ) {
-			$value = $_ENV[ $key ];
+			$value = sanitize_text_field( (string) $_ENV[ $key ] );
 		}
 
 		if ( is_string( $value ) && '' !== trim( $value ) ) {
@@ -415,7 +419,7 @@ final class Settings {
 		$value = getenv( $constant_name );
 
 		if ( false === $value && isset( $_ENV[ $constant_name ] ) ) {
-			$value = $_ENV[ $constant_name ];
+			$value = sanitize_text_field( (string) $_ENV[ $constant_name ] );
 		}
 
 		if ( is_string( $value ) && '' !== trim( $value ) ) {

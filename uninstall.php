@@ -18,8 +18,8 @@ foreach ( [
 	'codex_runtime_bearer_token',
 	'codex_runtime_allowed_models',
 	'codex_provider_schema_version',
-] as $option_name ) {
-	delete_option( $option_name );
+] as $codex_provider_option_name ) {
+	delete_option( $codex_provider_option_name );
 }
 
 // Clear the removed site-level default-model option on upgraded installs too.
@@ -33,10 +33,12 @@ delete_metadata( 'user', 0, 'codex_provider_pending_auth_session', true );
 delete_metadata( 'user', 0, 'codex_provider_preferred_model', true );
 
 foreach ( [
-	'codex_provider_connections',
-	'codex_provider_connection_snapshots',
-	'codex_provider_auth_states',
-] as $suffix ) {
-	$table_name = $wpdb->prefix . $suffix;
-	$wpdb->query( "DROP TABLE IF EXISTS {$table_name}" ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+	$wpdb->prefix . 'codex_provider_connections',
+	$wpdb->prefix . 'codex_provider_connection_snapshots',
+	$wpdb->prefix . 'codex_provider_auth_states',
+] as $codex_provider_table_name ) {
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Uninstall removes the plugin's custom tables directly.
+	$wpdb->query(
+		$wpdb->prepare( 'DROP TABLE IF EXISTS %i', $codex_provider_table_name ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery.SchemaChange -- Uninstall removes the plugin's custom tables directly.
+	);
 }

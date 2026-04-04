@@ -12,6 +12,10 @@ namespace AIProviderForCodex\Admin;
 use AIProviderForCodex\Runtime\HealthMonitor;
 use AIProviderForCodex\Runtime\Settings;
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 /**
  * Renders the site settings page.
  */
@@ -110,20 +114,21 @@ final class SiteSettings {
 				<p><?php esc_html_e( 'Codex uses a local runtime service that runs on the same host as WordPress. Each user links their own Codex account so access and billing stay user-specific.', 'ai-provider-for-codex' ); ?></p>
 				<p>
 					<?php
-					printf(
-						/* translators: %s: absolute shared env file path. */
-						esc_html__( 'For automated installs, the plugin can auto-detect the runtime URL and bearer token from %s.', 'ai-provider-for-codex' ),
-						(string) $runtime_config['shared_env_file']
-					);
+						printf(
+							/* translators: %s: absolute shared env file path. */
+							esc_html__( 'For automated installs, the plugin can auto-detect the runtime URL and bearer token from %s.', 'ai-provider-for-codex' ),
+							esc_html( (string) $runtime_config['shared_env_file'] )
+						);
 					?>
 				</p>
 				<p>
 					<?php
-					printf(
-						wp_kses_post(
-							__(
-								'<a href="%1$s">Settings &gt; Connectors</a> is the main entry point. Per-user account linking is on the <a href="%2$s">user connection page</a>.',
-								'ai-provider-for-codex'
+						printf(
+							wp_kses_post(
+								/* translators: 1: connectors settings URL, 2: user connection page URL. */
+								__(
+									'<a href="%1$s">Settings &gt; Connectors</a> is the main entry point. Per-user account linking is on the <a href="%2$s">user connection page</a>.',
+									'ai-provider-for-codex'
 							)
 						),
 						esc_url( admin_url( 'options-connectors.php' ) ),
@@ -230,7 +235,9 @@ final class SiteSettings {
 	 * @return array{code:string,message:string}
 	 */
 	private static function read_notice(): array {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reads display-only notice query args for this admin screen.
 		$code    = isset( $_GET['codex_provider_notice'] ) ? sanitize_key( wp_unslash( $_GET['codex_provider_notice'] ) ) : '';
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reads display-only notice query args for this admin screen.
 		$message = isset( $_GET['codex_provider_notice_message'] ) ? rawurldecode( sanitize_text_field( wp_unslash( $_GET['codex_provider_notice_message'] ) ) ) : '';
 
 		return [

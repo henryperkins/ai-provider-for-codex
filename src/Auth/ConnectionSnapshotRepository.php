@@ -9,6 +9,10 @@ declare( strict_types=1 );
 
 namespace AIProviderForCodex\Auth;
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 /**
  * Stores runtime-derived readiness snapshots.
  */
@@ -36,11 +40,10 @@ final class ConnectionSnapshotRepository {
 	public static function get( string $connection_id ): ?array {
 		global $wpdb;
 
+		$table_name = self::table_name();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Plugin data is stored in a dedicated custom table.
 		$row = $wpdb->get_row(
-			$wpdb->prepare(
-				'SELECT * FROM ' . self::table_name() . ' WHERE connection_id = %s LIMIT 1',
-				$connection_id
-			),
+			$wpdb->prepare( 'SELECT * FROM %i WHERE connection_id = %s LIMIT 1', $table_name, $connection_id ),
 			ARRAY_A
 		);
 
@@ -62,13 +65,18 @@ final class ConnectionSnapshotRepository {
 	public static function list_active_for_site_catalog(): array {
 		global $wpdb;
 
+		$snapshots_table   = self::table_name();
+		$connections_table = ConnectionRepository::table_name();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Plugin data is stored in dedicated custom tables.
 		$rows = $wpdb->get_results(
 			$wpdb->prepare(
 				'SELECT snapshots.*, connections.session_expires_at
-				FROM ' . self::table_name() . ' AS snapshots
-				INNER JOIN ' . ConnectionRepository::table_name() . ' AS connections
+				FROM %i AS snapshots
+				INNER JOIN %i AS connections
 					ON connections.connection_id = snapshots.connection_id
 				WHERE connections.status = %s',
+				$snapshots_table,
+				$connections_table,
 				'linked'
 			),
 			ARRAY_A
@@ -113,6 +121,7 @@ final class ConnectionSnapshotRepository {
 	public static function upsert( string $connection_id, array $payload, string $readiness_status = 'ready' ): void {
 		global $wpdb;
 
+		$table_name = self::table_name();
 		$existing = self::get( $connection_id );
 		$now      = gmdate( 'Y-m-d H:i:s' );
 
@@ -145,7 +154,8 @@ final class ConnectionSnapshotRepository {
 			$formats = [ '%d' ] + $formats;
 		}
 
-		$wpdb->replace( self::table_name(), $data, $formats );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Plugin data is stored in a dedicated custom table.
+		$wpdb->replace( $table_name, $data, $formats );
 	}
 
 	/**
@@ -157,6 +167,7 @@ final class ConnectionSnapshotRepository {
 	public static function delete( string $connection_id ): void {
 		global $wpdb;
 
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Plugin data is stored in a dedicated custom table.
 		$wpdb->delete( self::table_name(), [ 'connection_id' => $connection_id ], [ '%s' ] );
 	}
 

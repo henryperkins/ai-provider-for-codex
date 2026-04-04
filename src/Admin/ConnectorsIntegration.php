@@ -21,6 +21,24 @@ final class ConnectorsIntegration {
 	private const CONNECTOR_ID  = 'codex';
 
 	/**
+	 * Returns the connector module config payload.
+	 *
+	 * @return array<string,string>
+	 */
+	private static function connector_config(): array {
+		return [
+			'connectorId'       => self::CONNECTOR_ID,
+			'statusUrl'         => rest_url( 'codex-provider/v1/status' ),
+			'statusPath'        => '/codex-provider/v1/status',
+			'startConnectUrl'   => rest_url( 'codex-provider/v1/connect/start' ),
+			'startConnectPath'  => '/codex-provider/v1/connect/start',
+			'siteSettingsUrl'   => SiteSettings::page_url(),
+			'userConnectionUrl' => UserConnectionPage::page_url(),
+			'restNonce'         => wp_create_nonce( 'wp_rest' ),
+		];
+	}
+
+	/**
 	 * Registers richer connector metadata for the Codex provider.
 	 *
 	 * @param \WP_Connector_Registry $registry Connector registry.
@@ -61,17 +79,6 @@ final class ConnectorsIntegration {
 			return;
 		}
 
-		$config = [
-			'connectorId'       => self::CONNECTOR_ID,
-			'statusUrl'         => rest_url( 'codex-provider/v1/status' ),
-			'statusPath'        => '/codex-provider/v1/status',
-			'startConnectUrl'   => rest_url( 'codex-provider/v1/connect/start' ),
-			'startConnectPath'  => '/codex-provider/v1/connect/start',
-			'siteSettingsUrl'   => SiteSettings::page_url(),
-			'userConnectionUrl' => UserConnectionPage::page_url(),
-			'restNonce'         => wp_create_nonce( 'wp_rest' ),
-		];
-
 		wp_register_script_module(
 			self::MODULE_ID,
 			plugins_url( 'assets/connectors.js', \AIProviderForCodex\PLUGIN_FILE ),
@@ -99,16 +106,24 @@ final class ConnectorsIntegration {
 				'wp-url',
 			],
 			\AIProviderForCodex\VERSION,
-			true
-		);
-
-		wp_add_inline_script(
-			self::SCRIPT_HANDLE,
-			'window.aiProviderForCodexConnectors = ' . wp_json_encode( $config ) . ';',
-			'before'
+			false
 		);
 		wp_enqueue_script( self::SCRIPT_HANDLE );
 		wp_enqueue_script_module( self::MODULE_ID );
+	}
+
+	/**
+	 * Supplies bootstrap data for the connector script module.
+	 *
+	 * @param array<string,mixed> $data Existing module data.
+	 * @return array<string,mixed>
+	 */
+	public static function script_module_data( array $data ): array {
+		if ( ! self::is_connectors_screen() ) {
+			return $data;
+		}
+
+		return array_merge( $data, self::connector_config() );
 	}
 
 	/**
@@ -264,6 +279,7 @@ final class ConnectorsIntegration {
 			return true;
 		}
 
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reads the current admin page slug only to detect screen context.
 		return isset( $_GET['page'] ) && 'options-connectors-wp-admin' === sanitize_key( wp_unslash( $_GET['page'] ) );
 	}
 }

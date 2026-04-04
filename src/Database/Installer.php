@@ -13,6 +13,10 @@ use AIProviderForCodex\Auth\ConnectionRepository;
 use AIProviderForCodex\Auth\ConnectionSnapshotRepository;
 use AIProviderForCodex\Runtime\Settings;
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 /**
  * Creates plugin tables and seeds defaults.
  */
@@ -85,7 +89,7 @@ final class Installer {
 			) {$charset_collate};"
 		);
 
-			dbDelta(
+		dbDelta(
 			"CREATE TABLE {$snapshots} (
 				id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 				connection_id varchar(191) NOT NULL,
@@ -113,18 +117,24 @@ final class Installer {
 
 		$connections = ConnectionRepository::table_name();
 
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Schema inspection during upgrade must query the plugin table directly.
 		$legacy_column = $wpdb->get_var(
-			$wpdb->prepare(
-				'SHOW COLUMNS FROM ' . $connections . ' LIKE %s',
-				'broker_user_id'
-			)
+			$wpdb->prepare( 'SHOW COLUMNS FROM %i LIKE %s', $connections, 'broker_user_id' )
 		);
 
 		if ( is_string( $legacy_column ) && '' !== $legacy_column ) {
-			$wpdb->query( 'ALTER TABLE ' . $connections . ' DROP COLUMN broker_user_id' ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Schema cleanup during upgrade must run directly.
+			$wpdb->query(
+				$wpdb->prepare( 'ALTER TABLE %i DROP COLUMN broker_user_id', $connections ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery.SchemaChange -- Schema cleanup during upgrade must run directly.
+			);
 		}
 
-		$wpdb->query( 'DROP TABLE IF EXISTS ' . $wpdb->prefix . 'codex_provider_auth_states' ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$legacy_auth_states = $wpdb->prefix . 'codex_provider_auth_states';
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Schema cleanup during upgrade must run directly.
+		$wpdb->query(
+			$wpdb->prepare( 'DROP TABLE IF EXISTS %i', $legacy_auth_states ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery.SchemaChange -- Schema cleanup during upgrade must run directly.
+		);
 	}
 
 	/**

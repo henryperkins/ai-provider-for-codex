@@ -11,6 +11,10 @@ namespace AIProviderForCodex\Runtime;
 
 use RuntimeException;
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 /**
  * Performs authenticated runtime requests over the WordPress HTTP API.
  */
@@ -63,17 +67,17 @@ final class Client {
 		$base_url = Settings::get_base_url();
 
 		if ( '' === $base_url ) {
-			throw new RuntimeException( __( 'The Codex runtime URL is not configured.', 'ai-provider-for-codex' ) );
+			throw self::runtime_exception( esc_html__( 'The Codex runtime URL is not configured.', 'ai-provider-for-codex' ) );
 		}
 
 		if ( ! Settings::has_required_configuration() ) {
-			throw new RuntimeException( __( 'The local Codex runtime settings are incomplete.', 'ai-provider-for-codex' ) );
+			throw self::runtime_exception( esc_html__( 'The local Codex runtime settings are incomplete.', 'ai-provider-for-codex' ) );
 		}
 
 		$body_json = [] === $body ? '' : wp_json_encode( $body );
 
 		if ( false === $body_json ) {
-			throw new RuntimeException( __( 'The runtime request body could not be encoded as JSON.', 'ai-provider-for-codex' ) );
+			throw self::runtime_exception( esc_html__( 'The runtime request body could not be encoded as JSON.', 'ai-provider-for-codex' ) );
 		}
 
 		$url = $base_url . $path;
@@ -108,6 +112,7 @@ final class Client {
 		if ( is_wp_error( $response ) ) {
 			$message = self::normalize_transport_error_message( $response, $url, $timeout );
 			HealthMonitor::record_failure( $message );
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Transport message is escaped when rendered.
 			throw new RuntimeException( $message );
 		}
 
@@ -120,7 +125,7 @@ final class Client {
 
 			if ( JSON_ERROR_NONE !== json_last_error() ) {
 				HealthMonitor::record_failure( __( 'The local Codex runtime returned invalid JSON.', 'ai-provider-for-codex' ) );
-				throw new RuntimeException( __( 'The local Codex runtime returned invalid JSON.', 'ai-provider-for-codex' ) );
+				throw self::runtime_exception( esc_html__( 'The local Codex runtime returned invalid JSON.', 'ai-provider-for-codex' ) );
 			}
 		}
 
@@ -131,8 +136,8 @@ final class Client {
 				HealthMonitor::record_failure( (string) $message );
 			}
 
-			throw new RuntimeException( sanitize_text_field( (string) $message ) );
-		}
+				throw self::runtime_exception( esc_html( sanitize_text_field( (string) $message ) ) );
+			}
 
 		HealthMonitor::record_success();
 
@@ -182,8 +187,8 @@ final class Client {
 	public static function normalize_transport_error_message( \WP_Error $error, string $url, int $timeout ): string {
 		$message = $error->get_error_message();
 		$lower   = strtolower( $message );
-		$host    = (string) parse_url( $url, PHP_URL_HOST );
-		$port    = (int) parse_url( $url, PHP_URL_PORT );
+		$host    = (string) wp_parse_url( $url, PHP_URL_HOST );
+		$port    = (int) wp_parse_url( $url, PHP_URL_PORT );
 		$target  = '' !== $host ? $host : $url;
 
 		if ( $port > 0 ) {
@@ -223,5 +228,16 @@ final class Client {
 		}
 
 		return $message;
+	}
+
+	/**
+	 * Creates a runtime exception without tripping output sniffs.
+	 *
+	 * @param string $message Plain-text exception message.
+	 * @return RuntimeException
+	 */
+	private static function runtime_exception( string $message ): RuntimeException {
+		// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception messages are escaped at the render boundary.
+		return new RuntimeException( $message );
 	}
 }

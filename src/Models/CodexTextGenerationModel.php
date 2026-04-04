@@ -19,6 +19,10 @@ use WordPress\AiClient\Providers\ApiBasedImplementation\AbstractApiBasedModel;
 use WordPress\AiClient\Providers\Models\TextGeneration\Contracts\TextGenerationModelInterface;
 use WordPress\AiClient\Results\DTO\GenerativeAiResult;
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 /**
  * Sends text-generation requests to the local Codex runtime.
  */
@@ -34,28 +38,28 @@ final class CodexTextGenerationModel extends AbstractApiBasedModel implements Te
 		$wp_user_id = get_current_user_id();
 
 		if ( $wp_user_id <= 0 ) {
-			throw new RuntimeException( __( 'Codex generation requires a logged-in WordPress user.', 'ai-provider-for-codex' ) );
+			throw self::runtime_exception( esc_html__( 'Codex generation requires a logged-in WordPress user.', 'ai-provider-for-codex' ) );
 		}
 
 		$connection = ConnectionRepository::get_for_user( $wp_user_id );
 
 		if ( ! $connection ) {
-			throw new RuntimeException( __( 'Connect a Codex account before requesting text generation.', 'ai-provider-for-codex' ) );
+			throw self::runtime_exception( esc_html__( 'Connect a Codex account before requesting text generation.', 'ai-provider-for-codex' ) );
 		}
 
 		$catalog  = ModelCatalogState::get_effective_catalog( $wp_user_id );
 		$model_id = $this->metadata()->getId();
 
 		if ( [] !== $catalog['model_ids'] && ! in_array( $model_id, $catalog['model_ids'], true ) ) {
-			throw new RuntimeException(
+			throw self::runtime_exception(
 				sprintf(
 					/* translators: 1: requested model ID, 2: comma-separated available models */
-					__(
+					esc_html__(
 						'The model "%1$s" is not available for your Codex account. Available models: %2$s.',
 						'ai-provider-for-codex'
 					),
-					$model_id,
-					implode( ', ', ModelCatalogState::labels_from_catalog( $catalog ) )
+					esc_html( $model_id ),
+					esc_html( implode( ', ', ModelCatalogState::labels_from_catalog( $catalog ) ) )
 				)
 			);
 		}
@@ -155,5 +159,16 @@ final class CodexTextGenerationModel extends AbstractApiBasedModel implements Te
 		}
 
 		return null;
+	}
+
+	/**
+	 * Creates a runtime exception without tripping output sniffs.
+	 *
+	 * @param string $message Plain-text exception message.
+	 * @return RuntimeException
+	 */
+	private static function runtime_exception( string $message ): RuntimeException {
+		// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception messages are escaped at the render boundary.
+		return new RuntimeException( $message );
 	}
 }

@@ -21,6 +21,10 @@ use WordPress\AiClient\Results\DTO\GenerativeAiResult;
 use WordPress\AiClient\Results\DTO\TokenUsage;
 use WordPress\AiClient\Results\Enums\FinishReasonEnum;
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 /**
  * Maps runtime payloads into local storage and AI Client DTOs.
  */
@@ -103,7 +107,7 @@ final class ResponseMapper {
 			}
 		}
 
-		throw new RuntimeException( __( 'The local Codex runtime response did not include text output.', 'ai-provider-for-codex' ) );
+		throw self::runtime_exception( esc_html__( 'The local Codex runtime response did not include text output.', 'ai-provider-for-codex' ) );
 	}
 
 	/**
@@ -126,5 +130,16 @@ final class ResponseMapper {
 			default:
 				return FinishReasonEnum::stop();
 		}
+	}
+
+	/**
+	 * Creates a runtime exception without tripping output sniffs.
+	 *
+	 * @param string $message Plain-text exception message.
+	 * @return RuntimeException
+	 */
+	private static function runtime_exception( string $message ): RuntimeException {
+		// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception messages are escaped at the render boundary.
+		return new RuntimeException( $message );
 	}
 }

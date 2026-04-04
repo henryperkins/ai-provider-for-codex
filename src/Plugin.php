@@ -18,6 +18,10 @@ use AIProviderForCodex\REST\ConnectController;
 use AIProviderForCodex\REST\StatusController;
 use WordPress\AiClient\AiClient;
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 /**
  * Coordinates hook registration.
  */
@@ -31,13 +35,13 @@ final class Plugin {
 	public function init(): void {
 		add_action( 'init', [ Installer::class, 'maybe_upgrade' ], 1 );
 		add_action( 'init', [ $this, 'register_provider' ], 5 );
-		add_action( 'init', [ $this, 'load_textdomain' ] );
 
 		add_action( 'admin_menu', [ SiteSettings::class, 'register_page' ] );
 		add_action( 'admin_menu', [ UserConnectionPage::class, 'register_page' ] );
 		add_action( 'admin_init', [ SiteSettings::class, 'register_settings' ] );
 		add_action( 'admin_init', [ UserConnectionPage::class, 'maybe_handle_actions' ] );
 		add_action( 'admin_enqueue_scripts', [ ConnectorsIntegration::class, 'enqueue_connectors_assets' ] );
+		add_filter( 'script_module_data_ai-provider-for-codex/connectors', [ ConnectorsIntegration::class, 'script_module_data' ] );
 		add_action( 'wp_connectors_init', [ ConnectorsIntegration::class, 'register_connector_metadata' ] );
 
 		add_action( 'rest_api_init', [ ConnectController::class, 'register_routes' ] );
@@ -51,15 +55,6 @@ final class Plugin {
 		add_action( 'admin_notices', [ ConnectorsIntegration::class, 'maybe_render_unlinked_notice' ] );
 		add_action( 'admin_enqueue_scripts', [ ConnectorsIntegration::class, 'maybe_enqueue_dismiss_script' ] );
 		add_action( 'wp_ajax_codex_provider_dismiss_notice', [ ConnectorsIntegration::class, 'ajax_dismiss_notice' ] );
-	}
-
-	/**
-	 * Loads translations.
-	 *
-	 * @return void
-	 */
-	public function load_textdomain(): void {
-		load_plugin_textdomain( 'ai-provider-for-codex', false, dirname( plugin_basename( PLUGIN_FILE ) ) . '/languages' );
 	}
 
 	/**

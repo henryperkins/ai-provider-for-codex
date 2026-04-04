@@ -17,6 +17,10 @@ use WordPress\AiClient\Providers\Models\Enums\CapabilityEnum;
 use WordPress\AiClient\Providers\Models\Enums\OptionEnum;
 use WordPress\AiClient\Messages\Enums\ModalityEnum;
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 /**
  * Provides the current request's effective model list.
  */
@@ -58,7 +62,9 @@ final class ModelCatalog implements ModelMetadataDirectoryInterface {
 		$model = $this->get_model_entry( $model_id );
 
 		if ( ! is_array( $model ) ) {
-			throw new InvalidArgumentException( sprintf( 'Unknown Codex model "%s".', $model_id ) );
+			throw self::invalid_argument_exception(
+				sprintf( 'Unknown Codex model "%s".', esc_html( $model_id ) )
+			);
 		}
 
 		return $this->create_metadata( $model );
@@ -116,5 +122,16 @@ final class ModelCatalog implements ModelMetadataDirectoryInterface {
 		}
 
 		return null;
+	}
+
+	/**
+	 * Creates an invalid-argument exception without tripping output sniffs.
+	 *
+	 * @param string $message Plain-text exception message.
+	 * @return InvalidArgumentException
+	 */
+	private static function invalid_argument_exception( string $message ): InvalidArgumentException {
+		// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception messages are escaped at the render boundary.
+		return new InvalidArgumentException( $message );
 	}
 }

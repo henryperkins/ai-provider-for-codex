@@ -3,20 +3,47 @@ import {
 	__experimentalRegisterConnector as registerConnector,
 } from '@wordpress/connectors';
 
-const config = window.aiProviderForCodexConnectors;
-const wp = window.wp || {};
+const MODULE_ID = 'ai-provider-for-codex/connectors';
+const MAX_BOOT_ATTEMPTS = 40;
+const BOOT_DELAY_MS = 50;
 
-if (
-	config &&
-	wp.apiFetch &&
-	wp.components &&
-	wp.element &&
-	wp.i18n
-) {
-	const { Button, Spinner } = wp.components;
-	const { createElement, Fragment, useEffect, useState } = wp.element;
-	const { __ } = wp.i18n;
-	const apiFetch = wp.apiFetch;
+let hasBooted = false;
+let bootAttempts = 0;
+
+function readModuleData() {
+	const script = document.getElementById( `wp-script-module-data-${ MODULE_ID }` );
+
+	if ( ! script || ! script.textContent ) {
+		return null;
+	}
+
+	try {
+		return JSON.parse( script.textContent );
+	} catch ( error ) {
+		return null;
+	}
+}
+
+function getWpPackages() {
+	const wp = window.wp || {};
+
+	if ( ! wp.apiFetch || ! wp.components || ! wp.element || ! wp.i18n ) {
+		return null;
+	}
+
+	return {
+		apiFetch: wp.apiFetch,
+		components: wp.components,
+		element: wp.element,
+		i18n: wp.i18n,
+	};
+}
+
+function buildConnector( config, wpPackages ) {
+	const { apiFetch } = wpPackages;
+	const { Button, Spinner } = wpPackages.components;
+	const { createElement, Fragment, useEffect, useState } = wpPackages.element;
+	const { __ } = wpPackages.i18n;
 	const restHeaders = config.restNonce ? { 'X-WP-Nonce': config.restNonce } : {};
 
 	const request = ( args ) =>
@@ -68,7 +95,12 @@ if (
 
 		if ( isLoading ) {
 			actionArea = createElement( Spinner );
-		} else if ( ! status || ! status.runtimeConfigured || status.reason === 'runtime_unconfigured' || status.reason === 'runtime_unreachable' ) {
+		} else if (
+			! status ||
+			! status.runtimeConfigured ||
+			status.reason === 'runtime_unconfigured' ||
+			status.reason === 'runtime_unreachable'
+		) {
 			actionArea = createElement(
 				Button,
 				{
@@ -145,4 +177,36 @@ if (
 	registerConnector( config.connectorId || 'codex', {
 		render: ( props ) => createElement( CodexConnector, props ),
 	} );
+}
+
+function tryBoot() {
+	if ( hasBooted ) {
+		return;
+	}
+
+	const config = readModuleData();
+	const wpPackages = getWpPackages();
+
+	if ( config && wpPackages ) {
+		buildConnector( config, wpPackages );
+		hasBooted = true;
+		return;
+	}
+
+	bootAttempts += 1;
+
+	if ( bootAttempts >= MAX_BOOT_ATTEMPTS ) {
+		window.console?.warn?.(
+			'AI Provider for Codex connector did not initialize before timeout.'
+		);
+		return;
+	}
+
+	window.setTimeout( tryBoot, BOOT_DELAY_MS );
+}
+
+if ( document.readyState === 'loading' ) {
+	document.addEventListener( 'DOMContentLoaded', tryBoot, { once: true } );
+} else {
+	tryBoot();
 }

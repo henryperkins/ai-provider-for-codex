@@ -9,6 +9,10 @@ declare( strict_types=1 );
 
 namespace AIProviderForCodex\Auth;
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 /**
  * Manages local connection records.
  */
@@ -36,11 +40,10 @@ final class ConnectionRepository {
 	public static function get_for_user( int $wp_user_id ): ?array {
 		global $wpdb;
 
+		$table_name = self::table_name();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Plugin data is stored in a dedicated custom table.
 		$row = $wpdb->get_row(
-			$wpdb->prepare(
-				'SELECT * FROM ' . self::table_name() . ' WHERE wp_user_id = %d LIMIT 1',
-				$wp_user_id
-			),
+			$wpdb->prepare( 'SELECT * FROM %i WHERE wp_user_id = %d LIMIT 1', $table_name, $wp_user_id ),
 			ARRAY_A
 		);
 
@@ -55,11 +58,10 @@ final class ConnectionRepository {
 	public static function list_active_for_site_catalog(): array {
 		global $wpdb;
 
+		$table_name = self::table_name();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Plugin data is stored in a dedicated custom table.
 		$rows = $wpdb->get_results(
-			$wpdb->prepare(
-				'SELECT * FROM ' . self::table_name() . ' WHERE status = %s',
-				'linked'
-			),
+			$wpdb->prepare( 'SELECT * FROM %i WHERE status = %s', $table_name, 'linked' ),
 			ARRAY_A
 		);
 
@@ -90,7 +92,8 @@ final class ConnectionRepository {
 	public static function upsert( int $wp_user_id, array $payload ): void {
 		global $wpdb;
 
-		$now = gmdate( 'Y-m-d H:i:s' );
+		$table_name = self::table_name();
+		$now        = gmdate( 'Y-m-d H:i:s' );
 
 		$existing = self::get_for_user( $wp_user_id );
 
@@ -125,7 +128,8 @@ final class ConnectionRepository {
 			$formats = [ '%d' ] + $formats;
 		}
 
-		$wpdb->replace( self::table_name(), $data, $formats );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Plugin data is stored in a dedicated custom table.
+		$wpdb->replace( $table_name, $data, $formats );
 	}
 
 	/**
@@ -137,6 +141,7 @@ final class ConnectionRepository {
 	public static function delete_for_user( int $wp_user_id ): void {
 		global $wpdb;
 
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Plugin data is stored in a dedicated custom table.
 		$wpdb->delete( self::table_name(), [ 'wp_user_id' => $wp_user_id ], [ '%d' ] );
 	}
 

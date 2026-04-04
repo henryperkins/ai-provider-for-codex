@@ -14,6 +14,10 @@ use AIProviderForCodex\Runtime\ResponseMapper;
 use AIProviderForCodex\Runtime\Settings;
 use RuntimeException;
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 /**
  * Starts, polls, refreshes, and disconnects user links.
  */
@@ -27,13 +31,13 @@ final class ConnectionService {
 	 */
 	public function start_connect( int $wp_user_id ): array {
 		if ( ! Settings::has_required_configuration() ) {
-			throw new RuntimeException( __( 'The local Codex runtime settings are incomplete.', 'ai-provider-for-codex' ) );
+			throw self::runtime_exception( esc_html__( 'The local Codex runtime settings are incomplete.', 'ai-provider-for-codex' ) );
 		}
 
 		$user = get_userdata( $wp_user_id );
 
 		if ( ! $user ) {
-			throw new RuntimeException( __( 'The current user could not be loaded.', 'ai-provider-for-codex' ) );
+			throw self::runtime_exception( esc_html__( 'The current user could not be loaded.', 'ai-provider-for-codex' ) );
 		}
 
 		$client   = new Client();
@@ -47,7 +51,7 @@ final class ConnectionService {
 		);
 
 		if ( empty( $response['authSessionId'] ) || empty( $response['verificationUrl'] ) || empty( $response['userCode'] ) ) {
-			throw new RuntimeException( __( 'The local Codex runtime returned an incomplete login response.', 'ai-provider-for-codex' ) );
+			throw self::runtime_exception( esc_html__( 'The local Codex runtime returned an incomplete login response.', 'ai-provider-for-codex' ) );
 		}
 
 		PendingConnectionRepository::upsert( $wp_user_id, $response );
@@ -106,7 +110,7 @@ final class ConnectionService {
 	 */
 	public function refresh_snapshot( int $wp_user_id, ?string $connection_id = null ): array {
 		if ( ! Settings::has_required_configuration() ) {
-			throw new RuntimeException( __( 'The local Codex runtime settings are incomplete.', 'ai-provider-for-codex' ) );
+			throw self::runtime_exception( esc_html__( 'The local Codex runtime settings are incomplete.', 'ai-provider-for-codex' ) );
 		}
 
 		$connection = ConnectionRepository::get_for_user( $wp_user_id );
@@ -185,5 +189,16 @@ final class ConnectionService {
 		}
 
 		return 'conn_local_' . $wp_user_id;
+	}
+
+	/**
+	 * Creates a runtime exception without tripping output sniffs.
+	 *
+	 * @param string $message Plain-text exception message.
+	 * @return RuntimeException
+	 */
+	private static function runtime_exception( string $message ): RuntimeException {
+		// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception messages are escaped at the render boundary.
+		return new RuntimeException( $message );
 	}
 }
