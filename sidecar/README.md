@@ -10,6 +10,20 @@ It wraps `codex app-server`, stores per-user ChatGPT/Codex auth state on disk, a
 - `codex` installed and available on the host
 - a host that can run a local service or daemon
 
+## Recommended Quick Start
+
+1. On the same host as WordPress, confirm Python 3.11+ and the `codex` CLI are installed.
+2. From the installed plugin directory, run the bundled installer:
+
+```bash
+sudo bash ./sidecar/scripts/install-systemd.sh
+```
+
+3. The installer writes `/etc/codex-wp-sidecar.env`, starts the sidecar service, and lets WordPress auto-detect the Runtime URL and Runtime bearer token when PHP can read that file.
+4. In WordPress, open `Settings > Codex Provider`. If the values were not auto-detected, enter them manually.
+5. Open `Settings > Connectors` and confirm Codex reports a healthy local runtime.
+6. Each user finishes setup from `Users > Codex Provider` by connecting their own account.
+
 ## Environment
 
 - `CODEX_BIN` default: `/usr/local/bin/codex`
@@ -21,7 +35,7 @@ It wraps `codex app-server`, stores per-user ChatGPT/Codex auth state on disk, a
 - `CODEX_RUNTIME_TURN_TIMEOUT` default: `300`
 - `CODEX_RUNTIME_LOGIN_TIMEOUT` default: `1800`
 
-## Run Manually
+## Manual Run For Testing
 
 ```bash
 export CODEX_WP_BEARER_TOKEN="replace-me"
@@ -30,8 +44,10 @@ python3 sidecar/app/main.py
 
 ## Install As A systemd Service
 
+This is the recommended path for most installs.
+
 ```bash
-sudo ./sidecar/scripts/install-systemd.sh
+sudo bash ./sidecar/scripts/install-systemd.sh
 ```
 
 That installer:

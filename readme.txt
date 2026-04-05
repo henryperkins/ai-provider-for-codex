@@ -37,15 +37,18 @@ Runtime requirements:
 
 == Installation ==
 
+Important: activating the plugin in wp-admin is only the first step. An administrator also needs terminal access on the same host as WordPress to start the bundled local sidecar.
+
 1. Upload the plugin to `/wp-content/plugins/`.
 2. Activate the plugin through the WordPress admin.
 3. On the same host as WordPress, install Python 3.11+ and the `codex` CLI.
-4. The plugin bundle includes the companion Codex sidecar runtime in the `sidecar/` directory. Follow the bundled setup guide in `sidecar/README.md`.
-5. Configure the sidecar to listen on loopback only and set a shared bearer token with `CODEX_WP_BEARER_TOKEN`.
-6. If you use systemd, the bundle also includes `sidecar/scripts/install-systemd.sh` to install the service from the plugin directory.
-7. In WordPress, open `Settings > Codex Provider` and configure the runtime URL and bearer token, unless they are managed externally.
-8. Open `Settings > Connectors` and confirm that the `Codex` connector reports a healthy local runtime.
-9. Each user who wants to use Codex should open `Users > Codex Provider` and complete the device-code login flow.
+4. From the installed plugin directory on that server, run the bundled systemd installer (recommended): `sudo bash /path/to/wp-content/plugins/ai-provider-for-codex/sidecar/scripts/install-systemd.sh`
+5. The installer writes `/etc/codex-wp-sidecar.env`, starts the localhost sidecar, and usually lets the plugin auto-detect the Runtime URL and Runtime bearer token.
+6. In WordPress, open `Settings > Codex Provider`. If the values were not auto-detected, enter them manually. The default Runtime URL is `http://127.0.0.1:4317`.
+7. Open `Settings > Connectors` and confirm that the `Codex` connector reports a healthy local runtime.
+8. Each user who wants to use Codex should open `Users > Codex Provider`, click `Connect Codex account`, complete the device-code login, and then refresh status.
+
+If you are not using systemd, you can still run the bundled sidecar manually with the environment variables documented in `sidecar/README.md`, but the systemd installer is the recommended path because it also writes the shared env file that WordPress can read automatically.
 
 The plugin can also auto-detect the runtime URL and bearer token from `/etc/codex-wp-sidecar.env` when that file is readable by PHP. The sidecar setup guide includes an example systemd unit.
 
