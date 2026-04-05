@@ -14,6 +14,8 @@ Last reviewed: 2026-04-04
 - `[pass]` Plugin Check has been run locally against the release-style file set and currently reports no findings
 - `[pass]` A release-specific packaging step now builds a submission zip that excludes dev-only and local artifact files
 - `[pass]` The public readme now documents the external service/runtime requirement, Terms of Use, privacy, and data handling
+- `[pass]` A standalone GPL-2.0-or-later LICENSE file is present in the project root
+- `[pass]` The release zip includes `sidecar/` so the readme installation instructions work from the installed plugin directory
 - `[needs decision]` The plugin name and slug still reference `Codex`, which may create trademark or naming-review risk
 - `[verify at submission time]` `Tested up to: 7.0` is reasonable right now, but it must be re-checked against the current stable or release-candidate WordPress version on submission day
 
@@ -101,7 +103,7 @@ Repo notes:
 
 - The plugin includes activation and uninstall hooks in [`plugin.php`](./plugin.php) and [`uninstall.php`](./uninstall.php).
 - The sidecar runtime is real and implemented in [`sidecar/app/main.py`](./sidecar/app/main.py).
-- The current release zip excludes [`sidecar/`](./sidecar), so the public install path depends on the separate sidecar setup documented from [`readme.txt`](./readme.txt).
+- The release zip includes [`sidecar/`](./sidecar), so the installation instructions in [`readme.txt`](./readme.txt) that reference `sidecar/scripts/install-systemd.sh` work from the installed plugin directory.
 - The plugin depends on WordPress AI Client support in WordPress 7.0+, so the target audience is limited to environments that actually have that feature available.
 
 ## 7. Security And WordPress Coding Expectations
@@ -134,15 +136,16 @@ Current packaged zip includes:
 - [`plugin.php`](./plugin.php)
 - [`readme.txt`](./readme.txt)
 - [`uninstall.php`](./uninstall.php)
+- [`LICENSE`](./LICENSE)
 - [`src/`](./src)
 - [`assets/`](./assets)
 - [`languages/`](./languages)
+- [`sidecar/`](./sidecar)
 
 Current packager excludes:
 
 - [`.git/`](./.git)
 - [`dist/`](./dist)
-- [`2026-04-03-091723-local-command-caveatcaveat-the-messages-below.txt`](./2026-04-03-091723-local-command-caveatcaveat-the-messages-below.txt)
 - [`codex-app.err`](./codex-app.err)
 - [`composer.json`](./composer.json)
 - [`composer.lock`](./composer.lock)
@@ -151,11 +154,11 @@ Current packager excludes:
 - [`.gitignore`](./.gitignore)
 - [`README.md`](./README.md)
 - [`LOCAL-SIDECAR-SPEC.md`](./LOCAL-SIDECAR-SPEC.md)
+- [`PLUGIN-SUBMISSION-READINESS-CHECKLIST.md`](./PLUGIN-SUBMISSION-READINESS-CHECKLIST.md)
 - [`scripts/`](./scripts)
-- [`sidecar/`](./sidecar)
-- [`scripts/verify.sh`](./scripts/verify.sh)
-- [`scripts/verify.php`](./scripts/verify.php)
 - [`vendor/`](./vendor)
+- [`package-lock.json`](./package-lock.json)
+- Python build artifacts (`__pycache__`, `*.pyc`, `*.pyo`)
 
 ## 9. Testing And Verification
 
