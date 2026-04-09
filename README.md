@@ -8,6 +8,8 @@ WordPress AI Client provider plugin for Codex models using a local sidecar runti
 - The WordPress plugin stores site runtime settings and per-user connection state locally.
 - A localhost sidecar wraps `codex app-server`, handles device-code login, and keeps auth isolated per WordPress user.
 - The plugin talks only to the local runtime for health checks, account snapshots, and text generation.
+- Status screens stay read-only and use stored local connection state; explicit connect checks, snapshot refreshes, and live runtime requests reconcile auth against the sidecar.
+- Billing plan display is informational only and mirrors the latest account snapshot; if the runtime stops reporting a plan, the stored value is cleared.
 
 ## Included
 
@@ -25,6 +27,7 @@ WordPress AI Client provider plugin for Codex models using a local sidecar runti
 
 - Phase 1 functional cutover to the localhost runtime is complete.
 - Phase 2 cleanup removed the remaining legacy compatibility aliases from the active plugin code and docs.
+- Pending device-code sessions now recover cleanly after a sidecar restart when `auth.json` already exists for that user.
 
 ## Quick Start On A WordPress Host
 

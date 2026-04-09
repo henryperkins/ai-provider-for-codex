@@ -96,15 +96,16 @@ final class ConnectionRepository {
 		$now        = gmdate( 'Y-m-d H:i:s' );
 
 		$existing = self::get_for_user( $wp_user_id );
+		$account  = isset( $payload['account'] ) && is_array( $payload['account'] ) ? $payload['account'] : [];
 
 		$data = [
 			'wp_user_id'         => $wp_user_id,
 			'connection_id'      => sanitize_text_field( (string) ( $payload['connectionId'] ?? $existing['connection_id'] ?? '' ) ),
 			'status'             => sanitize_text_field( (string) ( $payload['status'] ?? $existing['status'] ?? 'linked' ) ),
-			'account_email'      => sanitize_email( (string) ( $payload['account']['email'] ?? $existing['account_email'] ?? '' ) ),
-			'plan_type'          => sanitize_text_field( (string) ( $payload['account']['planType'] ?? $existing['plan_type'] ?? '' ) ),
-			'auth_mode'          => sanitize_text_field( (string) ( $payload['account']['authMode'] ?? $existing['auth_mode'] ?? '' ) ),
-			'session_expires_at' => self::to_mysql_datetime( $payload['sessionExpiresAt'] ?? $existing['session_expires_at'] ?? null ),
+			'account_email'      => self::resolve_account_email( $account, $existing ),
+			'plan_type'          => self::resolve_account_field( $account, 'planType', $existing['plan_type'] ?? '' ),
+			'auth_mode'          => self::resolve_account_field( $account, 'authMode', $existing['auth_mode'] ?? '' ),
+			'session_expires_at' => self::resolve_session_expiration( $payload, $existing ),
 			'last_synced_at'     => $now,
 			'created_at'         => $existing['created_at'] ?? $now,
 			'updated_at'         => $now,
@@ -179,5 +180,51 @@ final class ConnectionRepository {
 		$timestamp = strtotime( (string) $value );
 
 		return false !== $timestamp ? gmdate( 'Y-m-d H:i:s', $timestamp ) : null;
+	}
+
+	/**
+	 * Resolves a clearable string account field.
+	 *
+	 * @param array<string,mixed> $account Runtime account payload.
+	 * @param string              $field Field name.
+	 * @param mixed               $existing Existing stored value.
+	 * @return string
+	 */
+	private static function resolve_account_field( array $account, string $field, $existing ): string {
+		if ( array_key_exists( $field, $account ) ) {
+			return sanitize_text_field( (string) $account[ $field ] );
+		}
+
+		return sanitize_text_field( (string) $existing );
+	}
+
+	/**
+	 * Resolves a clearable email account field.
+	 *
+	 * @param array<string,mixed>   $account Runtime account payload.
+	 * @param array<string,mixed>|null $existing Existing connection row.
+	 * @return string
+	 */
+	private static function resolve_account_email( array $account, ?array $existing ): string {
+		if ( array_key_exists( 'email', $account ) ) {
+			return sanitize_email( (string) $account['email'] );
+		}
+
+		return sanitize_email( (string) ( $existing['account_email'] ?? '' ) );
+	}
+
+	/**
+	 * Resolves a clearable session expiration value.
+	 *
+	 * @param array<string,mixed>      $payload Runtime payload.
+	 * @param array<string,mixed>|null $existing Existing connection row.
+	 * @return string|null
+	 */
+	private static function resolve_session_expiration( array $payload, ?array $existing ): ?string {
+		if ( array_key_exists( 'sessionExpiresAt', $payload ) ) {
+			return self::to_mysql_datetime( $payload['sessionExpiresAt'] );
+		}
+
+		return self::to_mysql_datetime( $existing['session_expires_at'] ?? null );
 	}
 }

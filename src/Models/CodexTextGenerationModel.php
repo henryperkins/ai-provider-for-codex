@@ -10,9 +10,11 @@ declare( strict_types=1 );
 namespace AIProviderForCodex\Models;
 
 use AIProviderForCodex\Auth\ConnectionRepository;
+use AIProviderForCodex\Auth\ConnectionService;
 use AIProviderForCodex\Provider\ModelCatalogState;
 use AIProviderForCodex\Runtime\Client;
 use AIProviderForCodex\Runtime\ResponseMapper;
+use AIProviderForCodex\Runtime\RuntimeRequestException;
 use RuntimeException;
 use WordPress\AiClient\Messages\DTO\Message;
 use WordPress\AiClient\Providers\ApiBasedImplementation\AbstractApiBasedModel;
@@ -64,30 +66,40 @@ final class CodexTextGenerationModel extends AbstractApiBasedModel implements Te
 			);
 		}
 
-		$client   = new Client();
-		$config   = $this->getConfig();
-		$response = $client->post(
-			'/v1/responses/text',
-			array_filter(
-				[
-					'wpUserId'          => $wp_user_id,
-					'requestId'         => wp_generate_uuid4(),
-					'input'             => $this->flatten_prompt( $prompt ),
-					'systemInstruction' => $config->getSystemInstruction(),
-					'model'             => $model_id,
-					'modelPreferences'  => [ $model_id ],
-					'reasoningEffort'   => $this->extract_reasoning_effort(),
-					'responseFormat'    => $this->build_response_format(),
-					'context'           => [
-						'surface'    => 'wordpress-ai-client',
-						'pluginSlug' => 'ai-provider-for-codex',
+		$client = new Client();
+		$config = $this->getConfig();
+
+		try {
+			$response = $client->post(
+				'/v1/responses/text',
+				array_filter(
+					[
+						'wpUserId'          => $wp_user_id,
+						'requestId'         => wp_generate_uuid4(),
+						'input'             => $this->flatten_prompt( $prompt ),
+						'systemInstruction' => $config->getSystemInstruction(),
+						'model'             => $model_id,
+						'modelPreferences'  => [ $model_id ],
+						'reasoningEffort'   => $this->extract_reasoning_effort(),
+						'responseFormat'    => $this->build_response_format(),
+						'context'           => [
+							'surface'    => 'wordpress-ai-client',
+							'pluginSlug' => 'ai-provider-for-codex',
+						],
 					],
-				],
-				static function ( $value ): bool {
-					return null !== $value && '' !== $value && [] !== $value;
-				}
-			)
-		);
+					static function ( $value ): bool {
+						return null !== $value && '' !== $value && [] !== $value;
+					}
+				)
+			);
+		} catch ( RuntimeRequestException $exception ) {
+			if ( $exception->is_auth_required() ) {
+				ConnectionService::invalidate_local_connection( $wp_user_id );
+			}
+
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception messages are escaped at the render boundary.
+			throw self::runtime_exception( $exception->getMessage() );
+		}
 
 		return ResponseMapper::to_generative_ai_result(
 			$response,

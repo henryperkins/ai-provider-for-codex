@@ -351,11 +351,12 @@ class RuntimeState:
                     {
                         "authSessionId": auth_session_id,
                         "status": "missing",
+                        "authStored": auth_file_path(user_codex_home(wp_user_id)).is_file(),
                         "verificationUrl": None,
                         "userCode": None,
                         "error": "Login session was not found in the local runtime.",
                     },
-                    HTTPStatus.NOT_FOUND,
+                    HTTPStatus.OK,
                 )
 
             payload = self._public_login_payload(session)

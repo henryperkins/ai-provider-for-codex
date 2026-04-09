@@ -234,16 +234,18 @@ Query parameters:
 Behavior:
 
 - Looks up the pending login session in memory.
-- If the session is missing or belongs to another user, returns `404` with `status = "missing"`.
+- If the session is missing or belongs to another user, returns `200` with `status = "missing"` plus `authStored`.
 - Otherwise returns the current pending or completed state.
 - Adds `authStored` by checking whether the user's `auth.json` file exists.
+
+During mixed plugin/sidecar rollouts, the WordPress plugin also tolerates the earlier `404` response that carried the same `status = "missing"` payload.
 
 The watcher thread updates the in-memory session like this:
 
 - on successful `account/login/completed`: `status = "completed"`
 - on failure or timeout: `status = "error"` and `error = ...`
 
-After login completion, the plugin polls this route, then separately asks the sidecar for a snapshot and persists WordPress-side connection data.
+After login completion, the plugin polls this route, then separately asks the sidecar for a snapshot and persists WordPress-side connection data. If the sidecar restarted and the in-memory login session is gone, WordPress treats `status = "missing"` as a recoverable state: it tries `GET /v1/account/snapshot` and reconnects automatically when stored auth already exists.
 
 ### `GET /v1/account/snapshot`
 
@@ -269,6 +271,12 @@ Returned data includes:
 - a selected default model
 - the visible model list
 - rate limits
+
+Important implementation detail:
+
+- `planType` is optional and may be blank.
+- WordPress clears stale stored account fields when a fresh snapshot omits them.
+- If this route returns `409 auth_required`, WordPress clears the local connection and prompts the user to reconnect.
 
 The plugin stores that result in its own WordPress tables so it can power:
 
@@ -450,8 +458,10 @@ The static unit template in [sidecar/systemd/codex-wp-sidecar.service](./systemd
 
 - WordPress still has a pending auth session id in user meta.
 - The sidecar no longer has the in-memory login session.
-- `GET /v1/login/status` returns `404` with `status = "missing"`.
-- The user has to start the connect flow again unless auth already completed and `auth.json` exists.
+- `GET /v1/login/status` returns `200` with `status = "missing"`.
+- WordPress tries `GET /v1/account/snapshot` before asking the user to reconnect.
+- If `auth.json` already exists and the snapshot succeeds, WordPress restores the local connection automatically.
+- If the snapshot returns `409 auth_required`, WordPress clears the stale local connection and the user starts the connect flow again.
 
 ### `codex app-server` transport failure
 

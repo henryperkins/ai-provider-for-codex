@@ -61,9 +61,11 @@ final class SupportChecks {
 		}
 
 		if ( $pending && ! empty( $pending['authSessionId'] ) ) {
+			$pending_status = sanitize_key( (string) ( $pending['status'] ?? 'pending' ) );
+
 			return [
 				'ready'             => false,
-				'reason'            => 'login_pending',
+				'reason'            => 'error' === $pending_status ? 'login_failed' : 'login_pending',
 				'runtime'           => $runtime,
 				'runtimeConfigured' => true,
 				'connection'        => null,

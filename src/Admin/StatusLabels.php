@@ -34,6 +34,8 @@ final class StatusLabels {
 				return __( 'Connection expired', 'ai-provider-for-codex' );
 			case 'login_pending':
 				return __( 'Login pending', 'ai-provider-for-codex' );
+			case 'login_failed':
+				return __( 'Login failed', 'ai-provider-for-codex' );
 			default:
 				return $reason;
 		}
@@ -46,17 +48,19 @@ final class StatusLabels {
 	 * @return string
 	 */
 	public static function readiness_guidance( string $reason ): string {
-			switch ( $reason ) {
-				case 'runtime_unconfigured':
-					return __( 'Add your local Codex runtime URL and bearer token in plugin settings, or provision `/etc/codex-wp-sidecar.env` for automatic detection.', 'ai-provider-for-codex' );
-				case 'runtime_unreachable':
-					return __( 'Check that the local Codex runtime service is running and that WordPress can reach its `/healthz` endpoint.', 'ai-provider-for-codex' );
+		switch ( $reason ) {
+			case 'runtime_unconfigured':
+				return __( 'Start the bundled local sidecar on the WordPress host, then make sure this site can read the runtime URL and bearer token (or `/etc/codex-wp-sidecar.env`).', 'ai-provider-for-codex' );
+			case 'runtime_unreachable':
+				return __( 'The sidecar should be running on the same host as WordPress and answering the configured `/healthz` URL.', 'ai-provider-for-codex' );
 			case 'user_unlinked':
-				return __( 'Connect your Codex account to start using AI features.', 'ai-provider-for-codex' );
+				return __( 'Once the shared runtime is healthy, connect your Codex account to start using AI features.', 'ai-provider-for-codex' );
 			case 'connection_expired':
 				return __( 'Reconnect to restore access.', 'ai-provider-for-codex' );
 			case 'login_pending':
-				return __( 'Complete the device-code login and then refresh this page.', 'ai-provider-for-codex' );
+				return __( 'Open the verification page, enter your device code, then refresh this page.', 'ai-provider-for-codex' );
+			case 'login_failed':
+				return __( 'The previous device-code login failed. Start the connection again to request a new device code.', 'ai-provider-for-codex' );
 			default:
 				return '';
 		}
@@ -112,6 +116,8 @@ final class StatusLabels {
 			case 'unknown':
 			case 'login_pending':
 				return 'warning';
+			case 'login_failed':
+				return 'error';
 			default:
 				return 'error';
 		}

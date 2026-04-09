@@ -53,7 +53,7 @@ final class ConnectorsIntegration {
 			self::CONNECTOR_ID,
 			[
 				'name'           => __( 'Codex', 'ai-provider-for-codex' ),
-				'description'    => __( 'AI text generation powered by Codex. Each user connects their own account.', 'ai-provider-for-codex' ),
+				'description'    => __( 'AI text generation powered by Codex. Requires a local runtime on this server, then each user connects their own account.', 'ai-provider-for-codex' ),
 				'type'           => 'ai_provider',
 				'logo_url'       => plugins_url( 'src/Provider/logo.svg', \AIProviderForCodex\PLUGIN_FILE ),
 				'authentication' => [
@@ -169,14 +169,14 @@ final class ConnectorsIntegration {
 		printf(
 			'<div class="notice notice-info"><p>%s</p></div>',
 			wp_kses_post(
-				sprintf(
-					/* translators: 1: Connectors URL, 2: Settings URL. */
+				SafeFormat::sprintf(
+					/* translators: 1: Settings URL, 2: Connectors URL. */
 					__(
-						'AI Provider for Codex is active, but the local runtime is not configured yet. Start on the <a href="%1$s">Connectors</a> screen or go directly to <a href="%2$s">plugin settings</a>.',
+						'AI Provider for Codex is active, but it will not work until the local runtime sidecar is running on this server. Open <a href="%1$s">plugin settings</a> for the step-by-step setup guide, then confirm the result on <a href="%2$s">Connectors</a>.',
 						'ai-provider-for-codex'
 					),
-					esc_url( admin_url( 'options-connectors.php' ) ),
-					esc_url( SiteSettings::page_url() )
+					esc_url( SiteSettings::page_url() ),
+					esc_url( admin_url( 'options-connectors.php' ) )
 				)
 			)
 		);
@@ -213,7 +213,7 @@ final class ConnectorsIntegration {
 		printf(
 			'<div class="notice notice-info is-dismissible" data-codex-dismiss-notice="link"><p>%s</p></div>',
 			wp_kses_post(
-				sprintf(
+				SafeFormat::sprintf(
 					/* translators: %s: user connection URL. */
 					__(
 						'Codex AI is available on this site. <a href="%s">Connect your Codex account</a> to start using AI features.',

@@ -130,14 +130,28 @@ final class Client {
 		}
 
 		if ( $status_code >= 400 ) {
-			$message = $payload['error']['message'] ?? wp_remote_retrieve_response_message( $response );
+			$runtime_error_code = sanitize_key( (string) ( $payload['error']['code'] ?? '' ) );
+			$runtime_message    = (string) ( $payload['error']['message'] ?? wp_remote_retrieve_response_message( $response ) );
+			$message            = self::normalize_runtime_error_message(
+				$status_code,
+				$runtime_message,
+				$runtime_error_code
+			);
 
 			if ( $status_code >= 500 || in_array( $status_code, [ 401, 403 ], true ) ) {
 				HealthMonitor::record_failure( (string) $message );
 			}
 
-				throw self::runtime_exception( esc_html( sanitize_text_field( (string) $message ) ) );
-			}
+			// phpcs:disable WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Runtime exception payload is rendered through escaped admin notices, not direct output.
+			throw new RuntimeRequestException(
+				esc_html( sanitize_text_field( (string) $message ) ),
+				$status_code,
+				$runtime_error_code,
+				$runtime_message,
+				is_array( $payload ) ? $payload : []
+			);
+			// phpcs:enable WordPress.Security.EscapeOutput.ExceptionNotEscaped
+		}
 
 		HealthMonitor::record_success();
 
@@ -225,6 +239,54 @@ final class Client {
 				$timeout,
 				$target
 			);
+		}
+
+		return $message;
+	}
+
+	/**
+	 * Converts runtime HTTP errors into clearer admin-facing messages.
+	 *
+	 * @param int    $status_code HTTP status code.
+	 * @param string $message Runtime error message.
+	 * @param string $runtime_error_code Runtime error code.
+	 * @return string
+	 */
+	private static function normalize_runtime_error_message( int $status_code, string $message, string $runtime_error_code = '' ): string {
+		$lower              = strtolower( $message );
+		$runtime_error_code = sanitize_key( $runtime_error_code );
+
+		if ( 'auth_required' === $runtime_error_code ) {
+			return __(
+				'The local Codex runtime no longer has a stored ChatGPT or Codex login for your WordPress account. Reconnect your account to refresh billing and model access.',
+				'ai-provider-for-codex'
+			);
+		}
+
+		if ( in_array( $status_code, [ 401, 403 ], true ) ) {
+			if (
+				str_contains( $lower, 'invalid bearer token' )
+				|| str_contains( $lower, 'missing bearer token' )
+			) {
+				return __(
+					'The local Codex runtime rejected the shared bearer token. Make sure Settings > Codex Provider uses the same raw token value as CODEX_WP_BEARER_TOKEN in the sidecar, and paste only the token itself instead of a full Authorization header.',
+					'ai-provider-for-codex'
+				);
+			}
+
+			if ( str_contains( $lower, 'bearer token is not configured' ) ) {
+				return __(
+					'The local Codex runtime is missing its shared bearer token. Set CODEX_WP_BEARER_TOKEN for the sidecar and the matching Runtime bearer token in WordPress.',
+					'ai-provider-for-codex'
+				);
+			}
+
+			if ( str_contains( $lower, 'only accepts local connections' ) ) {
+				return __(
+					'The local Codex runtime only accepts requests from the same host. Run the sidecar on the WordPress host or point the Runtime URL at a local address.',
+					'ai-provider-for-codex'
+				);
+			}
 		}
 
 		return $message;

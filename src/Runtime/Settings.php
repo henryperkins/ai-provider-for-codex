@@ -286,7 +286,53 @@ final class Settings {
 	 * @return string
 	 */
 	private static function normalize_bearer_token_value( string $value ): string {
-		return sanitize_text_field( trim( $value ) );
+		$value = trim( $value );
+		$value = self::unwrap_quoted_value( $value );
+
+		if ( 0 === stripos( $value, 'Bearer ' ) ) {
+			$value = ltrim( substr( $value, 7 ) );
+		}
+
+		$value = self::unwrap_quoted_value( $value );
+
+		return trim( $value );
+	}
+
+	/**
+	 * Normalizes externally managed setting values without corrupting opaque secrets.
+	 *
+	 * @param string $key Setting key.
+	 * @param string $value Raw value.
+	 * @return string
+	 */
+	private static function normalize_override_value( string $key, string $value ): string {
+		$value = trim( $value );
+
+		if ( 'CODEX_WP_BEARER_TOKEN' === $key ) {
+			return self::normalize_bearer_token_value( $value );
+		}
+
+		return sanitize_text_field( $value );
+	}
+
+	/**
+	 * Removes one layer of matching single or double quotes from a value.
+	 *
+	 * @param string $value Raw value.
+	 * @return string
+	 */
+	private static function unwrap_quoted_value( string $value ): string {
+		if (
+			strlen( $value ) >= 2
+			&& (
+				( '"' === $value[0] && '"' === substr( $value, -1 ) )
+				|| ( "'" === $value[0] && "'" === substr( $value, -1 ) )
+			)
+		) {
+			return trim( substr( $value, 1, -1 ) );
+		}
+
+		return $value;
 	}
 
 	/**
@@ -330,7 +376,7 @@ final class Settings {
 	 */
 	private static function setting_override( string $key ): array {
 		if ( defined( $key ) ) {
-			$value = sanitize_text_field( (string) constant( $key ) );
+			$value = self::normalize_override_value( $key, (string) constant( $key ) );
 
 			if ( '' !== $value ) {
 				return [
@@ -344,22 +390,27 @@ final class Settings {
 		$value = getenv( $key );
 
 		if ( false === $value && isset( $_ENV[ $key ] ) ) {
-			$value = sanitize_text_field( (string) $_ENV[ $key ] );
+			// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Environment values are normalized immediately below.
+			$value = (string) $_ENV[ $key ];
 		}
 
-		if ( is_string( $value ) && '' !== trim( $value ) ) {
+		if ( is_string( $value ) ) {
+			$value = self::normalize_override_value( $key, $value );
+		}
+
+		if ( is_string( $value ) && '' !== $value ) {
 			return [
-				'value'  => sanitize_text_field( trim( $value ) ),
+				'value'  => $value,
 				'source' => 'env',
 				'detail' => $key,
 			];
 		}
 
-		$file_value = self::shared_env_config()[ $key ] ?? '';
+		$file_value = self::normalize_override_value( $key, self::shared_env_config()[ $key ] ?? '' );
 
 		if ( '' !== $file_value ) {
 			return [
-				'value'  => sanitize_text_field( $file_value ),
+				'value'  => $file_value,
 				'source' => 'file',
 				'detail' => self::shared_env_file(),
 			];

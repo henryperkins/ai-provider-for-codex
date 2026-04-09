@@ -56,6 +56,7 @@ function buildConnector( config, wpPackages ) {
 		const [ status, setStatus ] = useState( null );
 		const [ isLoading, setIsLoading ] = useState( true );
 		const [ isBusy, setIsBusy ] = useState( false );
+		const pendingStatus = status?.pendingConnection?.status;
 
 		const loadStatus = () => {
 			setIsLoading( true );
@@ -92,6 +93,11 @@ function buildConnector( config, wpPackages ) {
 		};
 
 		let actionArea;
+		let setupLabel = __( 'Set up local runtime', 'ai-provider-for-codex' );
+
+		if ( status?.reason === 'runtime_unreachable' ) {
+			setupLabel = __( 'Check local runtime', 'ai-provider-for-codex' );
+		}
 
 		if ( isLoading ) {
 			actionArea = createElement( Spinner );
@@ -107,7 +113,16 @@ function buildConnector( config, wpPackages ) {
 					variant: 'secondary',
 					href: config.siteSettingsUrl,
 				},
-				__( 'Set up', 'ai-provider-for-codex' )
+					setupLabel
+			);
+		} else if ( status.reason === 'login_pending' && pendingStatus === 'completed' ) {
+			actionArea = createElement(
+				Button,
+				{
+					variant: 'primary',
+					href: config.userConnectionUrl,
+				},
+				__( 'Retry account sync', 'ai-provider-for-codex' )
 			);
 		} else if ( status.reason === 'login_pending' ) {
 			actionArea = createElement(
@@ -117,6 +132,15 @@ function buildConnector( config, wpPackages ) {
 					href: config.userConnectionUrl,
 				},
 				__( 'Continue connecting', 'ai-provider-for-codex' )
+			);
+		} else if ( status.reason === 'login_failed' ) {
+			actionArea = createElement(
+				Button,
+				{
+					variant: 'secondary',
+					href: config.userConnectionUrl,
+				},
+				__( 'Review error', 'ai-provider-for-codex' )
 			);
 		} else if ( ! status.connection || status.reason === 'connection_expired' ) {
 			actionArea = createElement(

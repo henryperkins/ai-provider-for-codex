@@ -111,16 +111,27 @@ final class UserConnectionPage {
 		$notice         = self::read_notice();
 		$reason         = (string) $status['reason'];
 		$pending        = is_array( $status['pendingConnection'] ?? null ) ? $status['pendingConnection'] : null;
+		$pending_status = is_array( $pending ) ? sanitize_key( (string) ( $pending['status'] ?? 'pending' ) ) : '';
+		$pending_active = in_array( $pending_status, [ 'pending', 'completed' ], true );
 		$ind            = StatusLabels::status_indicator( $reason );
+		$reason_label   = StatusLabels::readiness_label( $reason );
+		$guidance       = StatusLabels::readiness_guidance( $reason );
 		$model_labels   = ModelCatalogState::labels_from_catalog( $catalog );
 		$model_ids      = is_array( $catalog['model_ids'] ?? null ) ? $catalog['model_ids'] : [];
 		$selected_model = (string) ( $catalog['selected_model'] ?? '' );
+
+		if ( 'completed' === $pending_status ) {
+			$ind          = 'warning';
+			$reason_label = __( 'Account sync needs retry', 'ai-provider-for-codex' );
+			$guidance     = __( 'Device-code login already completed, but WordPress could not refresh your Codex account details yet. Retry the account sync below.', 'ai-provider-for-codex' );
+		}
 		?>
 		<style>
 			.codex-how-box { background: #f0f6fc; border: 1px solid #c3c4c7; border-left: 4px solid #2271b1; padding: 0.75rem 1.25rem; max-width: 960px; margin-bottom: 1.5rem; border-radius: 2px; }
 			.codex-how-box p { margin: 0.25rem 0; }
+			.codex-how-box ol { margin: 0.5rem 0 0.25rem 1.25rem; }
 			.codex-how-box ul { margin: 0.5rem 0 0.25rem 1.25rem; }
-			.codex-how-box li { margin-bottom: 0.25rem; }
+			.codex-how-box li { margin-bottom: 0.35rem; }
 			.codex-indicator { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
 			.codex-indicator.good { background: #00a32a; }
 			.codex-indicator.warning { background: #dba617; }
@@ -130,6 +141,8 @@ final class UserConnectionPage {
 			.codex-model-pill { display: inline-block; background: #f0f0f1; border-radius: 3px; padding: 2px 8px; font-size: 12px; }
 			.codex-model-pill.selected { background: #2271b1; color: #fff; }
 			.codex-device-box { background: #fff; border: 1px solid #c3c4c7; border-radius: 4px; padding: 1rem 1.25rem; max-width: 960px; margin-top: 1rem; }
+			.codex-device-box ol { margin: 0.5rem 0 1rem 1.25rem; }
+			.codex-device-box li { margin-bottom: 0.35rem; }
 			.codex-device-code { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 24px; font-weight: 600; letter-spacing: 0.18em; }
 		</style>
 		<div class="wrap">
@@ -142,20 +155,28 @@ final class UserConnectionPage {
 					<li><?php esc_html_e( 'Each person connects their own Codex or ChatGPT account so access and billing stay user-specific.', 'ai-provider-for-codex' ); ?></li>
 				</ul>
 				<p>
-						<?php
-						printf(
-							wp_kses_post(
-								/* translators: 1: site settings URL, 2: connectors settings URL. */
-								__(
-									'This page manages your personal account link. <a href="%1$s">Plugin settings</a> control the local runtime shared by all users. <a href="%2$s">Settings &gt; Connectors</a> shows overall provider status.',
-									'ai-provider-for-codex'
-							)
-						),
-						esc_url( SiteSettings::page_url() ),
-						esc_url( admin_url( 'options-connectors.php' ) )
+					<?php
+					echo wp_kses_post(
+						SafeFormat::sprintf(
+							/* translators: 1: site settings URL, 2: connectors settings URL. */
+							__(
+								'This page manages your personal account link. <a href="%1$s">Plugin settings</a> control the local runtime shared by all users. <a href="%2$s">Settings &gt; Connectors</a> shows overall provider status.',
+								'ai-provider-for-codex'
+							),
+							esc_url( SiteSettings::page_url() ),
+							esc_url( admin_url( 'options-connectors.php' ) )
+						)
 					);
 					?>
 				</p>
+				<?php if ( empty( $status['runtimeConfigured'] ) ) : ?>
+					<p><strong><?php esc_html_e( 'A site administrator still needs to finish the shared runtime setup before you can connect an account here.', 'ai-provider-for-codex' ); ?></strong></p>
+				<?php endif; ?>
+				<ol>
+					<li><?php esc_html_e( 'A site administrator starts the local sidecar and confirms Codex is healthy on Settings > Connectors.', 'ai-provider-for-codex' ); ?></li>
+					<li><?php esc_html_e( 'You click Connect Codex account on this page.', 'ai-provider-for-codex' ); ?></li>
+					<li><?php esc_html_e( 'You open the verification page, enter the device code, then come back here and refresh status.', 'ai-provider-for-codex' ); ?></li>
+				</ol>
 			</div>
 
 			<?php self::render_notice( $notice ); ?>
@@ -170,11 +191,8 @@ final class UserConnectionPage {
 						<th scope="row"><?php esc_html_e( 'Status', 'ai-provider-for-codex' ); ?></th>
 						<td>
 							<span class="codex-indicator <?php echo esc_attr( $ind ); ?>"></span>
-							<?php echo esc_html( StatusLabels::readiness_label( $reason ) ); ?>
-							<?php
-							$guidance = StatusLabels::readiness_guidance( $reason );
-							if ( '' !== $guidance ) :
-								?>
+							<?php echo esc_html( $reason_label ); ?>
+							<?php if ( '' !== $guidance ) : ?>
 								<br /><em><?php echo esc_html( $guidance ); ?></em>
 							<?php endif; ?>
 						</td>
@@ -198,15 +216,44 @@ final class UserConnectionPage {
 
 			<?php if ( $pending && ! empty( $pending['authSessionId'] ) ) : ?>
 				<div class="codex-device-box">
-					<h3><?php esc_html_e( 'Complete account connection', 'ai-provider-for-codex' ); ?></h3>
-					<p><?php esc_html_e( 'Open the verification page and enter this code:', 'ai-provider-for-codex' ); ?></p>
-					<p class="codex-device-code"><?php echo esc_html( (string) $pending['userCode'] ); ?></p>
-					<p>
-						<a class="button button-secondary" href="<?php echo esc_url( (string) $pending['verificationUrl'] ); ?>" target="_blank" rel="noopener noreferrer"><?php esc_html_e( 'Open verification page', 'ai-provider-for-codex' ); ?></a>
-						<a class="button button-primary" href="<?php echo esc_url( wp_nonce_url( add_query_arg( 'action', 'check-connect', self::page_url() ), 'codex-provider-check-connect' ) ); ?>"><?php esc_html_e( 'Check connection status', 'ai-provider-for-codex' ); ?></a>
-					</p>
-					<?php if ( ! empty( $pending['error'] ) ) : ?>
-						<p class="description" style="color:#d63638;"><?php echo esc_html( (string) $pending['error'] ); ?></p>
+					<?php if ( 'pending' === $pending_status ) : ?>
+						<h3><?php esc_html_e( 'Complete account connection', 'ai-provider-for-codex' ); ?></h3>
+						<p><?php esc_html_e( 'Finish the connection in three quick steps:', 'ai-provider-for-codex' ); ?></p>
+						<ol>
+							<li><?php esc_html_e( 'Open the verification page.', 'ai-provider-for-codex' ); ?></li>
+							<li><?php esc_html_e( 'Enter this device code.', 'ai-provider-for-codex' ); ?></li>
+							<li><?php esc_html_e( 'Return here and click Check connection status.', 'ai-provider-for-codex' ); ?></li>
+						</ol>
+						<p class="codex-device-code"><?php echo esc_html( (string) $pending['userCode'] ); ?></p>
+						<p>
+							<a class="button button-secondary" href="<?php echo esc_url( (string) $pending['verificationUrl'] ); ?>" target="_blank" rel="noopener noreferrer"><?php esc_html_e( 'Open verification page', 'ai-provider-for-codex' ); ?></a>
+							<a class="button button-primary" href="<?php echo esc_url( wp_nonce_url( add_query_arg( 'action', 'check-connect', self::page_url() ), 'codex-provider-check-connect' ) ); ?>"><?php esc_html_e( 'Check connection status', 'ai-provider-for-codex' ); ?></a>
+						</p>
+						<?php if ( ! empty( $pending['error'] ) ) : ?>
+							<p class="description" style="color:#d63638;"><?php echo esc_html( (string) $pending['error'] ); ?></p>
+						<?php endif; ?>
+					<?php elseif ( 'completed' === $pending_status ) : ?>
+						<h3><?php esc_html_e( 'Retry account sync', 'ai-provider-for-codex' ); ?></h3>
+						<p><?php esc_html_e( 'Your device-code login finished, but WordPress could not finish syncing your Codex account yet.', 'ai-provider-for-codex' ); ?></p>
+						<ol>
+							<li><?php esc_html_e( 'Confirm the local sidecar is still running.', 'ai-provider-for-codex' ); ?></li>
+							<li><?php esc_html_e( 'Click Retry account sync below.', 'ai-provider-for-codex' ); ?></li>
+							<li><?php esc_html_e( 'If it still fails, disconnect and start the connection again.', 'ai-provider-for-codex' ); ?></li>
+						</ol>
+						<?php if ( ! empty( $pending['error'] ) ) : ?>
+							<p class="description" style="color:#d63638;"><?php echo esc_html( (string) $pending['error'] ); ?></p>
+						<?php endif; ?>
+					<?php elseif ( 'error' === $pending_status ) : ?>
+						<h3><?php esc_html_e( 'Connection attempt failed', 'ai-provider-for-codex' ); ?></h3>
+						<p><?php esc_html_e( 'The previous device-code login did not finish successfully.', 'ai-provider-for-codex' ); ?></p>
+						<ol>
+							<li><?php esc_html_e( 'Review the error below.', 'ai-provider-for-codex' ); ?></li>
+							<li><?php esc_html_e( 'Click Start connection again to request a fresh device code.', 'ai-provider-for-codex' ); ?></li>
+							<li><?php esc_html_e( 'Complete the new verification flow from the beginning.', 'ai-provider-for-codex' ); ?></li>
+						</ol>
+						<?php if ( ! empty( $pending['error'] ) ) : ?>
+							<p class="description" style="color:#d63638;"><?php echo esc_html( (string) $pending['error'] ); ?></p>
+						<?php endif; ?>
 					<?php endif; ?>
 				</div>
 			<?php endif; ?>
@@ -217,10 +264,13 @@ final class UserConnectionPage {
 					<?php if ( '' !== $selected_model ) : ?>
 						<p>
 								<?php
-								printf(
+								echo wp_kses(
 									/* translators: %s: model name. */
-									wp_kses( __( 'Using: %s', 'ai-provider-for-codex' ), [ 'strong' => [] ] ),
-									'<strong>' . esc_html( ModelCatalogState::label_for_model_id( $selected_model ) ) . '</strong>'
+									SafeFormat::sprintf(
+										__( 'Using: %s', 'ai-provider-for-codex' ),
+										'<strong>' . esc_html( ModelCatalogState::label_for_model_id( $selected_model ) ) . '</strong>'
+									),
+									[ 'strong' => [] ]
 								);
 								?>
 						</p>
@@ -255,10 +305,12 @@ final class UserConnectionPage {
 			<p style="margin-top: 1.5rem;">
 				<?php if ( empty( $status['runtimeConfigured'] ) ) : ?>
 					<a class="button button-secondary" href="<?php echo esc_url( SiteSettings::page_url() ); ?>"><?php esc_html_e( 'Configure local runtime', 'ai-provider-for-codex' ); ?></a>
-				<?php elseif ( empty( $status['connection'] ) && ! $pending ) : ?>
+				<?php elseif ( 'error' === $pending_status ) : ?>
+					<a class="button button-primary" href="<?php echo esc_url( wp_nonce_url( add_query_arg( 'action', 'start-connect', self::page_url() ), 'codex-provider-start-connect' ) ); ?>"><?php esc_html_e( 'Start connection again', 'ai-provider-for-codex' ); ?></a>
+				<?php elseif ( empty( $status['connection'] ) && ! $pending_active ) : ?>
 					<a class="button button-primary" href="<?php echo esc_url( wp_nonce_url( add_query_arg( 'action', 'start-connect', self::page_url() ), 'codex-provider-start-connect' ) ); ?>"><?php esc_html_e( 'Connect Codex account', 'ai-provider-for-codex' ); ?></a>
 				<?php else : ?>
-					<a class="button button-secondary" href="<?php echo esc_url( wp_nonce_url( add_query_arg( 'action', 'refresh-status', self::page_url() ), 'codex-provider-refresh-status' ) ); ?>"><?php esc_html_e( 'Refresh status', 'ai-provider-for-codex' ); ?></a>
+					<a class="button button-secondary" href="<?php echo esc_url( wp_nonce_url( add_query_arg( 'action', 'refresh-status', self::page_url() ), 'codex-provider-refresh-status' ) ); ?>"><?php echo esc_html( 'completed' === $pending_status ? __( 'Retry account sync', 'ai-provider-for-codex' ) : __( 'Refresh status', 'ai-provider-for-codex' ) ); ?></a>
 					<a class="button button-link-delete" href="<?php echo esc_url( wp_nonce_url( add_query_arg( 'action', 'disconnect', self::page_url() ), 'codex-provider-disconnect' ) ); ?>"><?php esc_html_e( 'Disconnect Codex account', 'ai-provider-for-codex' ); ?></a>
 				<?php endif; ?>
 			</p>
@@ -295,6 +347,10 @@ final class UserConnectionPage {
 				self::redirect_with_notice( 'connected' );
 			}
 
+			if ( 'missing' === (string) ( $result['status'] ?? '' ) ) {
+				self::redirect_with_notice( 'connect-missing', (string) ( $result['error'] ?? '' ) );
+			}
+
 			if ( 'error' === (string) ( $result['status'] ?? '' ) ) {
 				self::redirect_with_notice( 'connect-failed', (string) ( $result['error'] ?? __( 'The local Codex runtime reported a login error.', 'ai-provider-for-codex' ) ) );
 			}
@@ -328,7 +384,6 @@ final class UserConnectionPage {
 	private static function disconnect(): void {
 		$service = new ConnectionService();
 		$service->disconnect( get_current_user_id() );
-		ModelCatalogState::delete_user_preferred_model( get_current_user_id() );
 		self::redirect_with_notice( 'disconnected' );
 	}
 
@@ -408,6 +463,12 @@ final class UserConnectionPage {
 			case 'connect-pending':
 				$class = 'notice notice-info';
 				$text  = __( 'The login is still pending. Complete the device-code step and check status again.', 'ai-provider-for-codex' );
+				break;
+			case 'connect-missing':
+				$class = 'notice notice-warning';
+				$text  = '' !== $notice['message']
+					? $notice['message']
+					: __( 'The previous device-code session is no longer available in the local runtime. Start the connection again to finish linking your account.', 'ai-provider-for-codex' );
 				break;
 			case 'connected':
 				$text = __( 'Your Codex account is now linked.', 'ai-provider-for-codex' );

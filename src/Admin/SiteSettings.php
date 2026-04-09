@@ -124,28 +124,26 @@ final class SiteSettings {
 			<div class="codex-how-it-works">
 				<p><?php esc_html_e( 'Codex uses a local runtime service that runs on the same host as WordPress. Each user links their own Codex account so access and billing stay user-specific.', 'ai-provider-for-codex' ); ?></p>
 				<p>
-					<?php
-						printf(
-							/* translators: %s: absolute shared env file path. */
-							esc_html__( 'For automated installs, the plugin can auto-detect the runtime URL and bearer token from %s.', 'ai-provider-for-codex' ),
-							esc_html( (string) $runtime_config['shared_env_file'] )
-						);
-					?>
+						<?php
+							echo SafeFormat::sprintf(
+								/* translators: %s: absolute shared env file path. */
+								esc_html__( 'For automated installs, the plugin can auto-detect the runtime URL and bearer token from %s.', 'ai-provider-for-codex' ),
+								esc_html( (string) $runtime_config['shared_env_file'] )
+							);
+						?>
 				</p>
-				<p>
-					<?php
-						printf(
-							wp_kses_post(
-								sprintf(
-									/* translators: 1: connectors settings URL, 2: user connection page URL. */
-									__(
-										'<a href="%1$s">Settings &gt; Connectors</a> is the main entry point. Per-user account linking is on the <a href="%2$s">user connection page</a>.',
-										'ai-provider-for-codex'
-									),
-									esc_url( admin_url( 'options-connectors.php' ) ),
-									esc_url( UserConnectionPage::page_url() )
-								)
-							)
+					<p>
+						<?php
+						echo wp_kses_post(
+							SafeFormat::sprintf(
+								/* translators: 1: connectors settings URL, 2: user connection page URL. */
+								__(
+									'<a href="%1$s">Settings &gt; Connectors</a> is the main entry point. Per-user account linking is on the <a href="%2$s">user connection page</a>.',
+								'ai-provider-for-codex'
+							),
+							esc_url( admin_url( 'options-connectors.php' ) ),
+							esc_url( UserConnectionPage::page_url() )
+						)
 					);
 					?>
 				</p>
@@ -166,25 +164,27 @@ final class SiteSettings {
 					</li>
 					<li>
 						<strong><?php esc_html_e( 'Return to this screen and confirm the shared runtime settings.', 'ai-provider-for-codex' ); ?></strong>
-						<p class="codex-note">
-							<?php
-							printf(
-								esc_html__( 'If %s is readable by PHP, the Runtime URL and Runtime bearer token will usually fill in automatically. Otherwise, enter them below and save.', 'ai-provider-for-codex' ),
-								esc_html( (string) $runtime_config['shared_env_file'] )
-							);
-							?>
+								<p class="codex-note">
+									<?php
+									echo SafeFormat::sprintf(
+										/* translators: %s: absolute shared env file path. */
+										esc_html__( 'If %s is readable by PHP, the Runtime URL and Runtime bearer token will usually fill in automatically. Otherwise, enter them below and save.', 'ai-provider-for-codex' ),
+										esc_html( (string) $runtime_config['shared_env_file'] )
+								);
+								?>
 						</p>
 					</li>
 					<li>
 						<strong><?php esc_html_e( 'Check the runtime from Connectors.', 'ai-provider-for-codex' ); ?></strong>
 						<p class="codex-note"><?php esc_html_e( 'Open Settings > Connectors and confirm Codex reports a healthy local runtime.', 'ai-provider-for-codex' ); ?></p>
-						<p class="codex-note">
-							<?php
-							printf(
-								esc_html__( 'If it does not, the sidecar should answer %s from the WordPress host.', 'ai-provider-for-codex' ),
-								esc_html( $healthz_url )
-							);
-							?>
+								<p class="codex-note">
+									<?php
+									echo SafeFormat::sprintf(
+										/* translators: %s: expected health check URL. */
+										esc_html__( 'If it does not, the sidecar should answer %s from the WordPress host.', 'ai-provider-for-codex' ),
+										esc_html( $healthz_url )
+								);
+								?>
 						</p>
 						<p class="codex-note"><a href="<?php echo esc_url( admin_url( 'options-connectors.php' ) ); ?>"><?php esc_html_e( 'Open Connectors', 'ai-provider-for-codex' ); ?></a></p>
 					</li>
@@ -224,12 +224,12 @@ final class SiteSettings {
 
 				<div class="codex-status-card">
 					<h3><?php esc_html_e( 'Fallback models', 'ai-provider-for-codex' ); ?></h3>
-					<div class="value">
-						<?php
-						printf(
-							/* translators: %d: number of models. */
-							esc_html( _n( '%d model configured', '%d models configured', count( $fallback_models ), 'ai-provider-for-codex' ) ),
-							count( $fallback_models )
+						<div class="value">
+							<?php
+							echo SafeFormat::sprintf(
+								/* translators: %d: number of models. */
+								esc_html( _n( '%d model configured', '%d models configured', count( $fallback_models ), 'ai-provider-for-codex' ) ),
+								count( $fallback_models )
 						);
 						?>
 					</div>
@@ -263,6 +263,7 @@ final class SiteSettings {
 						<td>
 							<input class="regular-text code" id="<?php echo esc_attr( Settings::OPTION_RUNTIME_BEARER ); ?>" name="<?php echo esc_attr( Settings::OPTION_RUNTIME_BEARER ); ?>" type="password" value="<?php echo esc_attr( $bearer_locked ? '' : Settings::get_bearer_token() ); ?>" <?php disabled( $bearer_locked ); ?> autocomplete="off" placeholder="<?php echo esc_attr( $bearer_locked ? __( 'Managed automatically', 'ai-provider-for-codex' ) : '' ); ?>" />
 							<p class="description"><?php esc_html_e( 'The shared bearer token used between WordPress and the local Codex runtime.', 'ai-provider-for-codex' ); ?></p>
+							<p class="description"><?php esc_html_e( 'Enter only the raw token value here, not a full Authorization header or Bearer prefix.', 'ai-provider-for-codex' ); ?></p>
 							<p class="description"><?php echo esc_html( (string) $runtime_config['bearer_token_source'] ); ?></p>
 						</td>
 					</tr>

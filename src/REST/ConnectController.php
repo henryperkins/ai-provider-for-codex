@@ -133,7 +133,6 @@ final class ConnectController {
 	public static function disconnect(): WP_REST_Response {
 		$service = new ConnectionService();
 		$service->disconnect( get_current_user_id() );
-		ModelCatalogState::delete_user_preferred_model( get_current_user_id() );
 
 		return new WP_REST_Response(
 			[

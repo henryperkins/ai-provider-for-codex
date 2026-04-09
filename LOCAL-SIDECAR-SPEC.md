@@ -256,6 +256,24 @@ Response when completed:
 }
 ```
 
+Response when the sidecar lost the in-memory login session:
+
+```json
+{
+  "authSessionId": "auth_abc123",
+  "status": "missing",
+  "verificationUrl": null,
+  "userCode": null,
+  "error": "Login session was not found in the local runtime.",
+  "authStored": true
+}
+```
+
+Compatibility note:
+
+- The current sidecar returns this payload with HTTP `200`.
+- During mixed rollouts, WordPress should also tolerate the previous HTTP `404` form of the same `status = "missing"` payload.
+
 ### `GET /v1/account/snapshot?wpUserId=<id>`
 
 Purpose:
@@ -287,6 +305,12 @@ Response:
   "rateLimits": {}
 }
 ```
+
+Notes:
+
+- `planType` may be `null` or an empty string.
+- WordPress treats this snapshot as the source of truth for displayed billing-plan information and clears stale local values when a fresh snapshot omits them.
+- If this route returns `409 auth_required`, WordPress clears the local connection state and prompts the user to reconnect.
 
 ### `POST /v1/responses/text`
 
@@ -524,6 +548,8 @@ Fields:
 - `last_synced_at`
 - timestamps
 
+These fields mirror the latest successful account snapshot and must be clearable when the runtime stops returning a value such as `planType`.
+
 ### Snapshots Table
 
 Fields:
@@ -662,8 +688,9 @@ Responsibilities:
 2. WordPress calls sidecar `GET /v1/login/status`.
 3. If still pending, WordPress returns pending state.
 4. If completed, WordPress calls sidecar `GET /v1/account/snapshot`.
-5. WordPress persists connection and snapshot data.
-6. WordPress returns connected state.
+5. If `status = "missing"`, WordPress also tries `GET /v1/account/snapshot` before asking the user to reconnect.
+6. If the snapshot succeeds, WordPress persists connection and snapshot data and returns connected state.
+7. If the snapshot returns `auth_required`, WordPress clears the stale local connection and returns an unlinked state.
 
 ### Disconnect
 
