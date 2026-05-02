@@ -1,27 +1,111 @@
+# Version control
 .git
 .gitignore
+.svn
+.hg
+
+# CI / hosting infrastructure
 .github
+.gitlab
+.circleci
+.travis.yml
+.gitlab-ci.yml
+bitbucket-pipelines.yml
+
+# Editors / IDEs
 .idea
-.remember
 .vscode
+.editorconfig
+*.swp
+*.swo
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# Backups, temp files, logs
+*~
+*.bak
+*.orig
+*.tmp
+*.rej
+*.log
+
+# Local-only state
+.remember
+.env
+
+# Build output and external deps
 dist
 node_modules
 vendor
-.DS_Store
-Thumbs.db
-*.swp
-*.swo
-.env
+
+# PHP development tooling
+composer.json
+composer.lock
+phpstan.neon
+phpstan-baseline.neon
+phpcs.xml
+phpcs.xml.dist
+.phpcs.xml
+.phpcs.xml.dist
+psalm.xml
+psalm.xml.dist
+.php-cs-fixer.php
+.php-cs-fixer.dist.php
+
+# PHP test infrastructure
+tests
+phpunit.xml
+phpunit.xml.dist
+
+# JS / frontend dev tooling
+package.json
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+tsconfig.json
+.eslintrc
+.eslintrc.*
+.prettierrc
+.prettierrc.*
+.babelrc
+.babelrc.*
+babel.config.js
+babel.config.cjs
+babel.config.mjs
+babel.config.json
+Gruntfile.js
+gulpfile.js
+webpack.config.js
+webpack.config.ts
+vite.config.js
+vite.config.ts
+vite.config.mjs
+rollup.config.js
+rollup.config.ts
+jest.config.js
+jest.config.ts
+
+# Python dev tooling and bytecode
+__pycache__
+*.pyc
+*.pyo
+Pipfile
+Pipfile.lock
+pyproject.toml
+setup.py
+setup.cfg
+requirements*.txt
+.venv
+venv
+*.egg-info
+
+# Internal-only docs and runtime artifacts
 LOCAL-SIDECAR-SPEC.md
 PLUGIN-SUBMISSION-READINESS-CHECKLIST.md
 /README.md
 codex-app.err
-composer.json
-composer.lock
-package-lock.json
-phpstan-baseline.neon
-phpstan.neon
-__pycache__
-*.pyc
-*.pyo
+
+# Top-level dev scripts (sidecar/scripts/ is preserved by the leading slash)
 /scripts
