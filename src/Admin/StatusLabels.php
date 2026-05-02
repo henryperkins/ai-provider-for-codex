@@ -48,9 +48,9 @@ final class StatusLabels {
 	 * @return string
 	 */
 	public static function readiness_guidance( string $reason ): string {
-		switch ( $reason ) {
+			switch ( $reason ) {
 			case 'runtime_unconfigured':
-				return __( 'Start the bundled local sidecar on the WordPress host, then make sure this site can read the runtime URL and bearer token (or `/etc/codex-wp-sidecar.env`).', 'ai-provider-for-codex' );
+				return __( 'Create and start the local sidecar service on the WordPress host, then enter the runtime URL and bearer token or make /etc/codex-wp-sidecar.env readable by PHP.', 'ai-provider-for-codex' );
 			case 'runtime_unreachable':
 				return __( 'The sidecar should be running on the same host as WordPress and answering the configured `/healthz` URL.', 'ai-provider-for-codex' );
 			case 'user_unlinked':

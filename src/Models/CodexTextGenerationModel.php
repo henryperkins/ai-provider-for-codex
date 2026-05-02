@@ -30,6 +30,8 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 final class CodexTextGenerationModel extends AbstractApiBasedModel implements TextGenerationModelInterface {
 
+	private const REASONING_EFFORTS = [ 'none', 'minimal', 'low', 'medium', 'high', 'xhigh' ];
+
 	/**
 	 * Generates a text result through the local runtime API.
 	 *
@@ -155,22 +157,73 @@ final class CodexTextGenerationModel extends AbstractApiBasedModel implements Te
 	}
 
 	/**
-	 * Extracts a reasoning effort from custom options when present.
+	 * Extracts a reasoning effort from AI Client config when present.
 	 *
 	 * @return string|null
 	 */
 	private function extract_reasoning_effort(): ?string {
-		$custom_options = $this->getConfig()->getCustomOptions();
+		$config         = $this->getConfig();
+		$custom_options = $config->getCustomOptions();
 
-		if ( isset( $custom_options['reasoningEffort'] ) ) {
-			return sanitize_text_field( (string) $custom_options['reasoningEffort'] );
+		foreach ( [ 'reasoningEffort', 'reasoning_effort', 'reasoning' ] as $key ) {
+			if ( ! isset( $custom_options[ $key ] ) ) {
+				continue;
+			}
+
+			$reasoning_effort = self::normalize_reasoning_effort( $custom_options[ $key ] );
+
+			if ( null !== $reasoning_effort ) {
+				return $reasoning_effort;
+			}
 		}
 
-		if ( isset( $custom_options['reasoning_effort'] ) ) {
-			return sanitize_text_field( (string) $custom_options['reasoning_effort'] );
+		foreach ( [ 'getReasoningEffort', 'getReasoning' ] as $method ) {
+			if ( ! is_callable( [ $config, $method ] ) ) {
+				continue;
+			}
+
+			$reasoning_effort = self::normalize_reasoning_effort( call_user_func( [ $config, $method ] ) );
+
+			if ( null !== $reasoning_effort ) {
+				return $reasoning_effort;
+			}
 		}
 
 		return null;
+	}
+
+	/**
+	 * Normalizes supported runtime reasoning effort values.
+	 *
+	 * @param mixed $value Raw reasoning value.
+	 * @return string|null
+	 */
+	private static function normalize_reasoning_effort( mixed $value ): ?string {
+		if ( is_array( $value ) ) {
+			return isset( $value['effort'] )
+				? self::normalize_reasoning_effort( $value['effort'] )
+				: null;
+		}
+
+		if ( is_object( $value ) ) {
+			if ( is_callable( [ $value, 'getEffort' ] ) ) {
+				return self::normalize_reasoning_effort( call_user_func( [ $value, 'getEffort' ] ) );
+			}
+
+			$properties = get_object_vars( $value );
+
+			return isset( $properties['effort'] )
+				? self::normalize_reasoning_effort( $properties['effort'] )
+				: null;
+		}
+
+		if ( ! is_scalar( $value ) ) {
+			return null;
+		}
+
+		$value = sanitize_key( (string) $value );
+
+		return in_array( $value, self::REASONING_EFFORTS, true ) ? $value : null;
 	}
 
 	/**

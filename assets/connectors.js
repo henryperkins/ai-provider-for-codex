@@ -93,10 +93,10 @@ function buildConnector( config, wpPackages ) {
 		};
 
 		let actionArea;
-		let setupLabel = __( 'Set up local runtime', 'ai-provider-for-codex' );
+		let setupLabel = __( 'Set up Codex runtime', 'ai-provider-for-codex' );
 
 		if ( status?.reason === 'runtime_unreachable' ) {
-			setupLabel = __( 'Check local runtime', 'ai-provider-for-codex' );
+			setupLabel = __( 'Check Codex runtime', 'ai-provider-for-codex' );
 		}
 
 		if ( isLoading ) {

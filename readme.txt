@@ -42,13 +42,13 @@ Important: activating the plugin in wp-admin is only the first step. An administ
 1. Upload the plugin to `/wp-content/plugins/`.
 2. Activate the plugin through the WordPress admin.
 3. On the same host as WordPress, install Python 3.11+ and the `codex` CLI.
-4. From the installed plugin directory on that server, run the bundled systemd installer (recommended): `sudo bash /path/to/wp-content/plugins/ai-provider-for-codex/sidecar/scripts/install-systemd.sh`
-5. The installer writes `/etc/codex-wp-sidecar.env`, starts the localhost sidecar, and usually lets the plugin auto-detect the Runtime URL and Runtime bearer token.
+4. Create a localhost service for the bundled sidecar. Use `sidecar/systemd/codex-wp-sidecar.service` as a systemd template and replace `/path/to/wp-content/plugins/ai-provider-for-codex` with the installed plugin directory.
+5. Create `/etc/codex-wp-sidecar.env` with the runtime values documented in `sidecar/README.md`, start the service, and make the file readable by PHP if you want the plugin to auto-detect the Runtime URL and Runtime bearer token.
 6. In WordPress, open `Settings > Codex Provider`. If the values were not auto-detected, enter them manually. The default Runtime URL is `http://127.0.0.1:4317`.
 7. Open `Settings > Connectors` and confirm that the `Codex` connector reports a healthy local runtime.
 8. Each user who wants to use Codex should open `Users > Codex Provider`, click `Connect Codex account`, complete the device-code login, and then refresh status.
 
-If you are not using systemd, you can still run the bundled sidecar manually with the environment variables documented in `sidecar/README.md`, but the systemd installer is the recommended path because it also writes the shared env file that WordPress can read automatically.
+If you are not using systemd, you can still run the bundled sidecar manually with the environment variables documented in `sidecar/README.md`.
 
 The plugin can also auto-detect the runtime URL and bearer token from `/etc/codex-wp-sidecar.env` when that file is readable by PHP. The sidecar setup guide includes an example systemd unit.
 

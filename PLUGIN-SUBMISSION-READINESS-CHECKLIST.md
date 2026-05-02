@@ -103,7 +103,7 @@ Repo notes:
 
 - The plugin includes activation and uninstall hooks in [`plugin.php`](./plugin.php) and [`uninstall.php`](./uninstall.php).
 - The sidecar runtime is real and implemented in [`sidecar/app/main.py`](./sidecar/app/main.py).
-- The release zip includes [`sidecar/`](./sidecar), so the installation instructions in [`readme.txt`](./readme.txt) that reference `sidecar/scripts/install-systemd.sh` work from the installed plugin directory.
+- The release zip includes [`sidecar/`](./sidecar), including the Python runtime and systemd template. Shell installer scripts are excluded because Plugin Check reports `.sh` files as disallowed application files.
 - The plugin depends on WordPress AI Client support in WordPress 7.0+, so the target audience is limited to environments that actually have that feature available.
 
 ## 7. Security And WordPress Coding Expectations
@@ -156,6 +156,7 @@ Current packager excludes:
 - [`LOCAL-SIDECAR-SPEC.md`](./LOCAL-SIDECAR-SPEC.md)
 - [`PLUGIN-SUBMISSION-READINESS-CHECKLIST.md`](./PLUGIN-SUBMISSION-READINESS-CHECKLIST.md)
 - [`scripts/`](./scripts)
+- [`sidecar/scripts/`](./sidecar/scripts)
 - [`vendor/`](./vendor)
 - [`package-lock.json`](./package-lock.json)
 - Python build artifacts (`__pycache__`, `*.pyc`, `*.pyo`)

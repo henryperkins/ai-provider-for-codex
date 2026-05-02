@@ -33,7 +33,7 @@ WordPress AI Client provider plugin for Codex models using a local sidecar runti
 
 1. Install and activate the plugin in WordPress.
 2. On the same host as WordPress, install Python 3.11+ and the `codex` CLI.
-3. From the installed plugin directory, run `sudo bash ./sidecar/scripts/install-systemd.sh`.
+3. Create a localhost systemd service from `sidecar/systemd/codex-wp-sidecar.service` and write `/etc/codex-wp-sidecar.env` with the runtime settings.
 4. Open `Settings > Codex Provider` and confirm the runtime URL and bearer token were auto-detected from `/etc/codex-wp-sidecar.env`, or enter them manually.
 5. Open `Settings > Connectors` and confirm Codex reports a healthy local runtime.
 6. Each user then opens `Users > Codex Provider`, clicks `Connect Codex account`, and completes the device-code login.
@@ -45,6 +45,6 @@ WordPress AI Client provider plugin for Codex models using a local sidecar runti
 
 ## Automated Sidecar Setup
 
-- `sudo bash ./sidecar/scripts/install-systemd.sh` installs the sidecar as a systemd service.
-- The installer writes `/etc/codex-wp-sidecar.env`, and the plugin now auto-detects the runtime URL and bearer token from that file.
+- `sidecar/systemd/codex-wp-sidecar.service` provides a systemd template for running the sidecar.
+- The plugin can auto-detect the runtime URL and bearer token from `/etc/codex-wp-sidecar.env` when PHP can read that file.
 - The runtime status probe now checks `GET /healthz`, so Connectors can report `Runtime unreachable` before a user hits the connect action.

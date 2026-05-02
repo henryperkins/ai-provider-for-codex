@@ -413,7 +413,7 @@ For the runtime base URL specifically, the plugin supports either:
 - explicit `CODEX_WP_RUNTIME_BASE_URL`
 - or derived `http://<CODEX_WP_HOST>:<CODEX_WP_PORT>`
 
-The systemd installer writes `/etc/codex-wp-sidecar.env` with:
+The systemd service should use `/etc/codex-wp-sidecar.env` with:
 
 - `CODEX_WP_RUNTIME_BASE_URL`
 - `CODEX_WP_BEARER_TOKEN`
@@ -423,23 +423,13 @@ If PHP can read that file, the plugin auto-detects the runtime URL and bearer to
 
 ## systemd Installation
 
-The helper at [sidecar/scripts/install-systemd.sh](./scripts/install-systemd.sh):
-
-1. Resolves the plugin directory, Python binary, Codex binary, and runtime path.
-2. Generates a bearer token if one was not supplied.
-3. Writes a shared env file, default `/etc/codex-wp-sidecar.env`.
-4. Writes a systemd unit that runs:
+Use [sidecar/systemd/codex-wp-sidecar.service](./systemd/codex-wp-sidecar.service) as a template and replace the placeholder plugin path with the real installed plugin directory. The service runs:
 
 ```text
 python3 <plugin-dir>/sidecar/app/main.py
 ```
 
-5. Creates the storage root if needed.
-6. Optionally syncs the runtime URL and bearer token into WordPress options with WP-CLI.
-7. Enables and starts or restarts the service.
-8. Probes `/healthz`.
-
-The static unit template in [sidecar/systemd/codex-wp-sidecar.service](./systemd/codex-wp-sidecar.service) is only a placeholder. The installer writes the real unit file with the actual plugin path.
+Create the storage root if needed, write `/etc/codex-wp-sidecar.env`, then enable and start the service. The static unit template includes placeholder paths and must be edited before use.
 
 ## Failure Modes And Their Effects
 

@@ -173,7 +173,7 @@ final class UserConnectionPage {
 					<p><strong><?php esc_html_e( 'A site administrator still needs to finish the shared runtime setup before you can connect an account here.', 'ai-provider-for-codex' ); ?></strong></p>
 				<?php endif; ?>
 				<ol>
-					<li><?php esc_html_e( 'A site administrator starts the local sidecar and confirms Codex is healthy on Settings > Connectors.', 'ai-provider-for-codex' ); ?></li>
+					<li><?php esc_html_e( 'A site administrator creates and starts the local sidecar service, then confirms Codex is healthy on Settings > Connectors.', 'ai-provider-for-codex' ); ?></li>
 					<li><?php esc_html_e( 'You click Connect Codex account on this page.', 'ai-provider-for-codex' ); ?></li>
 					<li><?php esc_html_e( 'You open the verification page, enter the device code, then come back here and refresh status.', 'ai-provider-for-codex' ); ?></li>
 				</ol>
@@ -265,8 +265,8 @@ final class UserConnectionPage {
 						<p>
 								<?php
 								echo wp_kses(
-									/* translators: %s: model name. */
 									SafeFormat::sprintf(
+										/* translators: %s: model name. */
 										__( 'Using: %s', 'ai-provider-for-codex' ),
 										'<strong>' . esc_html( ModelCatalogState::label_for_model_id( $selected_model ) ) . '</strong>'
 									),

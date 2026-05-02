@@ -107,5 +107,6 @@ PLUGIN-SUBMISSION-READINESS-CHECKLIST.md
 /README.md
 codex-app.err
 
-# Top-level dev scripts (sidecar/scripts/ is preserved by the leading slash)
+# Scripts that are not accepted in WordPress.org plugin zips
 /scripts
+/sidecar/scripts

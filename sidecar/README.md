@@ -13,13 +13,8 @@ It wraps `codex app-server`, stores per-user ChatGPT/Codex auth state on disk, a
 ## Recommended Quick Start
 
 1. On the same host as WordPress, confirm Python 3.11+ and the `codex` CLI are installed.
-2. From the installed plugin directory, run the bundled installer:
-
-```bash
-sudo bash ./sidecar/scripts/install-systemd.sh
-```
-
-3. The installer writes `/etc/codex-wp-sidecar.env`, starts the sidecar service, and lets WordPress auto-detect the Runtime URL and Runtime bearer token when PHP can read that file.
+2. Copy `sidecar/systemd/codex-wp-sidecar.service` to `/etc/systemd/system/codex-wp-sidecar.service` and replace `/path/to/wp-content/plugins/ai-provider-for-codex` with the installed plugin directory.
+3. Create `/etc/codex-wp-sidecar.env` with the environment values below, then enable and start the service.
 4. In WordPress, open `Settings > Codex Provider`. If the values were not auto-detected, enter them manually.
 5. Open `Settings > Connectors` and confirm Codex reports a healthy local runtime.
 6. Each user finishes setup from `Users > Codex Provider` by connecting their own account.
@@ -44,18 +39,30 @@ python3 sidecar/app/main.py
 
 ## Install As A systemd Service
 
-This is the recommended path for most installs.
+This is the recommended path for most installs. The included
+`sidecar/systemd/codex-wp-sidecar.service` file is a template; replace the
+placeholder plugin path with the real installed plugin directory before copying
+it into `/etc/systemd/system/`.
 
-```bash
-sudo bash ./sidecar/scripts/install-systemd.sh
+Create `/etc/codex-wp-sidecar.env` with values similar to:
+
+```text
+CODEX_BIN=/usr/local/bin/codex
+CODEX_WP_STORAGE_ROOT=/var/lib/codex-wp
+CODEX_WP_HOST=127.0.0.1
+CODEX_WP_PORT=4317
+CODEX_WP_RUNTIME_BASE_URL=http://127.0.0.1:4317
+CODEX_WP_BEARER_TOKEN=replace-me-with-a-long-random-token
 ```
 
-That installer:
+Then run:
 
-- writes `/etc/codex-wp-sidecar.env`
-- writes a real systemd unit with the current plugin path
-- enables and starts the service
-- lets the WordPress plugin auto-detect the runtime URL and bearer token from the shared env file
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now codex-wp-sidecar
+```
+
+If PHP can read `/etc/codex-wp-sidecar.env`, the WordPress plugin can auto-detect
 
 ## WordPress Plugin Settings
 
