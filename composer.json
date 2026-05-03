@@ -1,13 +1,17 @@
 {
-	"name": "lakefront-digital/ai-provider-for-codex",
-	"description": "Broker-backed Codex provider scaffold for the WordPress AI Client.",
+	"name": "henryperkins/ai-provider-for-codex",
+	"description": "AI Provider for Codex for the PHP AI Client SDK using a local sidecar runtime. Works as both a Composer package and WordPress plugin.",
 	"type": "wordpress-plugin",
 	"license": "GPL-2.0-or-later",
 	"require": {
 		"php": ">=7.4"
 	},
 	"require-dev": {
+		"dealerdirect/phpcodesniffer-composer-installer": "^1.0",
+		"phpcompatibility/php-compatibility": "dev-develop",
 		"phpstan/phpstan": "^2.1",
+		"slevomat/coding-standard": "^8.20",
+		"squizlabs/php_codesniffer": "^3.7 || ^4.0",
 		"szepeviktor/phpstan-wordpress": "^2.0",
 		"wordpress/php-ai-client": "^0.4 || dev-trunk"
 	},
@@ -32,6 +36,29 @@
 		"sort-packages": true
 	},
 	"scripts": {
+		"lint": [
+			"@phpcs",
+			"@phpstan"
+		],
+		"phpcbf": "phpcbf",
+		"phpcs": "phpcs",
 		"phpstan": "phpstan analyse --memory-limit=2G"
+	},
+	"keywords": [
+		"ai",
+		"codex",
+		"wordpress",
+		"llm",
+		"connector"
+	],
+	"authors": [
+		{
+			"name": "Lakefront Digital"
+		}
+	],
+	"homepage": "https://github.com/henryperkins/ai-provider-for-codex",
+	"support": {
+		"issues": "https://github.com/henryperkins/ai-provider-for-codex/issues",
+		"source": "https://github.com/henryperkins/ai-provider-for-codex"
 	}
 }

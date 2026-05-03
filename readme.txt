@@ -56,10 +56,13 @@ The plugin can also auto-detect the runtime URL and bearer token from `/etc/code
 
 Architecture notes for reviewers:
 
-* provider availability is based on local sidecar health rather than a remote `/v1/models` request
+* the provider is registered as a server-side provider because WordPress talks to a local sidecar, even though the sidecar ultimately connects to OpenAI's Codex and ChatGPT services
+* provider availability is based on site-level local sidecar health rather than a remote `/v1/models` request
+* per-user Codex account connection is checked separately during connector status, refresh, and generation flows
 * each user connects their own Codex or ChatGPT account, so the plugin stores per-user connection and snapshot records
 * REST endpoints under `codex-provider/v1/*` power the local status, connection, disconnect, and refresh flows
 * WordPress/ai credential filters are used because Codex does not rely on a site-wide API key
+* current text generation flattens supported text message parts for the sidecar contract; future function-calling support should preserve structured message parts instead of flattening them into plain text
 
 Developers can filter `codex_provider_runtime_request_timeout` to change local runtime HTTP timeouts.
 
