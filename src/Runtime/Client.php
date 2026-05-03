@@ -167,7 +167,7 @@ final class Client {
 	 * @return int
 	 */
 	private function request_timeout( string $method, string $path, string $url ): int {
-		$timeout = str_starts_with( $path, '/v1/responses/' )
+		$timeout = 0 === strpos( $path, '/v1/responses/' )
 			? self::TEXT_GENERATION_TIMEOUT
 			: self::DEFAULT_TIMEOUT;
 
@@ -210,10 +210,10 @@ final class Client {
 		}
 
 		if (
-			str_contains( $lower, 'curl error 7' )
-			|| str_contains( $lower, 'failed to connect to' )
-			|| str_contains( $lower, 'couldn\'t connect to server' )
-			|| str_contains( $lower, 'connection refused' )
+			self::string_contains( $lower, 'curl error 7' )
+			|| self::string_contains( $lower, 'failed to connect to' )
+			|| self::string_contains( $lower, 'couldn\'t connect to server' )
+			|| self::string_contains( $lower, 'connection refused' )
 		) {
 			return sprintf(
 				/* translators: %s: runtime host and port. */
@@ -226,9 +226,9 @@ final class Client {
 		}
 
 		if (
-			str_contains( $lower, 'curl error 28' )
-			|| str_contains( $lower, 'operation timed out' )
-			|| str_contains( $lower, 'timed out' )
+			self::string_contains( $lower, 'curl error 28' )
+			|| self::string_contains( $lower, 'operation timed out' )
+			|| self::string_contains( $lower, 'timed out' )
 		) {
 			return sprintf(
 				/* translators: 1: timeout in seconds, 2: runtime host and port */
@@ -265,8 +265,8 @@ final class Client {
 
 		if ( in_array( $status_code, [ 401, 403 ], true ) ) {
 			if (
-				str_contains( $lower, 'invalid bearer token' )
-				|| str_contains( $lower, 'missing bearer token' )
+				self::string_contains( $lower, 'invalid bearer token' )
+				|| self::string_contains( $lower, 'missing bearer token' )
 			) {
 				return __(
 					'The local Codex runtime rejected the shared bearer token. Make sure Settings > Codex Provider uses the same raw token value as CODEX_WP_BEARER_TOKEN in the sidecar, and paste only the token itself instead of a full Authorization header.',
@@ -274,14 +274,14 @@ final class Client {
 				);
 			}
 
-			if ( str_contains( $lower, 'bearer token is not configured' ) ) {
+			if ( self::string_contains( $lower, 'bearer token is not configured' ) ) {
 				return __(
 					'The local Codex runtime is missing its shared bearer token. Set CODEX_WP_BEARER_TOKEN for the sidecar and the matching Runtime bearer token in WordPress.',
 					'ai-provider-for-codex'
 				);
 			}
 
-			if ( str_contains( $lower, 'only accepts local connections' ) ) {
+			if ( self::string_contains( $lower, 'only accepts local connections' ) ) {
 				return __(
 					'The local Codex runtime only accepts requests from the same host. Run the sidecar on the WordPress host or point the Runtime URL at a local address.',
 					'ai-provider-for-codex'
@@ -290,6 +290,17 @@ final class Client {
 		}
 
 		return $message;
+	}
+
+	/**
+	 * Returns whether a string contains a substring on PHP 7.4+.
+	 *
+	 * @param string $haystack String to inspect.
+	 * @param string $needle Substring to find.
+	 * @return bool
+	 */
+	private static function string_contains( string $haystack, string $needle ): bool {
+		return '' === $needle || false !== strpos( $haystack, $needle );
 	}
 
 	/**

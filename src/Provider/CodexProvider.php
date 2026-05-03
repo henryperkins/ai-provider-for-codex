@@ -10,8 +10,8 @@ declare( strict_types=1 );
 namespace AIProviderForCodex\Provider;
 
 use AIProviderForCodex\Models\CodexTextGenerationModel;
-use WordPress\AiClient\AiClient;
-use WordPress\AiClient\Providers\AbstractProvider;
+use AIProviderForCodex\Runtime\Settings;
+use WordPress\AiClient\Providers\ApiBasedImplementation\AbstractApiProvider;
 use WordPress\AiClient\Providers\Contracts\ModelMetadataDirectoryInterface;
 use WordPress\AiClient\Providers\Contracts\ProviderAvailabilityInterface;
 use WordPress\AiClient\Providers\DTO\ProviderMetadata;
@@ -22,7 +22,16 @@ use WordPress\AiClient\Providers\Models\DTO\ModelMetadata;
 /**
  * Codex provider scaffold.
  */
-final class CodexProvider extends AbstractProvider {
+final class CodexProvider extends AbstractApiProvider {
+
+	/**
+	 * Returns the configured local runtime base URL.
+	 *
+	 * @return string
+	 */
+	protected static function baseUrl(): string {
+		return Settings::get_base_url();
+	}
 
 	/**
 	 * Creates a model instance.
@@ -46,18 +55,27 @@ final class CodexProvider extends AbstractProvider {
 			'Codex',
 			ProviderTypeEnum::cloud(),
 			\AIProviderForCodex\PLUGIN_URI,
-			null,
+				null,
 		];
 
-		if ( version_compare( AiClient::VERSION, '1.2.0', '>=' ) ) {
+		if ( self::provider_metadata_parameter_count() >= 6 ) {
 			$provider_metadata[] = __( 'Codex provider for the WordPress AI Client using a local runtime.', 'ai-provider-for-codex' );
 		}
 
-		if ( version_compare( AiClient::VERSION, '1.3.0', '>=' ) ) {
+		if ( self::provider_metadata_parameter_count() >= 7 ) {
 			$provider_metadata[] = __DIR__ . '/logo.svg';
 		}
 
 		return new ProviderMetadata( ...$provider_metadata );
+	}
+
+	/**
+	 * Returns the available ProviderMetadata constructor arity for SDK compatibility.
+	 *
+	 * @return int
+	 */
+	private static function provider_metadata_parameter_count(): int {
+		return ( new \ReflectionMethod( ProviderMetadata::class, '__construct' ) )->getNumberOfParameters();
 	}
 
 	/**

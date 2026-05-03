@@ -14,6 +14,7 @@ use AIProviderForCodex\Admin\SiteSettings;
 use AIProviderForCodex\Admin\UserConnectionPage;
 use AIProviderForCodex\Database\Installer;
 use AIProviderForCodex\Provider\CodexProvider;
+use AIProviderForCodex\Provider\ModelCatalogState;
 use AIProviderForCodex\REST\ConnectController;
 use AIProviderForCodex\REST\StatusController;
 use WordPress\AiClient\AiClient;
@@ -43,6 +44,9 @@ final class Plugin {
 		add_action( 'admin_enqueue_scripts', [ ConnectorsIntegration::class, 'enqueue_connectors_assets' ] );
 		add_filter( 'script_module_data_ai-provider-for-codex/connectors', [ ConnectorsIntegration::class, 'script_module_data' ] );
 		add_action( 'wp_connectors_init', [ ConnectorsIntegration::class, 'register_connector_metadata' ] );
+		add_filter( 'wpai_has_ai_credentials', [ ConnectorsIntegration::class, 'filter_ai_plugin_has_credentials' ], 10, 2 );
+		add_filter( 'wpai_pre_has_valid_credentials_check', [ ConnectorsIntegration::class, 'filter_ai_plugin_has_valid_credentials' ] );
+		add_filter( 'wpai_preferred_text_models', [ $this, 'filter_preferred_text_models' ] );
 
 		add_action( 'rest_api_init', [ ConnectController::class, 'register_routes' ] );
 		add_action( 'rest_api_init', [ StatusController::class, 'register_routes' ] );
@@ -63,7 +67,7 @@ final class Plugin {
 	 * @return void
 	 */
 	public function register_provider(): void {
-		if ( ! class_exists( AiClient::class ) ) {
+		if ( ! class_exists( AiClient::class ) || ( function_exists( 'wp_supports_ai' ) && ! wp_supports_ai() ) ) {
 			return;
 		}
 
@@ -74,5 +78,22 @@ final class Plugin {
 		}
 
 		$registry->registerProvider( CodexProvider::class );
+	}
+
+	/**
+	 * Prepends the current Codex text model to WordPress/ai's preferred list.
+	 *
+	 * @param array<int,array{string,string}> $models Preferred provider/model pairs.
+	 * @return array<int,array{string,string}>
+	 */
+	public function filter_preferred_text_models( array $models ): array {
+		$catalog  = ModelCatalogState::get_effective_catalog();
+		$model_id = $catalog['selected_model'];
+
+		if ( '' !== $model_id ) {
+			array_unshift( $models, [ 'codex', $model_id ] );
+		}
+
+		return $models;
 	}
 }

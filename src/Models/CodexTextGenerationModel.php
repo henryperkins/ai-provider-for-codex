@@ -198,7 +198,7 @@ final class CodexTextGenerationModel extends AbstractApiBasedModel implements Te
 	 * @param mixed $value Raw reasoning value.
 	 * @return string|null
 	 */
-	private static function normalize_reasoning_effort( mixed $value ): ?string {
+	private static function normalize_reasoning_effort( $value ): ?string {
 		if ( is_array( $value ) ) {
 			return isset( $value['effort'] )
 				? self::normalize_reasoning_effort( $value['effort'] )

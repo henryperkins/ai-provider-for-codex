@@ -59,8 +59,8 @@ Repo notes:
 - `Version: 0.1.0` in [`plugin.php`](./plugin.php)
 - `Stable tag: 0.1.0` in [`readme.txt`](./readme.txt)
 - `Text Domain: ai-provider-for-codex` in [`plugin.php`](./plugin.php)
-- `Requires at least: 7.0` in [`plugin.php`](./plugin.php)
-- `Requires PHP: 8.0` in [`plugin.php`](./plugin.php)
+- `Requires at least: 6.9` in [`plugin.php`](./plugin.php)
+- `Requires PHP: 7.4` in [`plugin.php`](./plugin.php)
 - `Tested up to: 7.0` in [`readme.txt`](./readme.txt)
 
 ## 4. Public Documentation Quality
@@ -104,7 +104,7 @@ Repo notes:
 - The plugin includes activation and uninstall hooks in [`plugin.php`](./plugin.php) and [`uninstall.php`](./uninstall.php).
 - The sidecar runtime is real and implemented in [`sidecar/app/main.py`](./sidecar/app/main.py).
 - The release zip includes [`sidecar/`](./sidecar), including the Python runtime and systemd template. Shell installer scripts are excluded because Plugin Check reports `.sh` files as disallowed application files.
-- The plugin depends on WordPress AI Client support in WordPress 7.0+, so the target audience is limited to environments that actually have that feature available.
+- The plugin depends on WordPress AI Client support, bundled in WordPress 7.0+ or available separately on WordPress 6.9.
 
 ## 7. Security And WordPress Coding Expectations
 

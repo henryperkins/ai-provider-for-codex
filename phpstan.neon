@@ -13,9 +13,9 @@ parameters:
 	excludePaths:
 		- vendor/
 
-	# WP 7.0 classes not yet covered by wordpress-stubs.
+	# SDK classes are provided by the development dependency in composer.json.
 	scanDirectories:
-		- %currentWorkingDirectory%/../../../wp-includes/php-ai-client/src/
+		- %currentWorkingDirectory%/vendor/wordpress/php-ai-client/src/
 
 	scanFiles:
-		- %currentWorkingDirectory%/../../../wp-includes/class-wp-connector-registry.php
+		- %currentWorkingDirectory%/phpstan-stubs.php

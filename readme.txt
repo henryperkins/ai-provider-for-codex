@@ -1,9 +1,9 @@
 === AI Provider for Codex ===
 Contributors: lakefrontdigital
 Tags: ai, codex, wordpress-ai-client
-Requires at least: 7.0
+Requires at least: 6.9
 Tested up to: 7.0
-Requires PHP: 8.0
+Requires PHP: 7.4
 Stable tag: 0.1.0
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -12,7 +12,9 @@ Local-runtime Codex provider for the WordPress AI Client.
 
 == Description ==
 
-AI Provider for Codex adds a `codex` provider to the WordPress AI Client and sends requests through a localhost runtime that runs on the same host as WordPress.
+AI Provider for Codex adds a `codex` provider to the WordPress AI Client and sends text-generation requests through a localhost runtime that runs on the same host as WordPress.
+
+Text generation only; vision and image generation are routed to other providers.
 
 This plugin is intended for self-managed environments that can run a local service. It is not intended for shared hosting or managed hosts that cannot run background processes.
 
@@ -28,8 +30,8 @@ Features:
 
 Runtime requirements:
 
-* WordPress 7.0 or newer with the WordPress AI Client available
-* PHP 8.0 or newer
+* WordPress 6.9 or newer with the WordPress AI Client available, either bundled in WordPress 7.0+ or installed separately on WordPress 6.9
+* PHP 7.4 or newer
 * Python 3.11 or newer on the same host as WordPress
 * the `codex` CLI installed on the same host
 * permission to run a localhost-only background service or daemon
@@ -51,6 +53,15 @@ Important: activating the plugin in wp-admin is only the first step. An administ
 If you are not using systemd, you can still run the bundled sidecar manually with the environment variables documented in `sidecar/README.md`.
 
 The plugin can also auto-detect the runtime URL and bearer token from `/etc/codex-wp-sidecar.env` when that file is readable by PHP. The sidecar setup guide includes an example systemd unit.
+
+Architecture notes for reviewers:
+
+* provider availability is based on local sidecar health rather than a remote `/v1/models` request
+* each user connects their own Codex or ChatGPT account, so the plugin stores per-user connection and snapshot records
+* REST endpoints under `codex-provider/v1/*` power the local status, connection, disconnect, and refresh flows
+* WordPress/ai credential filters are used because Codex does not rely on a site-wide API key
+
+Developers can filter `codex_provider_runtime_request_timeout` to change local runtime HTTP timeouts.
 
 == Frequently Asked Questions ==
 

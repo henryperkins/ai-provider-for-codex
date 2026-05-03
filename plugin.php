@@ -3,8 +3,8 @@
  * Plugin Name:       AI Provider for Codex
  * Plugin URI:        https://github.com/henryperkins/wp-hperkins-com/tree/main/wp-content/plugins/ai-provider-for-codex
  * Description:       Codex provider for the WordPress AI Client using a local runtime sidecar.
- * Requires at least: 7.0
- * Requires PHP:      8.0
+ * Requires at least: 6.9
+ * Requires PHP:      7.4
  * Version:           0.1.0
  * Author:            Lakefront Digital
  * License:           GPL-2.0-or-later
@@ -27,8 +27,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 const VERSION = '0.1.0';
 const PLUGIN_URI = 'https://github.com/henryperkins/wp-hperkins-com/tree/main/wp-content/plugins/ai-provider-for-codex';
-const MIN_WP_VERSION = '7.0';
-const MIN_PHP_VERSION = '8.0';
+const MIN_WP_VERSION = '6.9';
+const MIN_PHP_VERSION = '7.4';
 const PLUGIN_FILE = __FILE__;
 const PLUGIN_DIR  = __DIR__ . '/';
 
@@ -120,9 +120,9 @@ function check_ai_client(): bool {
 	add_action(
 		'admin_notices',
 		static function () {
-			requirement_notice(
-				__( 'AI Provider for Codex requires the WordPress AI Client available in WordPress 7.0+.', 'ai-provider-for-codex' )
-			);
+				requirement_notice(
+					__( 'AI Provider for Codex requires the WordPress AI Client, bundled in WordPress 7.0+ or available separately on WordPress 6.9.', 'ai-provider-for-codex' )
+				);
 		}
 	);
 

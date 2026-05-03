@@ -11,9 +11,3 @@ parameters:
 			identifier: deadCode.unreachable
 			count: 1
 			path: plugin.php
-
-		-
-			message: '#^If condition is always true\.$#'
-			identifier: if.alwaysTrue
-			count: 2
-			path: src/Provider/CodexProvider.php

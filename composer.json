@@ -4,20 +4,30 @@
 	"type": "wordpress-plugin",
 	"license": "GPL-2.0-or-later",
 	"require": {
-		"php": ">=8.0"
+		"php": ">=7.4"
 	},
 	"require-dev": {
 		"phpstan/phpstan": "^2.1",
-		"szepeviktor/phpstan-wordpress": "^2.0"
+		"szepeviktor/phpstan-wordpress": "^2.0",
+		"wordpress/php-ai-client": "^0.4 || dev-trunk"
 	},
 	"autoload": {
 		"psr-4": {
 			"AIProviderForCodex\\": "src/"
 		}
 	},
+	"suggest": {
+		"wordpress/php-ai-client": "Required at runtime when the SDK is not bundled with WordPress."
+	},
+	"minimum-stability": "dev",
+	"prefer-stable": true,
 	"config": {
 		"allow-plugins": {
-			"dealerdirect/phpcodesniffer-composer-installer": true
+			"dealerdirect/phpcodesniffer-composer-installer": true,
+			"php-http/discovery": true
+		},
+		"platform": {
+			"php": "7.4"
 		},
 		"sort-packages": true
 	},

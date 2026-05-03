@@ -1,0 +1,15 @@
+.git
+.github
+.gitignore
+codex-app.err
+composer.json
+composer.lock
+node_modules
+package-lock.json
+package.json
+phpstan-baseline.neon
+phpstan.neon
+phpstan-stubs.php
+README.md
+scripts
+vendor

@@ -117,7 +117,7 @@ final class Settings {
 			return self::stored_option( self::OPTION_RUNTIME_BASE_URL, self::DEFAULT_RUNTIME_BASE_URL );
 		}
 
-		if ( null === $value || ( ! is_scalar( $value ) && ! $value instanceof \Stringable ) ) {
+		if ( null === $value || ! self::can_cast_to_string( $value ) ) {
 			return self::stored_option( self::OPTION_RUNTIME_BASE_URL, self::DEFAULT_RUNTIME_BASE_URL );
 		}
 
@@ -135,7 +135,7 @@ final class Settings {
 			return self::stored_option( self::OPTION_RUNTIME_BEARER, '' );
 		}
 
-		if ( null === $value || ( ! is_scalar( $value ) && ! $value instanceof \Stringable ) ) {
+		if ( null === $value || ! self::can_cast_to_string( $value ) ) {
 			return self::stored_option( self::OPTION_RUNTIME_BEARER, '' );
 		}
 
@@ -509,11 +509,11 @@ final class Settings {
 		foreach ( $lines as $line ) {
 			$line = trim( (string) $line );
 
-			if ( '' === $line || str_starts_with( $line, '#' ) ) {
+			if ( '' === $line || 0 === strpos( $line, '#' ) ) {
 				continue;
 			}
 
-			if ( str_starts_with( $line, 'export ' ) ) {
+			if ( 0 === strpos( $line, 'export ' ) ) {
 				$line = trim( substr( $line, 7 ) );
 			}
 
@@ -547,6 +547,16 @@ final class Settings {
 		self::$shared_env_config = $config;
 
 		return self::$shared_env_config;
+	}
+
+	/**
+	 * Returns whether a value can be safely cast to string on PHP 7.4+.
+	 *
+	 * @param mixed $value Value to inspect.
+	 * @return bool
+	 */
+	private static function can_cast_to_string( $value ): bool {
+		return is_scalar( $value ) || ( is_object( $value ) && method_exists( $value, '__toString' ) );
 	}
 
 	/**

@@ -63,7 +63,6 @@ final class ResponseMapper {
 
 		$usage_input      = (int) ( $payload['usage']['inputTokens'] ?? 0 );
 		$usage_completion = (int) ( $payload['usage']['outputTokens'] ?? 0 );
-		$usage_reasoning  = isset( $payload['usage']['reasoningTokens'] ) ? (int) $payload['usage']['reasoningTokens'] : null;
 		$total_tokens     = $usage_input + $usage_completion;
 
 		return new GenerativeAiResult(
@@ -78,7 +77,7 @@ final class ResponseMapper {
 					self::finish_reason( $payload['finishReason'] ?? 'stop' )
 				),
 			],
-			new TokenUsage( $usage_input, $usage_completion, $total_tokens, $usage_reasoning ),
+			new TokenUsage( $usage_input, $usage_completion, $total_tokens ),
 			$provider_metadata,
 			$model_metadata,
 			[

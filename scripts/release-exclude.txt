@@ -35,6 +35,9 @@ Thumbs.db
 .remember
 .env
 
+# WP-CLI tooling (dev-only; we ship via package-release.sh, not dist-archive)
+.distignore
+
 # Build output and external deps
 dist
 node_modules
@@ -45,6 +48,7 @@ composer.json
 composer.lock
 phpstan.neon
 phpstan-baseline.neon
+phpstan-stubs.php
 phpcs.xml
 phpcs.xml.dist
 .phpcs.xml

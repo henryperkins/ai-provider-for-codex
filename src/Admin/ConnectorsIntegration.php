@@ -9,6 +9,7 @@ declare( strict_types=1 );
 
 namespace AIProviderForCodex\Admin;
 
+use AIProviderForCodex\Runtime\HealthMonitor;
 use AIProviderForCodex\Runtime\Settings;
 
 /**
@@ -64,6 +65,42 @@ final class ConnectorsIntegration {
 				],
 			]
 		);
+	}
+
+	/**
+	 * Lets the AI plugin recognize Codex's local-runtime connector as configured.
+	 *
+	 * The AI plugin's default check only detects API-key connectors with stored
+	 * settings. Codex uses a local sidecar and per-user account links instead.
+	 *
+	 * @param bool                $has_credentials Whether AI credentials are already available.
+	 * @param array<string,mixed> $connectors Registered connectors from WordPress core.
+	 * @return bool
+	 */
+	public static function filter_ai_plugin_has_credentials( bool $has_credentials, array $connectors ): bool {
+		if ( $has_credentials || ! self::has_codex_connector( $connectors ) ) {
+			return $has_credentials;
+		}
+
+		return Settings::has_required_configuration();
+	}
+
+	/**
+	 * Lets the AI plugin's validity check use the Codex runtime health state.
+	 *
+	 * @param bool|null $has_valid_credentials Existing short-circuit value, or null to continue default checks.
+	 * @return bool|null
+	 */
+	public static function filter_ai_plugin_has_valid_credentials( ?bool $has_valid_credentials ): ?bool {
+		if ( null !== $has_valid_credentials || ! Settings::has_required_configuration() ) {
+			return $has_valid_credentials;
+		}
+
+		if ( function_exists( 'wp_is_connector_registered' ) && ! wp_is_connector_registered( self::CONNECTOR_ID ) ) {
+			return $has_valid_credentials;
+		}
+
+		return HealthMonitor::is_available() ? true : $has_valid_credentials;
 	}
 
 	/**
@@ -280,6 +317,18 @@ final class ConnectorsIntegration {
 		}
 
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reads the current admin page slug only to detect screen context.
-		return isset( $_GET['page'] ) && 'options-connectors-wp-admin' === sanitize_key( wp_unslash( $_GET['page'] ) );
+		return isset( $_GET['page'] ) && 'options-connectors' === sanitize_key( wp_unslash( $_GET['page'] ) );
+	}
+
+	/**
+	 * Returns whether the registered connector list includes Codex.
+	 *
+	 * @param array<string,mixed> $connectors Registered connectors from WordPress core.
+	 * @return bool
+	 */
+	private static function has_codex_connector( array $connectors ): bool {
+		$connector = $connectors[ self::CONNECTOR_ID ] ?? null;
+
+		return is_array( $connector ) && 'ai_provider' === (string) ( $connector['type'] ?? '' );
 	}
 }

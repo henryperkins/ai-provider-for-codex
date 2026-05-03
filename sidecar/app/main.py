@@ -77,6 +77,10 @@ class JsonRpcSession:
             text=True,
             bufsize=1,
             env=env,
+            # Pin to a directory that can't be unlinked under us. Codex calls
+            # getcwd() while loading config and aborts if the parent's CWD has
+            # been replaced (e.g. a deploy that swapped inodes).
+            cwd="/",
         )
         self._reader = threading.Thread(target=self._reader_loop, daemon=True)
         self._reader.start()
@@ -157,6 +161,9 @@ class JsonRpcSession:
 
         response = waiter["response"]
         if not isinstance(response, dict):
+            # If the reader thread set a transport error during the wait,
+            # surface it instead of the generic "invalid response" message.
+            self._raise_if_broken()
             raise RuntimeError(f"{method} returned an invalid JSON-RPC response.")
 
         error = response.get("error")

@@ -10,6 +10,7 @@ use AIProviderForCodex\Auth\ConnectionRepository;
 use AIProviderForCodex\Auth\ConnectionService;
 use AIProviderForCodex\Auth\ConnectionSnapshotRepository;
 use AIProviderForCodex\Auth\PendingConnectionRepository;
+use AIProviderForCodex\Admin\ConnectorsIntegration;
 use AIProviderForCodex\Admin\SiteSettings;
 use AIProviderForCodex\Admin\UserConnectionPage;
 use AIProviderForCodex\Database\Installer;
@@ -298,6 +299,30 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 			$codex_provider_assert( isset( $codex_provider_routes['/codex-provider/v1/status'] ), 'Status route is not registered.' );
 
 		$codex_provider_assert( Settings::has_required_configuration(), 'Runtime settings should be considered configured.' );
+		$codex_provider_connectors = [
+			'codex' => [
+				'type'           => 'ai_provider',
+				'authentication' => [
+					'method' => 'none',
+				],
+			],
+		];
+		$codex_provider_assert(
+			ConnectorsIntegration::filter_ai_plugin_has_credentials( false, $codex_provider_connectors ),
+			'AI plugin credential check should recognize configured Codex connectors.'
+		);
+		$codex_provider_assert(
+			ConnectorsIntegration::filter_ai_plugin_has_credentials( false, [] ) === false,
+			'AI plugin credential check should not report credentials when Codex is not registered.'
+		);
+		$codex_provider_assert(
+			ConnectorsIntegration::filter_ai_plugin_has_credentials( true, [] ) === true,
+			'AI plugin credential check should preserve an existing true result.'
+		);
+		$codex_provider_assert(
+			ConnectorsIntegration::filter_ai_plugin_has_valid_credentials( true ) === true,
+			'AI plugin valid-credential check should preserve an existing true result.'
+		);
 
 		$codex_provider_status = SupportChecks::current_user_status( $codex_provider_temporary_user_id );
 		$codex_provider_assert( array_key_exists( 'runtimeConfigured', $codex_provider_status ), 'Status payload should expose runtimeConfigured.' );
