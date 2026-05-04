@@ -11,6 +11,7 @@ namespace AIProviderForCodex\Provider;
 
 use AIProviderForCodex\Models\CodexTextGenerationModel;
 use AIProviderForCodex\Runtime\Settings;
+use WordPress\AiClient\AiClient;
 use WordPress\AiClient\Providers\ApiBasedImplementation\AbstractApiProvider;
 use WordPress\AiClient\Providers\Contracts\ModelMetadataDirectoryInterface;
 use WordPress\AiClient\Providers\Contracts\ProviderAvailabilityInterface;
@@ -53,29 +54,20 @@ final class CodexProvider extends AbstractApiProvider {
 		$provider_metadata = [
 			'codex',
 			'Codex',
-			ProviderTypeEnum::cloud(),
+			ProviderTypeEnum::server(),
 			\AIProviderForCodex\PLUGIN_URI,
-				null,
+			null,
 		];
 
-		if ( self::provider_metadata_parameter_count() >= 6 ) {
+		if ( version_compare( AiClient::VERSION, '1.2.0', '>=' ) ) {
 			$provider_metadata[] = __( 'Codex provider for the WordPress AI Client using a local runtime.', 'ai-provider-for-codex' );
 		}
 
-		if ( self::provider_metadata_parameter_count() >= 7 ) {
+		if ( version_compare( AiClient::VERSION, '1.3.0', '>=' ) ) {
 			$provider_metadata[] = __DIR__ . '/logo.svg';
 		}
 
 		return new ProviderMetadata( ...$provider_metadata );
-	}
-
-	/**
-	 * Returns the available ProviderMetadata constructor arity for SDK compatibility.
-	 *
-	 * @return int
-	 */
-	private static function provider_metadata_parameter_count(): int {
-		return ( new \ReflectionMethod( ProviderMetadata::class, '__construct' ) )->getNumberOfParameters();
 	}
 
 	/**

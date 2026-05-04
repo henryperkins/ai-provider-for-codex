@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name:       AI Provider for Codex
- * Plugin URI:        https://github.com/henryperkins/wp-hperkins-com/tree/main/wp-content/plugins/ai-provider-for-codex
+ * Plugin URI:        https://github.com/henryperkins/ai-provider-for-codex
  * Description:       Codex provider for the WordPress AI Client using a local runtime sidecar.
  * Requires at least: 6.9
  * Requires PHP:      7.4
@@ -26,7 +26,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 const VERSION = '0.1.0';
-const PLUGIN_URI = 'https://github.com/henryperkins/wp-hperkins-com/tree/main/wp-content/plugins/ai-provider-for-codex';
+const PLUGIN_URI = 'https://github.com/henryperkins/ai-provider-for-codex';
 const MIN_WP_VERSION = '6.9';
 const MIN_PHP_VERSION = '7.4';
 const PLUGIN_FILE = __FILE__;
