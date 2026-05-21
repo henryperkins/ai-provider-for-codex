@@ -9,6 +9,7 @@ declare( strict_types=1 );
 
 namespace AIProviderForCodex\Provider;
 
+use AIProviderForCodex\Admin\UserConnectionPage;
 use AIProviderForCodex\Models\CodexTextGenerationModel;
 use AIProviderForCodex\Runtime\Settings;
 use WordPress\AiClient\AiClient;
@@ -55,7 +56,7 @@ final class CodexProvider extends AbstractApiProvider {
 			'codex',
 			'Codex',
 			ProviderTypeEnum::cloud(),
-			\AIProviderForCodex\PLUGIN_URI,
+			UserConnectionPage::page_url(),
 			null,
 		];
 

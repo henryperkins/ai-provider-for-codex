@@ -110,6 +110,12 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 			'Codex provider should register when AI is supported and the AI Client is available.'
 		);
 
+		$codex_provider_metadata = CodexProvider::metadata();
+		$codex_provider_assert(
+			UserConnectionPage::page_url() === $codex_provider_metadata->getCredentialsUrl(),
+			'Codex provider credentials URL should point to the per-user connection page.'
+		);
+
 		$codex_provider_original_options = [
 		Settings::OPTION_RUNTIME_BASE_URL => get_option( Settings::OPTION_RUNTIME_BASE_URL, null ),
 		Settings::OPTION_RUNTIME_BEARER   => get_option( Settings::OPTION_RUNTIME_BEARER, null ),
