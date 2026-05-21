@@ -29,5 +29,27 @@ for plugin_check_exclusion in "docs" "sidecar/scripts"; do
 	esac
 done
 
+locked_ai_client_version="$(
+	php -r '
+		$lock = json_decode(file_get_contents($argv[1]), true);
+		foreach (($lock["packages-dev"] ?? []) as $package) {
+			if (($package["name"] ?? "") === "wordpress/php-ai-client") {
+				echo (string) ($package["version"] ?? "");
+				exit;
+			}
+		}
+	' "$ROOT_DIR/composer.lock"
+)"
+
+if [[ -z "$locked_ai_client_version" ]]; then
+	echo "composer.lock must include wordpress/php-ai-client for local verification." >&2
+	exit 1
+fi
+
+if [[ "$locked_ai_client_version" != dev-* ]] && ! php -r 'exit(version_compare($argv[1], "1.0", ">=") ? 0 : 1);' "$locked_ai_client_version"; then
+	echo "composer.lock must use wordpress/php-ai-client 1.0 or newer for local verification. Current locked version: $locked_ai_client_version" >&2
+	exit 1
+fi
+
 node --input-type=module --check < "$ROOT_DIR/assets/connectors.js" >/dev/null
 wp --path="$WP_PATH" eval-file "$ROOT_DIR/scripts/verify.php"

@@ -14,11 +14,9 @@ use AIProviderForCodex\Admin\ConnectorsIntegration;
 use AIProviderForCodex\Admin\SiteSettings;
 use AIProviderForCodex\Admin\UserConnectionPage;
 use AIProviderForCodex\Database\Installer;
-use AIProviderForCodex\Provider\CodexProvider;
 use AIProviderForCodex\Provider\ModelCatalogState;
 use AIProviderForCodex\REST\ConnectController;
 use AIProviderForCodex\REST\StatusController;
-use WordPress\AiClient\AiClient;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -35,8 +33,8 @@ final class Plugin {
 	 * @return void
 	 */
 	public function init(): void {
+		add_action( 'init', __NAMESPACE__ . '\\register_provider', 5 );
 		add_action( 'init', [ Installer::class, 'maybe_upgrade' ], 1 );
-		add_action( 'init', [ $this, 'register_provider' ], 5 );
 		ConnectionRefreshScheduler::register_hooks();
 
 		add_action( 'admin_menu', [ SiteSettings::class, 'register_page' ] );
@@ -61,25 +59,6 @@ final class Plugin {
 		add_action( 'admin_notices', [ ConnectorsIntegration::class, 'maybe_render_unlinked_notice' ] );
 		add_action( 'admin_enqueue_scripts', [ ConnectorsIntegration::class, 'maybe_enqueue_dismiss_script' ] );
 		add_action( 'wp_ajax_codex_provider_dismiss_notice', [ ConnectorsIntegration::class, 'ajax_dismiss_notice' ] );
-	}
-
-	/**
-	 * Registers the Codex provider with the WordPress AI Client.
-	 *
-	 * @return void
-	 */
-	public function register_provider(): void {
-		if ( ! class_exists( AiClient::class ) || ( function_exists( 'wp_supports_ai' ) && ! wp_supports_ai() ) ) {
-			return;
-		}
-
-		$registry = AiClient::defaultRegistry();
-
-		if ( $registry->hasProvider( CodexProvider::class ) ) {
-			return;
-		}
-
-		$registry->registerProvider( CodexProvider::class );
 	}
 
 	/**

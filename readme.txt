@@ -1,7 +1,7 @@
 === AI Provider for Codex ===
 Contributors: lakefrontdigital
 Tags: ai, codex, wordpress-ai-client
-Requires at least: 6.9
+Requires at least: 7.0
 Tested up to: 7.0
 Requires PHP: 7.4
 Stable tag: 0.1.1
@@ -30,7 +30,7 @@ Features:
 
 Runtime requirements:
 
-* WordPress 6.9 or newer with the WordPress AI Client available, either bundled in WordPress 7.0+ or installed separately on WordPress 6.9
+* WordPress 7.0 or newer with AI Client SDK 1.0 or newer. If the standalone WordPress AI plugin provides the client, WordPress AI plugin 1.0 or newer is also required.
 * PHP 7.4 or newer
 * Python 3.11 or newer on the same host as WordPress
 * the `codex` CLI installed on the same host

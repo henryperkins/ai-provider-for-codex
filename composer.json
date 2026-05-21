@@ -9,7 +9,7 @@
 	"require-dev": {
 		"phpstan/phpstan": "^2.1",
 		"szepeviktor/phpstan-wordpress": "^2.0",
-		"wordpress/php-ai-client": "^0.4 || dev-trunk"
+		"wordpress/php-ai-client": "^1.0 || dev-trunk"
 	},
 	"autoload": {
 		"psr-4": {

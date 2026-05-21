@@ -15,6 +15,7 @@ use AIProviderForCodex\Admin\ConnectorsIntegration;
 use AIProviderForCodex\Admin\SiteSettings;
 use AIProviderForCodex\Admin\UserConnectionPage;
 use AIProviderForCodex\Database\Installer;
+use AIProviderForCodex\Provider\CodexProvider;
 use AIProviderForCodex\Provider\ModelCatalogState;
 use AIProviderForCodex\Provider\SupportChecks;
 use AIProviderForCodex\REST\ConnectController;
@@ -61,6 +62,53 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 				remove_filter( 'pre_http_request', $filter, 10 );
 			}
 		};
+
+		$codex_provider_reset_ai_client_registry = static function (): void {
+			$property = new ReflectionProperty( AiClient::class, 'defaultRegistry' );
+			$property->setAccessible( true );
+			$property->setValue( null, null );
+		};
+
+		$codex_provider_assert(
+			is_wp_version_compatible( \AIProviderForCodex\MIN_WP_VERSION ),
+			'AI Provider for Codex verification requires WordPress 7.0 or newer.'
+		);
+		$codex_provider_assert(
+			class_exists( AiClient::class ),
+			'AI Provider for Codex requires AI Client 1.0 or newer, but the AI Client class is not available.'
+		);
+		$codex_provider_assert(
+			version_compare( AiClient::VERSION, '1.0', '>=' ),
+			'AI Provider for Codex requires AI Client 1.0 or newer.'
+		);
+		$codex_provider_assert(
+			! defined( 'WPAI_VERSION' ) || version_compare( (string) constant( 'WPAI_VERSION' ), '1.0', '>=' ),
+			'AI Provider for Codex requires WordPress AI plugin 1.0 or newer when the standalone plugin is installed.'
+		);
+
+		$codex_provider_disable_ai_filter = static function (): bool {
+			return false;
+		};
+
+		add_filter( 'wp_supports_ai', $codex_provider_disable_ai_filter );
+
+		try {
+			$codex_provider_reset_ai_client_registry();
+			\AIProviderForCodex\register_provider();
+			$codex_provider_assert(
+				! AiClient::defaultRegistry()->hasProvider( CodexProvider::class ),
+				'Codex provider should not register when wp_supports_ai disables AI globally.'
+			);
+		} finally {
+			remove_filter( 'wp_supports_ai', $codex_provider_disable_ai_filter );
+		}
+
+		$codex_provider_reset_ai_client_registry();
+		\AIProviderForCodex\register_provider();
+		$codex_provider_assert(
+			AiClient::defaultRegistry()->hasProvider( CodexProvider::class ),
+			'Codex provider should register when AI is supported and the AI Client is available.'
+		);
 
 		$codex_provider_original_options = [
 		Settings::OPTION_RUNTIME_BASE_URL => get_option( Settings::OPTION_RUNTIME_BASE_URL, null ),
