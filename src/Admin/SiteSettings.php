@@ -27,13 +27,129 @@ final class SiteSettings {
 	 * @return void
 	 */
 	public static function register_page(): void {
-		add_options_page(
+		$hook = add_options_page(
 			__( 'Codex Provider', 'ai-provider-for-codex' ),
 			__( 'Codex Provider', 'ai-provider-for-codex' ),
 			'manage_options',
 			'ai-provider-for-codex',
 			[ self::class, 'render_page' ]
 		);
+
+		if ( $hook ) {
+			add_action( "load-{$hook}", [ self::class, 'register_help_tab' ] );
+		}
+	}
+
+	/**
+	 * Registers the contextual help tab for this screen.
+	 *
+	 * @return void
+	 */
+	public static function register_help_tab(): void {
+		$screen = get_current_screen();
+
+		if ( ! $screen ) {
+			return;
+		}
+
+		$screen->add_help_tab(
+			[
+				'id'       => 'codex-provider-site-settings',
+				'title'    => __( 'Codex Provider setup', 'ai-provider-for-codex' ),
+				'callback' => [ self::class, 'render_help_tab' ],
+			]
+		);
+	}
+
+	/**
+	 * Renders the contextual help tab content.
+	 *
+	 * @return void
+	 */
+	public static function render_help_tab(): void {
+		$runtime_config   = Settings::configuration_metadata();
+		$plugin_dir       = untrailingslashit( \AIProviderForCodex\PLUGIN_DIR );
+		$shared_env_file  = (string) $runtime_config['shared_env_file'];
+		$service_template = sprintf( '%s/sidecar/systemd/codex-wp-sidecar.service', $plugin_dir );
+		$env_example      = sprintf( '%s/sidecar/config.example.env', $plugin_dir );
+		$manual_command   = sprintf( 'CODEX_WP_BEARER_TOKEN=replace-me python3 %s/sidecar/app/main.py', $plugin_dir );
+		$runtime_base_url = Settings::get_base_url();
+		$healthz_url      = rtrim( '' !== $runtime_base_url ? $runtime_base_url : Settings::DEFAULT_RUNTIME_BASE_URL, '/' ) . '/healthz';
+		?>
+		<p><?php esc_html_e( 'Codex uses a local runtime service that runs on the same host as WordPress. Each user links their own Codex or ChatGPT account so access and billing stay user-specific.', 'ai-provider-for-codex' ); ?></p>
+		<p>
+			<?php
+			echo esc_html(
+				SafeFormat::sprintf(
+					/* translators: %s: absolute shared env file path. */
+					__( 'For service installs, the plugin can auto-detect the runtime URL and bearer token from %s when PHP can read that file.', 'ai-provider-for-codex' ),
+					$shared_env_file
+				)
+			);
+			?>
+		</p>
+		<p>
+			<?php
+			echo wp_kses_post(
+				SafeFormat::sprintf(
+					/* translators: 1: connectors settings URL, 2: user connection page URL. */
+					__(
+						'<a href="%1$s">Settings &gt; Connectors</a> is the main status screen. Per-user account linking is on the <a href="%2$s">user connection page</a>.',
+						'ai-provider-for-codex'
+					),
+					esc_url( admin_url( 'options-connectors.php' ) ),
+					esc_url( UserConnectionPage::page_url() )
+				)
+			);
+			?>
+		</p>
+		<h3><?php esc_html_e( 'Quick setup', 'ai-provider-for-codex' ); ?></h3>
+		<p><?php esc_html_e( 'WordPress activation is only step one. The plugin starts working after the local sidecar is running on this server and each user links their own account.', 'ai-provider-for-codex' ); ?></p>
+		<ol>
+			<li><?php esc_html_e( 'On the same host as WordPress, install Python 3.11+ and the codex CLI.', 'ai-provider-for-codex' ); ?></li>
+			<li>
+				<?php esc_html_e( 'Use the bundled systemd service template and environment example from the installed plugin directory:', 'ai-provider-for-codex' ); ?>
+				<p><code><?php echo esc_html( $service_template ); ?></code></p>
+				<p><code><?php echo esc_html( $env_example ); ?></code></p>
+			</li>
+			<li>
+				<?php
+				echo esc_html(
+					SafeFormat::sprintf(
+						/* translators: %s: absolute shared env file path. */
+						__( 'Confirm Settings > Codex Provider shows the runtime URL and bearer token from %s. If PHP cannot read that file, enter the same Runtime URL and raw bearer token manually, then save.', 'ai-provider-for-codex' ),
+						$shared_env_file
+					)
+				);
+				?>
+			</li>
+			<li>
+				<?php
+				echo wp_kses_post(
+					SafeFormat::sprintf(
+						/* translators: %s: expected health check URL. */
+						__( 'Open <a href="%1$s">Settings &gt; Connectors</a> and confirm Codex reports a healthy local runtime. If it does not, the sidecar should answer %2$s from the WordPress host.', 'ai-provider-for-codex' ),
+						esc_url( admin_url( 'options-connectors.php' ) ),
+						esc_html( $healthz_url )
+					)
+				);
+				?>
+			</li>
+			<li>
+				<?php
+				echo wp_kses_post(
+					SafeFormat::sprintf(
+						/* translators: %s: user connection page URL. */
+						__( 'Have each user open <a href="%s">Users &gt; Codex Provider</a>, click Connect Codex account, and complete the device-code login.', 'ai-provider-for-codex' ),
+						esc_url( UserConnectionPage::page_url() )
+					)
+				);
+				?>
+			</li>
+		</ol>
+		<p><?php esc_html_e( 'Manual fallback for quick testing:', 'ai-provider-for-codex' ); ?></p>
+		<p><code><?php echo esc_html( $manual_command ); ?></code></p>
+		<?php
 	}
 
 	/**
@@ -91,14 +207,6 @@ final class SiteSettings {
 		$health_ind      = StatusLabels::status_indicator( (string) $runtime_status['status'] );
 		$base_url_locked = ! empty( $runtime_config['base_url_managed'] );
 		$bearer_locked   = ! empty( $runtime_config['bearer_token_managed'] );
-		$plugin_dir      = untrailingslashit( \AIProviderForCodex\PLUGIN_DIR );
-		$shared_env_file = (string) $runtime_config['shared_env_file'];
-		$service_template = $plugin_dir . '/sidecar/systemd/codex-wp-sidecar.service';
-		$service_unit     = '/etc/systemd/system/codex-wp-sidecar.service';
-		$systemctl_command = 'sudo systemctl daemon-reload && sudo systemctl enable --now codex-wp-sidecar';
-		$manual_command    = sprintf( 'CODEX_WP_BEARER_TOKEN=replace-me python3 %s/sidecar/app/main.py', $plugin_dir );
-		$runtime_base_url  = Settings::get_base_url();
-		$healthz_url       = rtrim( '' !== $runtime_base_url ? $runtime_base_url : Settings::DEFAULT_RUNTIME_BASE_URL, '/' ) . '/healthz';
 		?>
 		<style>
 			.codex-status-cards { display: flex; flex-wrap: wrap; gap: 1rem; margin-bottom: 2rem; max-width: 960px; }
@@ -112,106 +220,9 @@ final class SiteSettings {
 			.codex-indicator.error { background: #d63638; }
 			.codex-models-list { display: flex; flex-wrap: wrap; gap: 0.375rem; margin-top: 0.25rem; }
 			.codex-model-pill { display: inline-block; background: #f0f0f1; border-radius: 3px; padding: 2px 8px; font-size: 12px; }
-			.codex-how-it-works { background: #f0f6fc; border: 1px solid #c3c4c7; border-left: 4px solid #2271b1; padding: 1rem 1.25rem; max-width: 960px; margin-bottom: 1.5rem; border-radius: 2px; }
-			.codex-how-it-works p { margin: 0.25rem 0; }
-			.codex-setup-box { background: #fff; border: 1px solid #c3c4c7; padding: 1rem 1.25rem; max-width: 960px; margin-bottom: 1.5rem; border-radius: 4px; }
-			.codex-setup-box h2 { margin-top: 0; }
-			.codex-setup-steps { margin: 0.75rem 0 0.5rem 1.25rem; }
-			.codex-setup-steps li { margin-bottom: 0.85rem; }
-			.codex-command { display: block; margin-top: 0.35rem; padding: 0.5rem 0.75rem; background: #f6f7f7; border-radius: 3px; font-family: ui-monospace, SFMono-Regular, monospace; word-break: break-all; }
-			.codex-note { margin: 0.35rem 0 0; font-size: 12px; color: #50575e; }
 		</style>
 		<div class="wrap">
 			<h1><?php esc_html_e( 'AI Provider for Codex', 'ai-provider-for-codex' ); ?></h1>
-
-			<div class="codex-how-it-works">
-				<p><?php esc_html_e( 'Codex uses a local runtime service that runs on the same host as WordPress. Each user links their own Codex account so access and billing stay user-specific.', 'ai-provider-for-codex' ); ?></p>
-				<p>
-					<?php
-					echo esc_html(
-						SafeFormat::sprintf(
-							/* translators: %s: absolute shared env file path. */
-							__( 'For service installs, the plugin can auto-detect the runtime URL and bearer token from %s.', 'ai-provider-for-codex' ),
-							$shared_env_file
-						)
-					);
-					?>
-				</p>
-				<p>
-					<?php
-					echo wp_kses_post(
-						SafeFormat::sprintf(
-							/* translators: 1: connectors settings URL, 2: user connection page URL. */
-							__(
-								'<a href="%1$s">Settings &gt; Connectors</a> is the main status screen. Per-user account linking is on the <a href="%2$s">user connection page</a>.',
-								'ai-provider-for-codex'
-							),
-							esc_url( admin_url( 'options-connectors.php' ) ),
-							esc_url( UserConnectionPage::page_url() )
-						)
-					);
-					?>
-				</p>
-			</div>
-
-			<div class="codex-setup-box">
-				<h2><?php esc_html_e( 'Quick setup', 'ai-provider-for-codex' ); ?></h2>
-				<p><?php esc_html_e( 'WordPress activation is only step one. The plugin starts working after the local sidecar is running on this server and each user links their own account.', 'ai-provider-for-codex' ); ?></p>
-				<ol class="codex-setup-steps">
-					<li>
-						<strong><?php esc_html_e( 'Install the server prerequisites.', 'ai-provider-for-codex' ); ?></strong>
-						<p class="codex-note"><?php esc_html_e( 'On the same host as WordPress, install Python 3.11+ and the codex CLI.', 'ai-provider-for-codex' ); ?></p>
-					</li>
-					<li>
-						<strong><?php esc_html_e( 'Create the local service.', 'ai-provider-for-codex' ); ?></strong>
-						<p class="codex-note"><?php esc_html_e( 'Use the bundled systemd template, replace the placeholder plugin path with this installed plugin directory, and install it as the service unit:', 'ai-provider-for-codex' ); ?></p>
-						<code class="codex-command"><?php echo esc_html( $service_template ); ?></code>
-						<code class="codex-command"><?php echo esc_html( $service_unit ); ?></code>
-					</li>
-					<li>
-						<strong><?php esc_html_e( 'Create the shared environment file.', 'ai-provider-for-codex' ); ?></strong>
-						<p class="codex-note">
-							<?php
-							echo esc_html(
-								SafeFormat::sprintf(
-									/* translators: %s: absolute shared env file path. */
-									__( 'Create %s with CODEX_WP_RUNTIME_BASE_URL and CODEX_WP_BEARER_TOKEN. If PHP can read the file, the fields below fill automatically; otherwise enter the values manually and save.', 'ai-provider-for-codex' ),
-									$shared_env_file
-								)
-							);
-							?>
-						</p>
-					</li>
-					<li>
-						<strong><?php esc_html_e( 'Start the sidecar service.', 'ai-provider-for-codex' ); ?></strong>
-						<p class="codex-note"><?php esc_html_e( 'After the unit and environment file are in place, reload systemd and start the service:', 'ai-provider-for-codex' ); ?></p>
-						<code class="codex-command"><?php echo esc_html( $systemctl_command ); ?></code>
-					</li>
-					<li>
-						<strong><?php esc_html_e( 'Check the runtime from Connectors.', 'ai-provider-for-codex' ); ?></strong>
-						<p class="codex-note"><?php esc_html_e( 'Open Settings > Connectors and confirm Codex reports a healthy local runtime.', 'ai-provider-for-codex' ); ?></p>
-						<p class="codex-note">
-							<?php
-							echo esc_html(
-								SafeFormat::sprintf(
-									/* translators: %s: expected health check URL. */
-									__( 'If it does not, the sidecar should answer %s from the WordPress host.', 'ai-provider-for-codex' ),
-									$healthz_url
-								)
-							);
-							?>
-						</p>
-						<p class="codex-note"><a href="<?php echo esc_url( admin_url( 'options-connectors.php' ) ); ?>"><?php esc_html_e( 'Open Connectors', 'ai-provider-for-codex' ); ?></a></p>
-					</li>
-					<li>
-						<strong><?php esc_html_e( 'Have each user link their own account.', 'ai-provider-for-codex' ); ?></strong>
-						<p class="codex-note"><?php esc_html_e( 'Users finish setup from Users > Codex Provider by clicking Connect Codex account and completing the device-code login.', 'ai-provider-for-codex' ); ?></p>
-						<p class="codex-note"><a href="<?php echo esc_url( UserConnectionPage::page_url() ); ?>"><?php esc_html_e( 'Open user connection page', 'ai-provider-for-codex' ); ?></a></p>
-					</li>
-				</ol>
-				<p class="codex-note"><?php esc_html_e( 'Manual fallback for quick testing:', 'ai-provider-for-codex' ); ?></p>
-				<code class="codex-command"><?php echo esc_html( $manual_command ); ?></code>
-			</div>
 
 			<?php self::render_notice( $notice ); ?>
 			<?php settings_errors(); ?>

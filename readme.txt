@@ -4,7 +4,7 @@ Tags: ai, codex, wordpress-ai-client
 Requires at least: 6.9
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.1.0
+Stable tag: 0.1.1
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -71,7 +71,7 @@ No. The plugin requires a localhost sidecar runtime and the `codex` CLI on the s
 
 = Is the sidecar included in the plugin zip? =
 
-Yes. The plugin bundle includes the sidecar source, setup guide, and helper install scripts in the `sidecar/` directory. An administrator still needs to configure and run that local service on the same host as WordPress.
+Yes. The plugin bundle includes the sidecar source, setup guide, systemd service template, and environment example in the `sidecar/` directory. An administrator still needs to configure and run that local service on the same host as WordPress.
 
 = Does every user share one Codex account? =
 
@@ -119,6 +119,13 @@ The sidecar is designed for localhost-only communication between WordPress and t
 Support is limited to documented, self-managed environments that can run the local sidecar runtime and the `codex` CLI on the same host as WordPress.
 
 == Changelog ==
+
+= 0.1.1 =
+* Build the Connectors logo path through `WP_PLUGIN_DIR` so symlinked plugin installs render the logo correctly.
+* Refresh linked-connection snapshots hourly so cached model lists and account metadata stay current without manual refresh.
+* Align provider and connector registration with the canonical WordPress AI Client registration flow.
+* Move the "How Codex Provider works" overview into the standard WordPress contextual Help tab on `Users > Codex Provider`.
+* Internal hardening of the local runtime client, settings, and response mapping.
 
 = 0.1.0 =
 * Initial local-runtime release with Connectors integration, per-user account linking, local runtime snapshots, and Codex provider support for the WordPress AI Client.

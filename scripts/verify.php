@@ -19,6 +19,9 @@ use AIProviderForCodex\Provider\ModelCatalogState;
 use AIProviderForCodex\Provider\SupportChecks;
 use AIProviderForCodex\REST\ConnectController;
 use AIProviderForCodex\Runtime\Settings;
+use WordPress\AiClient\AiClient;
+use WordPress\AiClient\Messages\DTO\MessagePart;
+use WordPress\AiClient\Messages\DTO\UserMessage;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	throw new RuntimeException( 'Run this script with wp eval-file.' );
@@ -246,39 +249,66 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 			false !== strpos( $codex_provider_site_settings_html, $codex_provider_temporary_fallback_a ) && false !== strpos( $codex_provider_site_settings_html, $codex_provider_temporary_fallback_b ),
 			'Site settings should render configured fallback models.'
 		);
-			$codex_provider_assert(
-				false === strpos( $codex_provider_site_settings_html, $codex_provider_temporary_model_a ) && false === strpos( $codex_provider_site_settings_html, $codex_provider_temporary_model_b ),
-				'Site settings should not render current-user snapshot models.'
-			);
-			$codex_provider_site_settings_filter_applied  = false;
-			$codex_provider_site_settings_translate_filter = static function ( string $translation, string $text, string $domain ) use ( &$codex_provider_site_settings_filter_applied ): string {
-				if (
-					'ai-provider-for-codex' === $domain
-					&& str_contains( $text, 'Per-user account linking is on the' )
-				) {
-					$codex_provider_site_settings_filter_applied = true;
+		$codex_provider_assert(
+			false === strpos( $codex_provider_site_settings_html, 'Quick setup' ),
+			'Site settings should move the quick setup guidance into the contextual Help dropdown.'
+		);
+		$codex_provider_assert(
+			false === strpos( $codex_provider_site_settings_html, 'Codex uses a local runtime service' ),
+			'Site settings should move the introductory help text into the contextual Help dropdown.'
+		);
+		$codex_provider_assert(
+			method_exists( SiteSettings::class, 'render_help_tab' ),
+			'Site settings help tab renderer should be available.'
+		);
+		ob_start();
+		SiteSettings::render_help_tab();
+		$codex_provider_site_settings_help_html = (string) ob_get_clean();
+		$codex_provider_assert(
+			false !== strpos( $codex_provider_site_settings_help_html, 'Quick setup' ),
+			'Site settings contextual Help should render quick setup guidance.'
+		);
+		$codex_provider_assert(
+			false === strpos( $codex_provider_site_settings_help_html, 'sidecar/scripts/install-systemd.sh' ),
+			'Site settings contextual Help should not recommend non-shipped helper scripts.'
+		);
+		$codex_provider_assert(
+			false !== strpos( $codex_provider_site_settings_help_html, 'sidecar/systemd/codex-wp-sidecar.service' ),
+			'Site settings contextual Help should recommend the shipped systemd service template.'
+		);
+		$codex_provider_assert(
+			false === strpos( $codex_provider_site_settings_html, $codex_provider_temporary_model_a ) && false === strpos( $codex_provider_site_settings_html, $codex_provider_temporary_model_b ),
+			'Site settings should not render current-user snapshot models.'
+		);
+		$codex_provider_site_settings_filter_applied  = false;
+		$codex_provider_site_settings_translate_filter = static function ( string $translation, string $text, string $domain ) use ( &$codex_provider_site_settings_filter_applied ): string {
+			if (
+				'ai-provider-for-codex' === $domain
+				&& str_contains( $text, 'Per-user account linking is on the' )
+			) {
+				$codex_provider_site_settings_filter_applied = true;
 
-					return '<a href="%1$s">Settings &gt; Connectors</a> is the main entry point. 100% guided. Per-user account linking is on the <a href="%2$s">user connection page</a>.';
-				}
-
-				return $translation;
-			};
-
-			add_filter( 'gettext', $codex_provider_site_settings_translate_filter, 10, 3 );
-
-			try {
-				ob_start();
-				SiteSettings::render_page();
-				$codex_provider_site_settings_html = (string) ob_get_clean();
-			} finally {
-				remove_filter( 'gettext', $codex_provider_site_settings_translate_filter, 10 );
+				return '<a href="%1$s">Settings &gt; Connectors</a> is the main entry point. 100% guided. Per-user account linking is on the <a href="%2$s">user connection page</a>.';
 			}
 
-			$codex_provider_assert( $codex_provider_site_settings_filter_applied, 'Site settings percent-sign translation filter was not applied.' );
-			$codex_provider_assert( '' !== $codex_provider_site_settings_html, 'Site settings should render successfully when translated text contains a literal percent sign.' );
+			return $translation;
+		};
 
-			PendingConnectionRepository::upsert(
-				$codex_provider_temporary_user_id,
+		add_filter( 'gettext', $codex_provider_site_settings_translate_filter, 10, 3 );
+
+		try {
+			ob_start();
+			SiteSettings::render_help_tab();
+			$codex_provider_site_settings_translated_help_html = (string) ob_get_clean();
+		} finally {
+			remove_filter( 'gettext', $codex_provider_site_settings_translate_filter, 10 );
+		}
+
+		$codex_provider_assert( $codex_provider_site_settings_filter_applied, 'Site settings percent-sign translation filter was not applied.' );
+		$codex_provider_assert( false !== strpos( $codex_provider_site_settings_translated_help_html, '100% guided' ), 'Site settings Help should render translated strings containing a literal percent sign.' );
+
+		PendingConnectionRepository::upsert(
+			$codex_provider_temporary_user_id,
 			[
 				'authSessionId'   => 'auth_verify',
 				'status'          => 'pending',
@@ -347,6 +377,77 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 		$codex_provider_assert( ! array_key_exists( 'siteConfigured', $codex_provider_status ), 'Legacy siteConfigured alias should not be returned.' );
 
 		$codex_provider_base_url = Settings::get_base_url();
+		$codex_provider_generation_requests = [];
+		$codex_provider_with_mock_runtime(
+			static function ( $preempt, array $args, string $url ) use ( $codex_provider_base_url, $codex_provider_http_json_response, &$codex_provider_generation_requests ) {
+				if ( 0 !== strpos( $url, $codex_provider_base_url ) ) {
+					return $preempt;
+				}
+
+				$path = (string) wp_parse_url( $url, PHP_URL_PATH );
+
+				if ( '/v1/responses/text' !== $path ) {
+					return $preempt;
+				}
+
+				if ( ! empty( $args['reject_unsafe_urls'] ) ) {
+					return $preempt;
+				}
+
+				$codex_provider_generation_requests[] = [
+					'url'  => $url,
+					'args' => $args,
+				];
+
+				return $codex_provider_http_json_response(
+					200,
+					[
+						'requestId'    => 'codex-verify-generation',
+						'outputText'   => 'Local runtime generation path works.',
+						'finishReason' => 'stop',
+						'usage'        => [
+							'inputTokens'  => 5,
+							'outputTokens' => 6,
+						],
+						'account'      => [],
+						'rateLimits'   => [],
+					]
+				);
+			},
+			static function () use ( $codex_provider_assert, &$codex_provider_generation_requests, $codex_provider_temporary_model_a, $codex_provider_temporary_user_id ) {
+				$model  = AiClient::defaultRegistry()->getProviderModel( 'codex', $codex_provider_temporary_model_a );
+				$result = $model->generateTextResult(
+					[
+						new UserMessage(
+							[
+								new MessagePart( 'Return a short verification sentence.' ),
+							]
+						),
+					]
+				);
+
+				$codex_provider_assert(
+					'Local runtime generation path works.' === $result->toText(),
+					'Codex text generation should return the mocked local runtime output.'
+				);
+				$codex_provider_assert(
+					1 === count( $codex_provider_generation_requests ),
+					'Codex text generation should make exactly one local runtime request.'
+				);
+
+				$request_args = $codex_provider_generation_requests[0]['args'] ?? [];
+				$request_body = json_decode( (string) ( $request_args['body'] ?? '' ), true );
+
+				$codex_provider_assert(
+					empty( $request_args['reject_unsafe_urls'] ),
+					'Codex text generation should not use the AI Client safe HTTP transporter for the loopback runtime request.'
+				);
+				$codex_provider_assert(
+					is_array( $request_body ) && $codex_provider_temporary_user_id === (int) ( $request_body['wpUserId'] ?? 0 ),
+					'Codex text generation should send the current WordPress user ID to the runtime.'
+				);
+			}
+		);
 
 		ConnectionService::invalidate_local_connection( $codex_provider_temporary_user_id );
 		PendingConnectionRepository::upsert(
@@ -609,6 +710,10 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 					ob_start();
 					UserConnectionPage::render_page();
 					$codex_provider_connection_page_html = (string) ob_get_clean();
+
+					ob_start();
+					UserConnectionPage::render_help_tab();
+					$codex_provider_connection_help_html = (string) ob_get_clean();
 				} finally {
 					remove_filter( 'gettext', $codex_provider_translate_filter, 10 );
 				}
@@ -616,7 +721,7 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 				$codex_provider_assert( false !== strpos( $codex_provider_connection_page_html, 'Connection attempt failed' ), 'User connection page should describe a stored terminal login error.' );
 				$codex_provider_assert( false !== strpos( $codex_provider_connection_page_html, 'Start connection again' ), 'User connection page should let the user restart after a terminal login error.' );
 				$codex_provider_assert( false !== strpos( $codex_provider_connection_page_html, 'Device code expired.' ), 'User connection page should render the stored terminal login error.' );
-				$codex_provider_assert( false !== strpos( $codex_provider_connection_page_html, '100% reliable' ), 'User connection page should render translated strings containing a literal percent sign.' );
+				$codex_provider_assert( false !== strpos( $codex_provider_connection_help_html, '100% reliable' ), 'User connection help tab should render translated strings containing a literal percent sign.' );
 			}
 		);
 

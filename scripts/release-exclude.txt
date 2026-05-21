@@ -106,6 +106,7 @@ venv
 *.egg-info
 
 # Internal-only docs and runtime artifacts
+/docs
 LOCAL-SIDECAR-SPEC.md
 PLUGIN-SUBMISSION-READINESS-CHECKLIST.md
 /README.md
