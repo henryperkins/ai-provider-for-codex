@@ -21,16 +21,16 @@ if ( ! class_exists( 'WP_Connector_Registry' ) ) {
 
 		/**
 		 * @param string $id Connector ID.
-		 * @return void
+		 * @return array<string,mixed>|null The unregistered connector data on success, null on failure.
 		 */
-		public function unregister( string $id ): void {}
+		public function unregister( string $id ): ?array {}
 
 		/**
 		 * @param string              $id Connector ID.
 		 * @param array<string,mixed> $args Connector metadata.
-		 * @return void
+		 * @return array<string,mixed>|null The registered connector data on success, null on failure.
 		 */
-		public function register( string $id, array $args ): void {}
+		public function register( string $id, array $args ): ?array {}
 	}
 }
 

@@ -11,6 +11,7 @@ namespace AIProviderForCodex\Provider;
 
 use AIProviderForCodex\Models\CodexTextGenerationModel;
 use AIProviderForCodex\Runtime\Settings;
+use WordPress\AiClient\AiClient;
 use WordPress\AiClient\Providers\ApiBasedImplementation\AbstractApiProvider;
 use WordPress\AiClient\Providers\Contracts\ModelMetadataDirectoryInterface;
 use WordPress\AiClient\Providers\Contracts\ProviderAvailabilityInterface;
@@ -50,32 +51,25 @@ final class CodexProvider extends AbstractApiProvider {
 	 * @return ProviderMetadata
 	 */
 	protected static function createProviderMetadata(): ProviderMetadata {
-		$provider_metadata = [
+		$provider_metadata_args = [
 			'codex',
 			'Codex',
 			ProviderTypeEnum::cloud(),
 			\AIProviderForCodex\PLUGIN_URI,
-				null,
+			null,
 		];
 
-		if ( self::provider_metadata_parameter_count() >= 6 ) {
-			$provider_metadata[] = __( 'Codex provider for the WordPress AI Client using a local runtime.', 'ai-provider-for-codex' );
+		// Provider description support was added in php-ai-client 1.2.0.
+		if ( version_compare( AiClient::VERSION, '1.2.0', '>=' ) ) {
+			$provider_metadata_args[] = __( 'AI text generation through a localhost Codex sidecar. Configure the shared runtime, then each user connects their own Codex or ChatGPT account.', 'ai-provider-for-codex' );
 		}
 
-		if ( self::provider_metadata_parameter_count() >= 7 ) {
-			$provider_metadata[] = __DIR__ . '/logo.svg';
+		// Provider logoPath support was added in php-ai-client 1.3.0.
+		if ( version_compare( AiClient::VERSION, '1.3.0', '>=' ) ) {
+			$provider_metadata_args[] = __DIR__ . '/logo.svg';
 		}
 
-		return new ProviderMetadata( ...$provider_metadata );
-	}
-
-	/**
-	 * Returns the available ProviderMetadata constructor arity for SDK compatibility.
-	 *
-	 * @return int
-	 */
-	private static function provider_metadata_parameter_count(): int {
-		return ( new \ReflectionMethod( ProviderMetadata::class, '__construct' ) )->getNumberOfParameters();
+		return new ProviderMetadata( ...$provider_metadata_args );
 	}
 
 	/**

@@ -40,31 +40,30 @@ final class ConnectorsIntegration {
 	}
 
 	/**
-	 * Registers richer connector metadata for the Codex provider.
+	 * Adds the owning-plugin file pointer that auto-discovery does not set for new providers.
+	 *
+	 * Name, description, logo_url, type, and authentication.method are all populated by
+	 * the WP 7.0 Connectors API auto-discovery from the registered ProviderMetadata. Only
+	 * plugin.file requires a manual override for non-built-in connectors.
 	 *
 	 * @param \WP_Connector_Registry $registry Connector registry.
 	 * @return void
 	 */
 	public static function register_connector_metadata( \WP_Connector_Registry $registry ): void {
-		if ( $registry->is_registered( self::CONNECTOR_ID ) ) {
-			$registry->unregister( self::CONNECTOR_ID );
+		if ( ! $registry->is_registered( self::CONNECTOR_ID ) ) {
+			return;
 		}
 
-		$registry->register(
-			self::CONNECTOR_ID,
-			[
-				'name'           => __( 'Codex', 'ai-provider-for-codex' ),
-				'description'    => __( 'AI text generation through a localhost Codex sidecar. Configure the shared runtime, then each user connects their own Codex or ChatGPT account.', 'ai-provider-for-codex' ),
-				'type'           => 'ai_provider',
-				'logo_url'       => plugins_url( 'src/Provider/logo.svg', \AIProviderForCodex\PLUGIN_FILE ),
-				'authentication' => [
-					'method' => 'none',
-				],
-				'plugin'         => [
-					'file' => plugin_basename( \AIProviderForCodex\PLUGIN_FILE ),
-				],
-			]
-		);
+		$connector = $registry->unregister( self::CONNECTOR_ID );
+		if ( ! is_array( $connector ) ) {
+			return;
+		}
+
+		$plugin                      = isset( $connector['plugin'] ) && is_array( $connector['plugin'] ) ? $connector['plugin'] : [];
+		$plugin['file']              = plugin_basename( \AIProviderForCodex\PLUGIN_FILE );
+		$connector['plugin']         = $plugin;
+
+		$registry->register( self::CONNECTOR_ID, $connector );
 	}
 
 	/**
