@@ -7,6 +7,7 @@
  */
 
 use AIProviderForCodex\Auth\ConnectionRepository;
+use AIProviderForCodex\Auth\ConnectionRefreshScheduler;
 use AIProviderForCodex\Auth\ConnectionService;
 use AIProviderForCodex\Auth\ConnectionSnapshotRepository;
 use AIProviderForCodex\Auth\PendingConnectionRepository;
@@ -297,6 +298,23 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 			$codex_provider_assert( isset( $codex_provider_routes['/codex-provider/v1/connect/status'] ), 'Connect status route is not registered.' );
 			$codex_provider_assert( isset( $codex_provider_routes['/codex-provider/v1/connect/refresh'] ), 'Connect refresh route is not registered.' );
 			$codex_provider_assert( isset( $codex_provider_routes['/codex-provider/v1/status'] ), 'Status route is not registered.' );
+
+			$codex_provider_assert( class_exists( ConnectionRefreshScheduler::class ), 'Connection refresh scheduler class is not available.' );
+			$codex_provider_assert(
+				false !== has_action( ConnectionRefreshScheduler::HOOK, [ ConnectionRefreshScheduler::class, 'refresh_linked_connections' ] ),
+				'Connection refresh cron hook is not registered.'
+			);
+			ConnectionRefreshScheduler::schedule();
+			$codex_provider_assert(
+				false !== wp_next_scheduled( ConnectionRefreshScheduler::HOOK ),
+				'Connection refresh cron event should be scheduled.'
+			);
+			ConnectionRefreshScheduler::unschedule();
+			$codex_provider_assert(
+				false === wp_next_scheduled( ConnectionRefreshScheduler::HOOK ),
+				'Connection refresh cron event should be removable during deactivation.'
+			);
+			ConnectionRefreshScheduler::schedule();
 
 		$codex_provider_assert( Settings::has_required_configuration(), 'Runtime settings should be considered configured.' );
 		$codex_provider_connectors = [
@@ -975,13 +993,124 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 					$codex_provider_assert( '' === ModelCatalogState::get_user_preferred_model( $codex_provider_temporary_user_id ), 'Auth loss should clear the preferred model.' );
 					$codex_provider_status = SupportChecks::current_user_status( $codex_provider_temporary_user_id );
 					$codex_provider_assert( 'settings_fallback' === (string) ( $codex_provider_status['catalog']['source'] ?? '' ), 'Auth loss should fall back to configured models instead of stale snapshot models.' );
-					$codex_provider_assert(
-						! in_array( $codex_provider_temporary_model_a, $codex_provider_status['catalog']['model_ids'] ?? [], true ),
-					'Auth loss should not keep stale snapshot models in the effective catalog.'
+						$codex_provider_assert(
+							! in_array( $codex_provider_temporary_model_a, $codex_provider_status['catalog']['model_ids'] ?? [], true ),
+						'Auth loss should not keep stale snapshot models in the effective catalog.'
+					);
+				}
 				);
-			}
-			);
-		} catch ( \Throwable $codex_provider_throwable ) {
+
+				ConnectionRepository::upsert(
+					$codex_provider_temporary_user_id,
+					[
+						'connectionId' => $codex_provider_temporary_connection_id,
+						'status'       => 'linked',
+						'account'      => [
+							'email'    => $codex_provider_user_email,
+							'planType' => 'plus',
+							'authMode' => 'chatgpt',
+						],
+					]
+				);
+				ConnectionSnapshotRepository::upsert(
+					$codex_provider_temporary_connection_id,
+					[
+						'models'       => [
+							[
+								'id'    => $codex_provider_temporary_model_a,
+								'label' => 'Codex Verify Alpha',
+							],
+						],
+						'defaultModel' => $codex_provider_temporary_model_a,
+						'rateLimits'   => [],
+					]
+				);
+				ModelCatalogState::update_user_preferred_model( $codex_provider_temporary_user_id, $codex_provider_temporary_model_a );
+				$codex_provider_with_mock_runtime(
+					static function ( $preempt, array $args, string $url ) use ( $codex_provider_base_url, $codex_provider_http_json_response ) {
+						if ( 0 !== strpos( $url, $codex_provider_base_url ) ) {
+							return $preempt;
+						}
+
+						$path = (string) wp_parse_url( $url, PHP_URL_PATH );
+
+						if ( '/v1/account/snapshot' === $path ) {
+							return $codex_provider_http_json_response(
+								409,
+								[
+									'error' => [
+										'code'    => 'auth_required',
+										'message' => 'No stored ChatGPT or Codex auth is available for this WordPress user.',
+									],
+								]
+							);
+						}
+
+						return $preempt;
+					},
+					static function () use ( $codex_provider_assert, $codex_provider_temporary_connection_id, $codex_provider_temporary_user_id ) {
+						ConnectionRefreshScheduler::refresh_linked_connections();
+
+						$codex_provider_assert( null === ConnectionRepository::get_for_user( $codex_provider_temporary_user_id ), 'Cron snapshot refresh should delete the local connection row when runtime auth disappears.' );
+						$codex_provider_assert( null === ConnectionSnapshotRepository::get( $codex_provider_temporary_connection_id ), 'Cron snapshot refresh should delete the local snapshot row when runtime auth disappears.' );
+						$codex_provider_assert( '' === ModelCatalogState::get_user_preferred_model( $codex_provider_temporary_user_id ), 'Cron snapshot refresh should clear the preferred model when runtime auth disappears.' );
+					}
+				);
+
+				ConnectionRepository::upsert(
+					$codex_provider_temporary_user_id,
+					[
+						'connectionId' => $codex_provider_temporary_connection_id,
+						'status'       => 'linked',
+						'account'      => [
+							'email'    => $codex_provider_user_email,
+							'planType' => 'plus',
+							'authMode' => 'chatgpt',
+						],
+					]
+				);
+				ConnectionSnapshotRepository::upsert(
+					$codex_provider_temporary_connection_id,
+					[
+						'models'       => [
+							[
+								'id'    => $codex_provider_temporary_model_a,
+								'label' => 'Codex Verify Alpha',
+							],
+						],
+						'defaultModel' => $codex_provider_temporary_model_a,
+						'rateLimits'   => [],
+					]
+				);
+				$codex_provider_with_mock_runtime(
+					static function ( $preempt, array $args, string $url ) use ( $codex_provider_base_url, $codex_provider_http_json_response ) {
+						if ( 0 !== strpos( $url, $codex_provider_base_url ) ) {
+							return $preempt;
+						}
+
+						$path = (string) wp_parse_url( $url, PHP_URL_PATH );
+
+						if ( '/v1/account/snapshot' === $path ) {
+							return $codex_provider_http_json_response(
+								500,
+								[
+									'error' => [
+										'code'    => 'runtime_failure',
+										'message' => 'Transient cron refresh failure during verification.',
+									],
+								]
+							);
+						}
+
+						return $preempt;
+					},
+					static function () use ( $codex_provider_assert, $codex_provider_temporary_user_id ) {
+						ConnectionRefreshScheduler::refresh_linked_connections();
+
+						$codex_provider_assert( null !== ConnectionRepository::get_for_user( $codex_provider_temporary_user_id ), 'Cron snapshot refresh should preserve local state after transient runtime failures.' );
+					}
+				);
+			} catch ( \Throwable $codex_provider_throwable ) {
 		$codex_provider_failure = $codex_provider_throwable;
 	} finally {
 		wp_set_current_user( $codex_provider_original_user_id );

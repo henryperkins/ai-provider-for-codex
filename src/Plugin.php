@@ -9,6 +9,7 @@ declare( strict_types=1 );
 
 namespace AIProviderForCodex;
 
+use AIProviderForCodex\Auth\ConnectionRefreshScheduler;
 use AIProviderForCodex\Admin\ConnectorsIntegration;
 use AIProviderForCodex\Admin\SiteSettings;
 use AIProviderForCodex\Admin\UserConnectionPage;
@@ -36,6 +37,7 @@ final class Plugin {
 	public function init(): void {
 		add_action( 'init', [ Installer::class, 'maybe_upgrade' ], 1 );
 		add_action( 'init', [ $this, 'register_provider' ], 5 );
+		ConnectionRefreshScheduler::register_hooks();
 
 		add_action( 'admin_menu', [ SiteSettings::class, 'register_page' ] );
 		add_action( 'admin_menu', [ UserConnectionPage::class, 'register_page' ] );

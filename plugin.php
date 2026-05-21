@@ -18,6 +18,7 @@ declare( strict_types=1 );
 
 namespace AIProviderForCodex;
 
+use AIProviderForCodex\Auth\ConnectionRefreshScheduler;
 use AIProviderForCodex\Database\Installer;
 use WordPress\AiClient\AiClient;
 
@@ -136,6 +137,16 @@ function check_ai_client(): bool {
  */
 function activate_plugin(): void {
 	Installer::activate();
+	ConnectionRefreshScheduler::schedule();
+}
+
+/**
+ * Handles plugin deactivation.
+ *
+ * @return void
+ */
+function deactivate_plugin(): void {
+	ConnectionRefreshScheduler::unschedule();
 }
 
 /**
@@ -160,4 +171,5 @@ function load(): void {
 }
 
 register_activation_hook( PLUGIN_FILE, __NAMESPACE__ . '\\activate_plugin' );
+register_deactivation_hook( PLUGIN_FILE, __NAMESPACE__ . '\\deactivate_plugin' );
 add_action( 'plugins_loaded', __NAMESPACE__ . '\\load' );
