@@ -65,8 +65,12 @@ final class CodexProvider extends AbstractApiProvider {
 		}
 
 		// Provider logoPath support was added in php-ai-client 1.3.0.
+		// Build the path through WP_PLUGIN_DIR + plugin_basename so the WP core resolver
+		// (_wp_connectors_resolve_ai_provider_logo_url) accepts it even when the plugin
+		// is loaded via a symlink — PHP's __DIR__ always returns the realpath.
 		if ( version_compare( AiClient::VERSION, '1.3.0', '>=' ) ) {
-			$provider_metadata_args[] = __DIR__ . '/logo.svg';
+			$provider_dir = WP_PLUGIN_DIR . '/' . dirname( plugin_basename( \AIProviderForCodex\PLUGIN_FILE ) );
+			$provider_metadata_args[] = $provider_dir . '/src/Provider/logo.svg';
 		}
 
 		return new ProviderMetadata( ...$provider_metadata_args );
