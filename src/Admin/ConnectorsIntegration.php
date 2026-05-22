@@ -28,14 +28,18 @@ final class ConnectorsIntegration {
 	 */
 	private static function connector_config(): array {
 		return [
-			'connectorId'       => self::CONNECTOR_ID,
-			'statusUrl'         => rest_url( 'codex-provider/v1/status' ),
-			'statusPath'        => '/codex-provider/v1/status',
-			'startConnectUrl'   => rest_url( 'codex-provider/v1/connect/start' ),
-			'startConnectPath'  => '/codex-provider/v1/connect/start',
-			'siteSettingsUrl'   => SiteSettings::page_url(),
-			'userConnectionUrl' => UserConnectionPage::page_url(),
-			'restNonce'         => wp_create_nonce( 'wp_rest' ),
+			'connectorId'        => self::CONNECTOR_ID,
+			'statusUrl'          => rest_url( 'codex-provider/v1/status' ),
+			'statusPath'         => '/codex-provider/v1/status',
+			'providerStatusUrl'  => rest_url( 'codex-provider/v1/status' ),
+			'providerStatusPath' => '/codex-provider/v1/status',
+			'startConnectUrl'    => rest_url( 'codex-provider/v1/connect/start' ),
+			'startConnectPath'   => '/codex-provider/v1/connect/start',
+			'connectStatusUrl'   => rest_url( 'codex-provider/v1/connect/status' ),
+			'connectStatusPath'  => '/codex-provider/v1/connect/status',
+			'siteSettingsUrl'    => SiteSettings::page_url(),
+			'userConnectionUrl'  => UserConnectionPage::page_url(),
+			'restNonce'          => wp_create_nonce( 'wp_rest' ),
 		];
 	}
 

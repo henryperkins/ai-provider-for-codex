@@ -371,11 +371,43 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 			]
 		);
 
-		$codex_provider_pending = PendingConnectionRepository::get_for_user( $codex_provider_temporary_user_id );
-		$codex_provider_assert( is_array( $codex_provider_pending ), 'Pending connection state was not persisted.' );
-		$codex_provider_assert( 'auth_verify' === (string) $codex_provider_pending['authSessionId'], 'Pending auth session ID did not persist.' );
+			$codex_provider_pending = PendingConnectionRepository::get_for_user( $codex_provider_temporary_user_id );
+			$codex_provider_assert( is_array( $codex_provider_pending ), 'Pending connection state was not persisted.' );
+			$codex_provider_assert( 'auth_verify' === (string) $codex_provider_pending['authSessionId'], 'Pending auth session ID did not persist.' );
+			ob_start();
+			UserConnectionPage::render_page();
+			$codex_provider_connection_page_html = (string) ob_get_clean();
 
-		$codex_provider_server = rest_get_server();
+				$codex_provider_assert( false !== strpos( $codex_provider_connection_page_html, 'id="codex-provider-connection-config"' ), 'User connection page should render JSON config for the enhanced connection flow.' );
+			$codex_provider_user_page_source       = (string) file_get_contents( dirname( __DIR__ ) . '/src/Admin/UserConnectionPage.php' );
+			$codex_provider_connection_flow_source = (string) file_get_contents( dirname( __DIR__ ) . '/assets/connection-flow.js' );
+			$codex_provider_connector_source       = (string) file_get_contents( dirname( __DIR__ ) . '/assets/connectors.js' );
+			$codex_provider_user_connection_source = (string) file_get_contents( dirname( __DIR__ ) . '/assets/user-connection.js' );
+				$codex_provider_assert( false !== strpos( $codex_provider_user_page_source, 'JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT' ), 'User connection page JSON config should be encoded with hex flags for script-tag safety.' );
+				$codex_provider_assert( false !== strpos( $codex_provider_user_page_source, 'admin_print_scripts-{$hook}' ), 'User connection page should hook its script module enqueue to the concrete admin page hook.' );
+				$codex_provider_assert( false !== strpos( $codex_provider_connection_flow_source, 'getCodexConnectionPendingSupportText' ), 'Connection flow should expose a shared pending support-text helper.' );
+				$codex_provider_assert( false !== strpos( $codex_provider_connector_source, 'getCodexConnectionPendingSupportText' ), 'Connectors card should use the shared pending support-text helper so polling errors are visible.' );
+				$codex_provider_assert( false !== strpos( $codex_provider_user_connection_source, 'getCodexConnectionPendingSupportText' ), 'User connection page should use the shared pending support-text helper so polling errors are visible.' );
+				UserConnectionPage::enqueue_assets();
+			$codex_provider_script_module_queue = function_exists( 'wp_script_modules' ) ? wp_script_modules()->get_queue() : [];
+			$codex_provider_assert( in_array( 'ai-provider-for-codex/user-connection', $codex_provider_script_module_queue, true ), 'User connection page should enqueue the enhanced connection-flow script module.' );
+			$codex_provider_assert( false !== strpos( $codex_provider_connection_page_html, 'data-codex-connection-root' ), 'User connection page should render the enhanced connection root.' );
+			$codex_provider_assert( false !== strpos( $codex_provider_connection_page_html, 'data-codex-connection-console' ), 'User connection page should render an always-present enhanced connection console for first-time starts.' );
+			$codex_provider_assert( false !== strpos( $codex_provider_connection_page_html, 'data-codex-base-actions' ), 'User connection page should expose the base action container to hide during enhanced flows.' );
+			$codex_provider_assert( false !== strpos( $codex_provider_connection_page_html, 'data-codex-start-connect' ), 'User connection page should mark start/restart links for progressive enhancement while preserving href fallbacks.' );
+				$codex_provider_assert( false !== strpos( $codex_provider_connection_page_html, 'data-codex-copy-code' ), 'User connection page should render an explicit Copy code button.' );
+				$codex_provider_assert( false !== strpos( $codex_provider_connection_page_html, 'data-codex-check-status' ), 'User connection page should preserve the manual Check connection status fallback.' );
+				$codex_provider_assert( false !== strpos( $codex_provider_connection_page_html, 'data-codex-retry-sync' ), 'User connection page should expose the retry-sync action for retryable completed pending sessions.' );
+				$codex_provider_assert( false !== strpos( $codex_provider_connection_page_html, 'data-codex-connected-actions' ), 'User connection page should render enhanced connected-state actions.' );
+				$codex_provider_assert( false !== strpos( $codex_provider_connection_page_html, 'data-codex-refresh-status' ), 'Enhanced connected state should expose a Refresh status action.' );
+				$codex_provider_assert( false !== strpos( $codex_provider_connection_page_html, 'data-codex-disconnect' ), 'Enhanced connected state should expose a Disconnect action.' );
+				$codex_provider_assert( false !== strpos( $codex_provider_connection_page_html, 'data-codex-server-fallback' ), 'User connection page should label server-rendered pending blocks so JavaScript can hide them once enhanced rendering takes over.' );
+			$codex_provider_assert( false !== strpos( $codex_provider_connection_page_html, 'ABCD-EFGH' ), 'Pending connection state should keep the device code visible in the no-JavaScript fallback.' );
+			$codex_provider_pending_verification_url = is_array( $codex_provider_pending ) ? (string) ( $codex_provider_pending['verificationUrl'] ?? '' ) : '';
+			$codex_provider_assert( '' !== $codex_provider_pending_verification_url, 'Pending connection fixture should include a runtime-provided verification URL.' );
+			$codex_provider_assert( false !== strpos( $codex_provider_connection_page_html, esc_url( $codex_provider_pending_verification_url ) ), 'Pending connection state should keep the runtime-provided verification URL visible in the no-JavaScript fallback.' );
+
+			$codex_provider_server = rest_get_server();
 		$codex_provider_routes = $codex_provider_server->get_routes();
 
 			$codex_provider_assert( isset( $codex_provider_routes['/codex-provider/v1/connect/start'] ), 'Connect start route is not registered.' );
@@ -421,6 +453,14 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 			ConnectorsIntegration::filter_ai_plugin_has_credentials( true, [] ) === true,
 			'AI plugin credential check should preserve an existing true result.'
 		);
+		$_GET['page'] = 'options-connectors';
+		$codex_provider_connector_data = ConnectorsIntegration::script_module_data( [] );
+		unset( $_GET['page'] );
+
+		$codex_provider_assert( '/codex-provider/v1/connect/status' === (string) ( $codex_provider_connector_data['connectStatusPath'] ?? '' ), 'Connector module data should expose the connect/status REST path.' );
+		$codex_provider_assert( '/codex-provider/v1/status' === (string) ( $codex_provider_connector_data['providerStatusPath'] ?? '' ), 'Connector module data should expose the passive provider status REST path.' );
+		$codex_provider_assert( ! empty( $codex_provider_connector_data['connectStatusUrl'] ), 'Connector module data should expose the connect/status REST URL.' );
+		$codex_provider_assert( ! empty( $codex_provider_connector_data['providerStatusUrl'] ), 'Connector module data should expose the provider status REST URL.' );
 		$codex_provider_assert(
 			ConnectorsIntegration::filter_ai_plugin_has_valid_credentials( true ) === true,
 			'AI plugin valid-credential check should preserve an existing true result.'
@@ -684,6 +724,8 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 
 				$codex_provider_assert( false !== strpos( $codex_provider_connection_page_html, 'Retry account sync' ), 'User connection page should offer a retry-sync action when snapshot refresh fails after login.' );
 				$codex_provider_assert( false !== strpos( $codex_provider_connection_page_html, 'Snapshot refresh failed during verification.' ), 'User connection page should surface the stored sync error after login completes.' );
+				$codex_provider_assert( false !== strpos( $codex_provider_connection_page_html, 'Retry account sync' ), 'Retryable completed pending state should still render Retry account sync.' );
+				$codex_provider_assert( false !== strpos( $codex_provider_connection_page_html, 'Snapshot refresh failed during verification.' ), 'Retryable completed pending state should preserve the stored sync error.' );
 			}
 		);
 

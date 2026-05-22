@@ -90,7 +90,7 @@ class JsonRpcSession:
                 "protocolVersion": "1",
                 "clientInfo": {
                     "name": "codex-wp-sidecar",
-                    "version": "0.1.1",
+                    "version": "0.1.2",
                 },
                 "capabilities": {
                     "optOutNotificationMethods": INITIALIZE_CAPABILITY_OPTOUTS,
@@ -750,7 +750,7 @@ class RuntimeHandler(BaseHTTPRequestHandler):
                     {
                         "ok": True,
                         "service": "codex-wp-sidecar",
-                        "version": "0.1.1",
+                        "version": "0.1.2",
                         "codexBin": CODEX_BIN,
                     }
                 )

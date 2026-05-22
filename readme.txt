@@ -4,7 +4,7 @@ Tags: ai, codex, wordpress-ai-client
 Requires at least: 7.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.1.1
+Stable tag: 0.1.2
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -119,6 +119,9 @@ The sidecar is designed for localhost-only communication between WordPress and t
 Support is limited to documented, self-managed environments that can run the local sidecar runtime and the `codex` CLI on the same host as WordPress.
 
 == Changelog ==
+
+= 0.1.2 =
+* Improve the Codex account connection flow with inline device-code approval, automatic status checks, copy-code support, and retry actions.
 
 = 0.1.1 =
 * Build the Connectors logo path through `WP_PLUGIN_DIR` so symlinked plugin installs render the logo correctly.

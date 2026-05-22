@@ -81,5 +81,9 @@ if grep -Fq "WordPress 6.9" "$readiness_checklist"; then
 	exit 1
 fi
 
+node --input-type=module --check < "$ROOT_DIR/assets/connection-flow.js" >/dev/null
 node --input-type=module --check < "$ROOT_DIR/assets/connectors.js" >/dev/null
+node --input-type=module --check < "$ROOT_DIR/assets/user-connection.js" >/dev/null
+node --test "$ROOT_DIR/assets/connection-flow.test.mjs"
+node --test "$ROOT_DIR/assets/user-connection.test.mjs"
 wp --path="$WP_PATH" eval-file "$ROOT_DIR/scripts/verify.php"

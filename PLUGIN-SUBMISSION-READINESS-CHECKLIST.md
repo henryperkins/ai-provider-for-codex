@@ -9,7 +9,7 @@ Version and requirement references refreshed: 2026-05-22
 
 ## Current Status Summary
 
-- `[pass]` Header version and readme stable tag currently match: `0.1.1`
+- `[pass]` Header version and readme stable tag currently match: `0.1.2`
 - `[pass]` `Requires at least` and `Requires PHP` are aligned between the main plugin file and `readme.txt`
 - `[pass]` Local verification script currently passes
 - `[pass]` Plugin Check has been run locally against the release-style file set and currently reports no findings
@@ -57,8 +57,8 @@ Repo notes:
 
 Repo notes:
 
-- `Version: 0.1.1` in [`plugin.php`](./plugin.php)
-- `Stable tag: 0.1.1` in [`readme.txt`](./readme.txt)
+- `Version: 0.1.2` in [`plugin.php`](./plugin.php)
+- `Stable tag: 0.1.2` in [`readme.txt`](./readme.txt)
 - `Text Domain: ai-provider-for-codex` in [`plugin.php`](./plugin.php)
 - `Requires at least: 7.0` in [`plugin.php`](./plugin.php)
 - `Requires PHP: 7.4` in [`plugin.php`](./plugin.php)
@@ -179,7 +179,7 @@ Repo notes:
 
 - Local verification currently passes using [`scripts/verify.sh`](./scripts/verify.sh).
 - The verification script covers text generation through the default loopback runtime URL so regressions caused by `wp_safe_remote_request()` rejecting `http://127.0.0.1:4317` are caught before release.
-- A release-style zip currently builds successfully at `../plugin-builds/ai-provider-for-codex-0.1.1.zip`.
+- A release-style zip currently builds successfully at `../plugin-builds/ai-provider-for-codex-0.1.2.zip`.
 - Plugin Check 1.9.0 is installed on this site and `WP_PATH=/home/dev/wp-hperkins-com bash scripts/plugin-check-release.sh` currently reports no findings.
 
 ## 10. Submission Packet
