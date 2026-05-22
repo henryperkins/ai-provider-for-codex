@@ -77,5 +77,5 @@ done < <(find "${TARGET_DIR}" -type f -name '*.php' -print0)
 echo "Created ${OUTPUT_ZIP}"
 echo
 echo "Before submitting to WordPress.org, also run:"
-echo "  - Plugin Check against an installed copy:  wp plugin check ${SLUG}"
-echo "  - readme.txt validator:                    https://wordpress.org/plugins/developers/readme-validator/"
+echo "  - Release-style Plugin Check:  WP_PATH=/path/to/wordpress bash scripts/plugin-check-release.sh"
+echo "  - Readme validator:            https://wordpress.org/plugins/developers/readme-validator/"

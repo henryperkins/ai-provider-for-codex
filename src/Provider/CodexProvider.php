@@ -52,6 +52,8 @@ final class CodexProvider extends AbstractApiProvider {
 	 * @return ProviderMetadata
 	 */
 	protected static function createProviderMetadata(): ProviderMetadata {
+		$ai_client_version = (string) constant( AiClient::class . '::VERSION' );
+
 		$provider_metadata_args = [
 			'codex',
 			'Codex',
@@ -61,7 +63,7 @@ final class CodexProvider extends AbstractApiProvider {
 		];
 
 		// Provider description support was added in php-ai-client 1.2.0.
-		if ( version_compare( AiClient::VERSION, '1.2.0', '>=' ) ) {
+		if ( version_compare( $ai_client_version, '1.2.0', '>=' ) ) {
 			$provider_metadata_args[] = __( 'AI text generation through a localhost Codex sidecar. Configure the shared runtime, then each user connects their own Codex or ChatGPT account.', 'ai-provider-for-codex' );
 		}
 
@@ -69,7 +71,7 @@ final class CodexProvider extends AbstractApiProvider {
 		// Build the path through WP_PLUGIN_DIR + plugin_basename so the WP core resolver
 		// (_wp_connectors_resolve_ai_provider_logo_url) accepts it even when the plugin
 		// is loaded via a symlink — PHP's __DIR__ always returns the realpath.
-		if ( version_compare( AiClient::VERSION, '1.3.0', '>=' ) ) {
+		if ( version_compare( $ai_client_version, '1.3.0', '>=' ) ) {
 			$provider_dir = WP_PLUGIN_DIR . '/' . dirname( plugin_basename( \AIProviderForCodex\PLUGIN_FILE ) );
 			$provider_metadata_args[] = $provider_dir . '/src/Provider/logo.svg';
 		}

@@ -5,10 +5,11 @@ This checklist is specific to `ai-provider-for-codex`.
 Use it before submitting a zip to the WordPress.org plugin directory and again before publishing the first approved SVN release.
 
 Last reviewed: 2026-04-04
+Version and requirement references refreshed: 2026-05-22
 
 ## Current Status Summary
 
-- `[pass]` Header version and readme stable tag currently match: `0.1.0`
+- `[pass]` Header version and readme stable tag currently match: `0.1.1`
 - `[pass]` `Requires at least` and `Requires PHP` are aligned between the main plugin file and `readme.txt`
 - `[pass]` Local verification script currently passes
 - `[pass]` Plugin Check has been run locally against the release-style file set and currently reports no findings
@@ -56,10 +57,10 @@ Repo notes:
 
 Repo notes:
 
-- `Version: 0.1.0` in [`plugin.php`](./plugin.php)
-- `Stable tag: 0.1.0` in [`readme.txt`](./readme.txt)
+- `Version: 0.1.1` in [`plugin.php`](./plugin.php)
+- `Stable tag: 0.1.1` in [`readme.txt`](./readme.txt)
 - `Text Domain: ai-provider-for-codex` in [`plugin.php`](./plugin.php)
-- `Requires at least: 6.9` in [`plugin.php`](./plugin.php)
+- `Requires at least: 7.0` in [`plugin.php`](./plugin.php)
 - `Requires PHP: 7.4` in [`plugin.php`](./plugin.php)
 - `Tested up to: 7.0` in [`readme.txt`](./readme.txt)
 
@@ -104,7 +105,7 @@ Repo notes:
 - The plugin includes activation and uninstall hooks in [`plugin.php`](./plugin.php) and [`uninstall.php`](./uninstall.php).
 - The sidecar runtime is real and implemented in [`sidecar/app/main.py`](./sidecar/app/main.py).
 - The release zip includes [`sidecar/`](./sidecar), including the Python runtime and systemd template. Shell installer scripts are excluded because Plugin Check reports `.sh` files as disallowed application files.
-- The plugin depends on WordPress AI Client support, bundled in WordPress 7.0+ or available separately on WordPress 6.9.
+- The plugin depends on WordPress 7.0+ with AI Client SDK 1.0+; if the standalone WordPress AI plugin provides the client, WordPress AI plugin 1.0+ is required.
 
 ## 7. Security And WordPress Coding Expectations
 
@@ -120,8 +121,9 @@ Repo notes:
 
 - Admin actions and REST routes appear to be protected in the current implementation.
 - The sidecar uses loopback plus bearer-token auth and constant-time token comparison.
-- Plugin Check 1.9.0 is installed on this site, and a release-style run currently reports no findings.
-- Re-run Plugin Check against the exact final submission zip on submission day.
+- Plugin Check 1.9.0 is installed on this site, and a release-style run currently reports no findings via `WP_PATH=/home/dev/wp-hperkins-com bash scripts/plugin-check-release.sh`.
+- A raw Plugin Check run against the symlinked development checkout is expected to report dev-only files such as `.gitignore`, `.distignore`, `scripts/`, `phpstan-stubs.php`, and internal root markdown. Those files are excluded from the release package.
+- Re-run Plugin Check against the final installable file set on submission day.
 
 ## 8. Release Packaging
 
@@ -151,7 +153,9 @@ Current packager excludes:
 - [`composer.lock`](./composer.lock)
 - [`phpstan.neon`](./phpstan.neon)
 - [`phpstan-baseline.neon`](./phpstan-baseline.neon)
+- [`phpstan-stubs.php`](./phpstan-stubs.php)
 - [`.gitignore`](./.gitignore)
+- [`.distignore`](./.distignore)
 - [`README.md`](./README.md)
 - [`LOCAL-SIDECAR-SPEC.md`](./LOCAL-SIDECAR-SPEC.md)
 - [`PLUGIN-SUBMISSION-READINESS-CHECKLIST.md`](./PLUGIN-SUBMISSION-READINESS-CHECKLIST.md)
@@ -160,6 +164,8 @@ Current packager excludes:
 - [`vendor/`](./vendor)
 - [`package-lock.json`](./package-lock.json)
 - Python build artifacts (`__pycache__`, `*.pyc`, `*.pyo`)
+
+The release-style Plugin Check wrapper is [`scripts/plugin-check-release.sh`](./scripts/plugin-check-release.sh); it mirrors the dev-only exclusions that Plugin Check cannot infer from a symlinked source checkout.
 
 ## 9. Testing And Verification
 
@@ -172,8 +178,9 @@ Current packager excludes:
 Repo notes:
 
 - Local verification currently passes using [`scripts/verify.sh`](./scripts/verify.sh).
-- A release-style zip currently builds successfully at `../plugin-builds/ai-provider-for-codex-0.1.0.zip`.
-- Plugin Check 1.9.0 is installed on this site and a release-style run currently reports no findings.
+- The verification script covers text generation through the default loopback runtime URL so regressions caused by `wp_safe_remote_request()` rejecting `http://127.0.0.1:4317` are caught before release.
+- A release-style zip currently builds successfully at `../plugin-builds/ai-provider-for-codex-0.1.1.zip`.
+- Plugin Check 1.9.0 is installed on this site and `WP_PATH=/home/dev/wp-hperkins-com bash scripts/plugin-check-release.sh` currently reports no findings.
 
 ## 10. Submission Packet
 
@@ -201,7 +208,7 @@ Suggested submission description points for this plugin:
 ## Immediate Next Actions For This Repo
 
 - [ ] Decide whether the plugin name or slug should change to reduce trademark risk before submission.
-- [ ] Re-run Plugin Check against the exact final submission zip on submission day.
+- [ ] Re-run release-style Plugin Check with `WP_PATH=/path/to/wordpress bash scripts/plugin-check-release.sh` on submission day, then install the final zip on a clean site if reviewer policy requires a raw installed-copy check.
 - [ ] Validate [`readme.txt`](./readme.txt) with the official readme validator.
 - [ ] Re-check `Tested up to` on the actual day of submission.
 

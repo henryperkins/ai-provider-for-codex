@@ -12,6 +12,7 @@ namespace AIProviderForCodex\Admin;
 use AIProviderForCodex\Auth\ConnectionService;
 use AIProviderForCodex\Provider\ModelCatalogState;
 use AIProviderForCodex\Provider\SupportChecks;
+use AIProviderForCodex\Runtime\Settings;
 use RuntimeException;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -29,13 +30,76 @@ final class UserConnectionPage {
 	 * @return void
 	 */
 	public static function register_page(): void {
-		add_users_page(
+		$hook = add_users_page(
 			__( 'Codex Provider', 'ai-provider-for-codex' ),
 			__( 'Codex Provider', 'ai-provider-for-codex' ),
 			'read',
 			'ai-provider-for-codex',
 			[ self::class, 'render_page' ]
 		);
+
+		if ( $hook ) {
+			add_action( "load-{$hook}", [ self::class, 'register_help_tab' ] );
+		}
+	}
+
+	/**
+	 * Registers the contextual help tab for this screen.
+	 *
+	 * @return void
+	 */
+	public static function register_help_tab(): void {
+		$screen = get_current_screen();
+
+		if ( ! $screen ) {
+			return;
+		}
+
+		$screen->add_help_tab(
+			[
+				'id'       => 'codex-provider-how-it-works',
+				'title'    => __( 'How Codex Provider works', 'ai-provider-for-codex' ),
+				'callback' => [ self::class, 'render_help_tab' ],
+			]
+		);
+	}
+
+	/**
+	 * Renders the contextual help tab content.
+	 *
+	 * @return void
+	 */
+	public static function render_help_tab(): void {
+		$runtime_configured = Settings::has_required_configuration();
+		?>
+		<ul>
+			<li><?php esc_html_e( 'This site uses a local Codex runtime running on the same host as WordPress.', 'ai-provider-for-codex' ); ?></li>
+			<li><?php esc_html_e( 'Each person connects their own Codex or ChatGPT account so access and billing stay user-specific.', 'ai-provider-for-codex' ); ?></li>
+		</ul>
+		<p>
+			<?php
+			echo wp_kses_post(
+				SafeFormat::sprintf(
+					/* translators: 1: site settings URL, 2: connectors settings URL. */
+					__(
+						'This page manages your personal account link. <a href="%1$s">Plugin settings</a> control the local runtime shared by all users. <a href="%2$s">Settings &gt; Connectors</a> shows overall provider status.',
+						'ai-provider-for-codex'
+					),
+					esc_url( SiteSettings::page_url() ),
+					esc_url( admin_url( 'options-connectors.php' ) )
+				)
+			);
+			?>
+		</p>
+		<?php if ( ! $runtime_configured ) : ?>
+			<p><strong><?php esc_html_e( 'A site administrator still needs to finish the shared runtime setup before you can connect an account here.', 'ai-provider-for-codex' ); ?></strong></p>
+		<?php endif; ?>
+		<ol>
+			<li><?php esc_html_e( 'A site administrator creates and starts the local sidecar service, then confirms Codex is healthy on Settings > Connectors.', 'ai-provider-for-codex' ); ?></li>
+			<li><?php esc_html_e( 'You click Connect Codex account on this page.', 'ai-provider-for-codex' ); ?></li>
+			<li><?php esc_html_e( 'You open the verification page, enter the device code, then come back here and refresh status.', 'ai-provider-for-codex' ); ?></li>
+		</ol>
+		<?php
 	}
 
 	/**
@@ -127,11 +191,6 @@ final class UserConnectionPage {
 		}
 		?>
 		<style>
-			.codex-how-box { background: #f0f6fc; border: 1px solid #c3c4c7; border-left: 4px solid #2271b1; padding: 0.75rem 1.25rem; max-width: 960px; margin-bottom: 1.5rem; border-radius: 2px; }
-			.codex-how-box p { margin: 0.25rem 0; }
-			.codex-how-box ol { margin: 0.5rem 0 0.25rem 1.25rem; }
-			.codex-how-box ul { margin: 0.5rem 0 0.25rem 1.25rem; }
-			.codex-how-box li { margin-bottom: 0.35rem; }
 			.codex-indicator { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
 			.codex-indicator.good { background: #00a32a; }
 			.codex-indicator.warning { background: #dba617; }
@@ -147,37 +206,6 @@ final class UserConnectionPage {
 		</style>
 		<div class="wrap">
 			<h1><?php esc_html_e( 'Codex Provider', 'ai-provider-for-codex' ); ?></h1>
-
-			<div class="codex-how-box">
-				<p><strong><?php esc_html_e( 'How Codex works', 'ai-provider-for-codex' ); ?></strong></p>
-				<ul>
-					<li><?php esc_html_e( 'This site uses a local Codex runtime running on the same host as WordPress.', 'ai-provider-for-codex' ); ?></li>
-					<li><?php esc_html_e( 'Each person connects their own Codex or ChatGPT account so access and billing stay user-specific.', 'ai-provider-for-codex' ); ?></li>
-				</ul>
-				<p>
-					<?php
-					echo wp_kses_post(
-						SafeFormat::sprintf(
-							/* translators: 1: site settings URL, 2: connectors settings URL. */
-							__(
-								'This page manages your personal account link. <a href="%1$s">Plugin settings</a> control the local runtime shared by all users. <a href="%2$s">Settings &gt; Connectors</a> shows overall provider status.',
-								'ai-provider-for-codex'
-							),
-							esc_url( SiteSettings::page_url() ),
-							esc_url( admin_url( 'options-connectors.php' ) )
-						)
-					);
-					?>
-				</p>
-				<?php if ( empty( $status['runtimeConfigured'] ) ) : ?>
-					<p><strong><?php esc_html_e( 'A site administrator still needs to finish the shared runtime setup before you can connect an account here.', 'ai-provider-for-codex' ); ?></strong></p>
-				<?php endif; ?>
-				<ol>
-					<li><?php esc_html_e( 'A site administrator creates and starts the local sidecar service, then confirms Codex is healthy on Settings > Connectors.', 'ai-provider-for-codex' ); ?></li>
-					<li><?php esc_html_e( 'You click Connect Codex account on this page.', 'ai-provider-for-codex' ); ?></li>
-					<li><?php esc_html_e( 'You open the verification page, enter the device code, then come back here and refresh status.', 'ai-provider-for-codex' ); ?></li>
-				</ol>
-			</div>
 
 			<?php self::render_notice( $notice ); ?>
 

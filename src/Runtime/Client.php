@@ -116,9 +116,23 @@ final class Client {
 			throw new RuntimeException( $message );
 		}
 
-		$status_code = (int) wp_remote_retrieve_response_code( $response );
-		$raw_body    = (string) wp_remote_retrieve_body( $response );
-		$payload     = [];
+		return $this->process_response(
+			(int) wp_remote_retrieve_response_code( $response ),
+			(string) wp_remote_retrieve_body( $response ),
+			(string) wp_remote_retrieve_response_message( $response )
+		);
+	}
+
+	/**
+	 * Parses the runtime response body and converts non-2xx responses into structured exceptions.
+	 *
+	 * @param int    $status_code HTTP status code.
+	 * @param string $raw_body Raw response body.
+	 * @param string $fallback_status_message Reason phrase to fall back to when the runtime returns no error message.
+	 * @return array<string,mixed>
+	 */
+	private function process_response( int $status_code, string $raw_body, string $fallback_status_message ): array {
+		$payload = [];
 
 		if ( '' !== $raw_body ) {
 			$payload = json_decode( $raw_body, true );
@@ -131,7 +145,7 @@ final class Client {
 
 		if ( $status_code >= 400 ) {
 			$runtime_error_code = sanitize_key( (string) ( $payload['error']['code'] ?? '' ) );
-			$runtime_message    = (string) ( $payload['error']['message'] ?? wp_remote_retrieve_response_message( $response ) );
+			$runtime_message    = (string) ( $payload['error']['message'] ?? $fallback_status_message );
 			$message            = self::normalize_runtime_error_message(
 				$status_code,
 				$runtime_message,
@@ -199,11 +213,22 @@ final class Client {
 	 * @return string
 	 */
 	public static function normalize_transport_error_message( \WP_Error $error, string $url, int $timeout ): string {
-		$message = $error->get_error_message();
-		$lower   = strtolower( $message );
-		$host    = (string) wp_parse_url( $url, PHP_URL_HOST );
-		$port    = (int) wp_parse_url( $url, PHP_URL_PORT );
-		$target  = '' !== $host ? $host : $url;
+		return self::normalize_transport_error_string( $error->get_error_message(), $url, $timeout );
+	}
+
+	/**
+	 * Maps a raw transport error message to a clearer runtime message.
+	 *
+	 * @param string $message Raw error message from the transport layer.
+	 * @param string $url Request URL.
+	 * @param int    $timeout Timeout in seconds.
+	 * @return string
+	 */
+	private static function normalize_transport_error_string( string $message, string $url, int $timeout ): string {
+		$lower  = strtolower( $message );
+		$host   = (string) wp_parse_url( $url, PHP_URL_HOST );
+		$port   = (int) wp_parse_url( $url, PHP_URL_PORT );
+		$target = '' !== $host ? $host : $url;
 
 		if ( $port > 0 ) {
 			$target .= ':' . $port;

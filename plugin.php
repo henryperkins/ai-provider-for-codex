@@ -115,7 +115,8 @@ function check_wp_version(): bool {
  * @return bool
  */
 function check_ai_client(): bool {
-	$has_supported_ai_client = class_exists( AiClient::class ) && version_compare( AiClient::VERSION, '1.0', '>=' );
+	$ai_client_version       = class_exists( AiClient::class ) ? (string) constant( AiClient::class . '::VERSION' ) : '';
+	$has_supported_ai_client = '' !== $ai_client_version && version_compare( $ai_client_version, '1.0', '>=' );
 	$has_supported_ai_plugin = ! defined( 'WPAI_VERSION' ) || version_compare( (string) constant( 'WPAI_VERSION' ), '1.0', '>=' );
 
 	if ( $has_supported_ai_client && $has_supported_ai_plugin ) {
@@ -125,7 +126,7 @@ function check_ai_client(): bool {
 	add_action(
 		'admin_notices',
 		static function () {
-			$current_client_version = class_exists( AiClient::class ) ? AiClient::VERSION : __( 'not available', 'ai-provider-for-codex' );
+			$current_client_version = class_exists( AiClient::class ) ? (string) constant( AiClient::class . '::VERSION' ) : __( 'not available', 'ai-provider-for-codex' );
 			$current_plugin_version = defined( 'WPAI_VERSION' ) ? (string) constant( 'WPAI_VERSION' ) : __( 'not detected', 'ai-provider-for-codex' );
 
 			requirement_notice(

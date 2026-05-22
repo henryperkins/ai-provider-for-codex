@@ -51,5 +51,35 @@ if [[ "$locked_ai_client_version" != dev-* ]] && ! php -r 'exit(version_compare(
 	exit 1
 fi
 
+plugin_requires_wp="$(
+	sed -n 's/^ \* Requires at least:[[:space:]]*//p' "$ROOT_DIR/plugin.php" | head -n 1
+)"
+readme_requires_wp="$(
+	sed -n 's/^Requires at least:[[:space:]]*//p' "$ROOT_DIR/readme.txt" | head -n 1
+)"
+readiness_checklist="$ROOT_DIR/PLUGIN-SUBMISSION-READINESS-CHECKLIST.md"
+
+if [[ -z "$plugin_requires_wp" ]]; then
+	echo "plugin.php must declare a Requires at least header." >&2
+	exit 1
+fi
+
+if [[ "$plugin_requires_wp" != "$readme_requires_wp" ]]; then
+	echo "plugin.php and readme.txt must declare the same Requires at least value." >&2
+	echo "  plugin.php: $plugin_requires_wp" >&2
+	echo "  readme.txt: $readme_requires_wp" >&2
+	exit 1
+fi
+
+if ! grep -Fq "Requires at least: $plugin_requires_wp" "$readiness_checklist"; then
+	echo "PLUGIN-SUBMISSION-READINESS-CHECKLIST.md must reference the current Requires at least value: $plugin_requires_wp." >&2
+	exit 1
+fi
+
+if grep -Fq "WordPress 6.9" "$readiness_checklist"; then
+	echo "PLUGIN-SUBMISSION-READINESS-CHECKLIST.md still refers to unsupported WordPress 6.9 runtime support." >&2
+	exit 1
+fi
+
 node --input-type=module --check < "$ROOT_DIR/assets/connectors.js" >/dev/null
 wp --path="$WP_PATH" eval-file "$ROOT_DIR/scripts/verify.php"
