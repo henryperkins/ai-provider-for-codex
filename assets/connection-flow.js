@@ -55,6 +55,47 @@ async function readJsonResponse( response ) {
 	return body;
 }
 
+function createPrearmedClipboardCopy( windowObject, clipboard ) {
+	const ClipboardItemConstructor = windowObject.ClipboardItem;
+	const BlobConstructor = windowObject.Blob;
+
+	if ( ! clipboard?.write || ! ClipboardItemConstructor || ! BlobConstructor ) {
+		return null;
+	}
+
+	let resolveText;
+	let rejectText;
+	const dataPromise = new Promise( ( resolve, reject ) => {
+		resolveText = resolve;
+		rejectText = reject;
+	} );
+	const blobPromise = dataPromise.then(
+		( text ) => new BlobConstructor( [ text ], { type: 'text/plain' } )
+	);
+	blobPromise.catch( () => {} );
+
+	try {
+		const item = new ClipboardItemConstructor( {
+			'text/plain': blobPromise,
+		} );
+		const writePromise = Promise.resolve( clipboard.write( [ item ] ) );
+		writePromise.catch( () => {} );
+
+		return {
+			copy( value ) {
+				resolveText( String( value ) );
+				return writePromise;
+			},
+			cancel() {
+				rejectText( new Error( 'Clipboard copy was canceled.' ) );
+			},
+		};
+	} catch ( error ) {
+		rejectText( error );
+		return null;
+	}
+}
+
 export function createCodexConnectionFlow( options ) {
 	const windowObject = options.windowObject || window;
 	const documentObject = windowObject.document;
@@ -333,9 +374,30 @@ export function createCodexConnectionFlow( options ) {
 
 		const authWindow = windowObject.open?.( 'about:blank', 'codex-provider-auth' ) || null;
 		const popupStatus = authWindow ? 'opened' : 'blocked';
+		const prearmedClipboardCopy = createPrearmedClipboardCopy( windowObject, clipboard );
 
 		try {
 			const result = await request( options.startUrl, { method: 'POST' } );
+
+			if ( result?.status === 'connected' ) {
+				prearmedClipboardCopy?.cancel();
+
+				if ( authWindow && ! authWindow.closed ) {
+					try {
+						authWindow.close();
+					} catch ( closeError ) {
+						onError( closeError );
+					}
+				}
+
+				terminal( {
+					status: 'connected',
+					connection: result.connection || null,
+					catalog: result.catalog || result.snapshot || null,
+					error: '',
+				} );
+				return result;
+			}
 
 			let finalPopupStatus = popupStatus;
 			if ( authWindow?.closed ) {
@@ -361,7 +423,15 @@ export function createCodexConnectionFlow( options ) {
 				error: '',
 			} );
 
-			if ( clipboard?.writeText && result.userCode ) {
+			if ( prearmedClipboardCopy && result.userCode ) {
+				try {
+					await prearmedClipboardCopy.copy( result.userCode );
+					emit( { copyStatus: 'copied' } );
+				} catch ( error ) {
+					onError( error );
+					emit( { copyStatus: 'failed' } );
+				}
+			} else if ( clipboard?.writeText && result.userCode ) {
 				try {
 					await clipboard.writeText( result.userCode );
 					emit( { copyStatus: 'copied' } );
@@ -375,6 +445,8 @@ export function createCodexConnectionFlow( options ) {
 			scheduleNextPoll();
 			return result;
 		} catch ( error ) {
+			prearmedClipboardCopy?.cancel();
+
 			if ( authWindow && ! authWindow.closed ) {
 				try {
 					authWindow.close();

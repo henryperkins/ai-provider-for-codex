@@ -320,7 +320,9 @@ final class ConnectorsIntegration {
 		}
 
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reads the current admin page slug only to detect screen context.
-		return isset( $_GET['page'] ) && 'options-connectors' === sanitize_key( wp_unslash( $_GET['page'] ) );
+		$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : '';
+
+		return in_array( $page, [ 'options-connectors', 'options-connectors-wp-admin' ], true );
 	}
 
 	/**

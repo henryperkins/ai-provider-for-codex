@@ -42,6 +42,12 @@ final class ConnectionService {
 			throw self::runtime_exception( esc_html__( 'The current user could not be loaded.', 'ai-provider-for-codex' ) );
 		}
 
+		$existing_connection = $this->reuse_stored_auth( $wp_user_id );
+
+		if ( null !== $existing_connection ) {
+			return $existing_connection;
+		}
+
 		PendingConnectionRepository::delete_for_user( $wp_user_id );
 
 		$client   = new Client();
@@ -244,6 +250,32 @@ final class ConnectionService {
 		}
 
 		return 'conn_local_' . $wp_user_id;
+	}
+
+	/**
+	 * Reuses a valid stored sidecar auth file before requesting a new device code.
+	 *
+	 * @param int $wp_user_id User ID.
+	 * @return array<string,mixed>|null
+	 */
+	private function reuse_stored_auth( int $wp_user_id ): ?array {
+		try {
+			$snapshot = $this->refresh_snapshot( $wp_user_id, $this->connection_id_for_user( $wp_user_id ) );
+		} catch ( RuntimeRequestException $exception ) {
+			if ( $exception->is_auth_required() ) {
+				return null;
+			}
+
+			throw $exception;
+		}
+
+		PendingConnectionRepository::delete_for_user( $wp_user_id );
+
+		return [
+			'status'     => 'connected',
+			'connection' => ConnectionRepository::get_for_user( $wp_user_id ),
+			'snapshot'   => $snapshot,
+		];
 	}
 
 	/**

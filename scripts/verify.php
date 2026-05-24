@@ -461,6 +461,11 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 		$codex_provider_assert( '/codex-provider/v1/status' === (string) ( $codex_provider_connector_data['providerStatusPath'] ?? '' ), 'Connector module data should expose the passive provider status REST path.' );
 		$codex_provider_assert( ! empty( $codex_provider_connector_data['connectStatusUrl'] ), 'Connector module data should expose the connect/status REST URL.' );
 		$codex_provider_assert( ! empty( $codex_provider_connector_data['providerStatusUrl'] ), 'Connector module data should expose the provider status REST URL.' );
+		$_GET['page'] = 'options-connectors-wp-admin';
+		$codex_provider_connector_app_data = ConnectorsIntegration::script_module_data( [] );
+		unset( $_GET['page'] );
+
+		$codex_provider_assert( '/codex-provider/v1/connect/status' === (string) ( $codex_provider_connector_app_data['connectStatusPath'] ?? '' ), 'Connector module data should also load on the routed Connectors admin app.' );
 		$codex_provider_assert(
 			ConnectorsIntegration::filter_ai_plugin_has_valid_credentials( true ) === true,
 			'AI plugin valid-credential check should preserve an existing true result.'
@@ -540,6 +545,66 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 					is_array( $request_body ) && $codex_provider_temporary_user_id === (int) ( $request_body['wpUserId'] ?? 0 ),
 					'Codex text generation should send the current WordPress user ID to the runtime.'
 				);
+			}
+		);
+
+		ConnectionService::invalidate_local_connection( $codex_provider_temporary_user_id );
+		$codex_provider_start_connect_login_requests = [];
+		$codex_provider_with_mock_runtime(
+			static function ( $preempt, array $args, string $url ) use ( $codex_provider_base_url, $codex_provider_http_json_response, $codex_provider_temporary_model_a, $codex_provider_user_email, &$codex_provider_start_connect_login_requests ) {
+				if ( 0 !== strpos( $url, $codex_provider_base_url ) ) {
+					return $preempt;
+				}
+
+				$path = (string) wp_parse_url( $url, PHP_URL_PATH );
+
+				if ( '/v1/login/start' === $path ) {
+					$codex_provider_start_connect_login_requests[] = $path;
+
+					return $codex_provider_http_json_response(
+						200,
+						[
+							'authSessionId'   => 'auth_should_not_start',
+							'status'          => 'pending',
+							'verificationUrl' => 'https://chatgpt.com/device',
+							'userCode'        => 'NEWC-ODE1',
+						]
+					);
+				}
+
+				if ( '/v1/account/snapshot' === $path ) {
+					return $codex_provider_http_json_response(
+						200,
+						[
+							'account'      => [
+								'email'    => $codex_provider_user_email,
+								'planType' => 'plus',
+								'authMode' => 'chatgpt',
+								'type'     => 'chatgpt',
+							],
+							'authStored'   => true,
+							'defaultModel' => $codex_provider_temporary_model_a,
+							'models'       => [
+								[
+									'id'    => $codex_provider_temporary_model_a,
+									'label' => 'Codex Verify Alpha',
+								],
+							],
+							'rateLimits'   => [],
+						]
+					);
+				}
+
+				return $preempt;
+			},
+			static function () use ( $codex_provider_assert, $codex_provider_temporary_model_a, $codex_provider_temporary_user_id, &$codex_provider_start_connect_login_requests ) {
+				$codex_provider_result = ( new ConnectionService() )->start_connect( $codex_provider_temporary_user_id );
+
+				$codex_provider_assert( 'connected' === (string) ( $codex_provider_result['status'] ?? '' ), 'Connect start should reuse valid stored runtime auth before starting a new device-code login.' );
+				$codex_provider_assert( 0 === count( $codex_provider_start_connect_login_requests ), 'Connect start should not call login/start when account snapshot succeeds.' );
+				$codex_provider_assert( null === PendingConnectionRepository::get_for_user( $codex_provider_temporary_user_id ), 'Stored-auth reuse should not leave a pending device-code login.' );
+				$codex_provider_assert( is_array( ConnectionRepository::get_for_user( $codex_provider_temporary_user_id ) ), 'Stored-auth reuse should restore the local connection row.' );
+				$codex_provider_assert( $codex_provider_temporary_model_a === (string) ( $codex_provider_result['snapshot']['defaultModel'] ?? '' ), 'Stored-auth reuse should return the refreshed runtime snapshot.' );
 			}
 		);
 

@@ -144,11 +144,41 @@ function createHarness( options = {} ) {
 				this.detail = init?.detail;
 			}
 		},
+		ClipboardItem: options.clipboardItemSupported
+			? class ClipboardItem {
+					constructor( data ) {
+						this.data = data;
+					}
+			  }
+			: undefined,
+		Blob: options.clipboardItemSupported
+			? class Blob {
+					constructor( parts ) {
+						this.parts = parts;
+					}
+
+					async text() {
+						return this.parts.join( '' );
+					}
+			  }
+			: undefined,
 	};
 
 	const clipboard = options.clipboardUnsupported
 		? undefined
 		: {
+				write: options.clipboardItemSupported
+					? async ( items ) => {
+							sequence.push( 'clipboard-write' );
+							const item = items[ 0 ];
+							const blob = await item.data[ 'text/plain' ];
+							const text =
+								typeof blob?.text === 'function'
+									? await blob.text()
+									: String( blob ?? '' );
+							sequence.push( `clipboard-write:${ text }` );
+					  }
+					: undefined,
 				writeText: async ( value ) => {
 					sequence.push( `clipboard:${ value }` );
 					if ( options.clipboardError ) {
@@ -232,6 +262,39 @@ test( 'opens a placeholder popup synchronously before connect/start and later na
 	assert.equal( harness.popup.location.href, 'https://auth.openai.com/codex/device' );
 	assert.equal( lastState( harness ).status, 'pending' );
 	assert.equal( lastState( harness ).userCode, 'ABCD-EFGH' );
+} );
+
+test( 'pre-arms ClipboardItem copy before connect/start resolves on supporting browsers', async () => {
+	const harness = createHarness( { clipboardItemSupported: true } );
+
+	await harness.flow.start();
+
+	assert.deepEqual( harness.sequence.slice( 0, 3 ), [
+		'open',
+		'clipboard-write',
+		`fetch:${ START_URL }`,
+	] );
+	assert.ok( harness.sequence.includes( 'clipboard-write:ABCD-EFGH' ) );
+	assert.ok( ! harness.sequence.includes( 'clipboard:ABCD-EFGH' ) );
+	assert.equal( lastState( harness ).copyStatus, 'copied' );
+} );
+
+test( 'handles an already-stored auth snapshot from connect/start without starting a pending login', async () => {
+	const harness = createHarness( {
+		startResponse: {
+			status: 'connected',
+			connection: { account_email: 'stored@example.test', plan_type: 'plus' },
+			snapshot: { defaultModel: 'gpt-5-codex' },
+		},
+	} );
+
+	await harness.flow.start();
+
+	assert.equal( lastState( harness ).status, 'connected' );
+	assert.equal( lastState( harness ).connection.account_email, 'stored@example.test' );
+	assert.equal( lastState( harness ).catalog.defaultModel, 'gpt-5-codex' );
+	assert.equal( harness.popup.closeCalled, true );
+	assert.equal( harness.timers.size, 0 );
 } );
 
 test( 'reports clipboard failure without failing the pending login', async () => {
