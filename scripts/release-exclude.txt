@@ -33,6 +33,7 @@ Thumbs.db
 
 # Local-only state
 .remember
+.playwright-mcp
 .env
 
 # WP-CLI tooling (dev-only; we ship via package-release.sh, not dist-archive)
@@ -62,6 +63,9 @@ psalm.xml.dist
 tests
 phpunit.xml
 phpunit.xml.dist
+
+# JS test files (Node test runner; not consumed by the WP plugin runtime)
+*.test.mjs
 
 # JS / frontend dev tooling
 package.json
