@@ -15,6 +15,7 @@ Thumbs.db
 
 # Session state
 .remember/
+.playwright-mcp/
 
 # Environment
 .env
