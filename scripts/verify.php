@@ -523,6 +523,24 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 			&& false !== strpos( $codex_provider_connectors_source, 'status.runtime?.error' ),
 			'Codex connector card should render Connector Approval guidance and link to Tools > Connector Approvals when approval blocks the runtime probe.'
 		);
+		$codex_provider_connectors_integration_source = (string) file_get_contents( dirname( __DIR__ ) . '/src/Admin/ConnectorsIntegration.php' );
+		$codex_provider_dismiss_notice_position       = strpos( $codex_provider_connectors_integration_source, 'public static function ajax_dismiss_notice' );
+		$codex_provider_dismiss_notice_segment        = false === $codex_provider_dismiss_notice_position ? '' : substr( $codex_provider_connectors_integration_source, $codex_provider_dismiss_notice_position, 700 );
+		$codex_provider_dismiss_notice_nonce_position = strpos( $codex_provider_dismiss_notice_segment, "check_ajax_referer( 'codex-provider-dismiss-notice', 'nonce' )" );
+		$codex_provider_dismiss_notice_cap_position   = strpos( $codex_provider_dismiss_notice_segment, "current_user_can( 'read' )" );
+		$codex_provider_dismiss_notice_meta_position  = strpos( $codex_provider_dismiss_notice_segment, 'update_user_meta' );
+		$codex_provider_assert(
+			false !== $codex_provider_dismiss_notice_position,
+			'Dismiss-notice AJAX handler should be present.'
+		);
+		$codex_provider_assert(
+			false !== $codex_provider_dismiss_notice_nonce_position
+			&& false !== $codex_provider_dismiss_notice_cap_position
+			&& false !== $codex_provider_dismiss_notice_meta_position
+			&& $codex_provider_dismiss_notice_nonce_position < $codex_provider_dismiss_notice_meta_position
+			&& $codex_provider_dismiss_notice_cap_position < $codex_provider_dismiss_notice_meta_position,
+			'Dismiss-notice AJAX handler should verify nonce and capability before updating user meta.'
+		);
 		if ( class_exists( '\\WordPress\\AI\\Connector_Approval\\Approvals_Store' ) ) {
 			$codex_provider_approval_store_class                  = '\\WordPress\\AI\\Connector_Approval\\Approvals_Store';
 			$codex_provider_approval_basename                     = plugin_basename( \AIProviderForCodex\PLUGIN_FILE );
