@@ -11,6 +11,8 @@ import {
 const MODULE_ID = 'ai-provider-for-codex/connectors';
 const MAX_BOOT_ATTEMPTS = 40;
 const BOOT_DELAY_MS = 50;
+const RENDER_ASSERTION_ATTEMPTS = 20;
+const RENDER_ASSERTION_DELAY_MS = 50;
 
 let hasBooted = false;
 let bootAttempts = 0;
@@ -263,6 +265,37 @@ function buildConnector( config, wpPackages ) {
 				},
 					setupLabel
 			);
+		} else if ( status.reason === 'connector_unapproved' ) {
+			actionArea = createElement(
+				'div',
+				{
+					'aria-live': 'polite',
+					style: {
+						maxWidth: '280px',
+					},
+				},
+				createElement(
+					'p',
+					{
+						style: {
+							margin: '0 0 8px',
+						},
+					},
+					status.runtime?.error ||
+						__(
+							'WordPress AI Connector Approval is blocking Codex runtime requests.',
+							'ai-provider-for-codex'
+						)
+				),
+				createElement(
+					Button,
+					{
+						variant: 'secondary',
+						href: config.connectorApprovalsUrl || config.siteSettingsUrl,
+					},
+					__( 'Review approvals', 'ai-provider-for-codex' )
+				)
+			);
 		} else if ( status.reason === 'login_pending' && pendingStatus === 'completed' ) {
 			actionArea = createElement(
 				Button,
@@ -346,9 +379,26 @@ function buildConnector( config, wpPackages ) {
 		);
 	}
 
-	registerConnector( config.connectorId || 'codex', {
+	const connectorId = config.connectorId || 'codex';
+	const connectorConfig = {
 		render: ( props ) => createElement( CodexConnector, props ),
-	} );
+	};
+
+	const registerCodexConnector = () => registerConnector( connectorId, connectorConfig );
+
+	registerCodexConnector();
+	scheduleRenderAssertion( registerCodexConnector );
+}
+
+function scheduleRenderAssertion( callback, remainingAttempts = RENDER_ASSERTION_ATTEMPTS ) {
+	if ( remainingAttempts <= 0 ) {
+		return;
+	}
+
+	window.setTimeout( () => {
+		callback();
+		scheduleRenderAssertion( callback, remainingAttempts - 1 );
+	}, RENDER_ASSERTION_DELAY_MS );
 }
 
 function tryBoot() {

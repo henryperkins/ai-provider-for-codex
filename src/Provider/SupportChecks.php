@@ -47,6 +47,19 @@ final class SupportChecks {
 
 		$runtime = HealthMonitor::probe();
 
+		if ( 'connector_unapproved' === (string) $runtime['status'] ) {
+			return [
+				'ready'             => false,
+				'reason'            => 'connector_unapproved',
+				'runtime'           => $runtime,
+				'runtimeConfigured' => true,
+				'connection'        => $connection,
+				'snapshot'          => null,
+				'catalog'           => $catalog,
+				'pendingConnection' => $pending,
+			];
+		}
+
 		if ( 'unreachable' === (string) $runtime['status'] ) {
 			return [
 				'ready'             => false,

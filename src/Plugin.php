@@ -10,6 +10,7 @@ declare( strict_types=1 );
 namespace AIProviderForCodex;
 
 use AIProviderForCodex\Auth\ConnectionRefreshScheduler;
+use AIProviderForCodex\Admin\ConnectorApprovalIntegration;
 use AIProviderForCodex\Admin\ConnectorsIntegration;
 use AIProviderForCodex\Admin\SiteSettings;
 use AIProviderForCodex\Admin\UserConnectionPage;
@@ -35,6 +36,7 @@ final class Plugin {
 	public function init(): void {
 		add_action( 'init', __NAMESPACE__ . '\\register_provider', 5 );
 		add_action( 'init', [ Installer::class, 'maybe_upgrade' ], 1 );
+		add_action( 'init', [ ConnectorApprovalIntegration::class, 'maybe_self_approve' ], 2 );
 		ConnectionRefreshScheduler::register_hooks();
 
 		add_action( 'admin_menu', [ SiteSettings::class, 'register_page' ] );
@@ -43,9 +45,12 @@ final class Plugin {
 		add_action( 'admin_init', [ UserConnectionPage::class, 'maybe_handle_actions' ] );
 		add_action( 'admin_enqueue_scripts', [ ConnectorsIntegration::class, 'enqueue_connectors_assets' ] );
 		add_filter( 'script_module_data_ai-provider-for-codex/connectors', [ ConnectorsIntegration::class, 'script_module_data' ] );
+		add_action( 'options-connectors_init', [ ConnectorsIntegration::class, 'enqueue_connectors_boot_module' ] );
+		add_action( 'options-connectors-wp-admin_init', [ ConnectorsIntegration::class, 'enqueue_connectors_boot_module' ] );
 		add_action( 'wp_connectors_init', [ ConnectorsIntegration::class, 'register_connector_metadata' ] );
 		add_filter( 'wpai_has_ai_credentials', [ ConnectorsIntegration::class, 'filter_ai_plugin_has_credentials' ], 10, 2 );
 		add_filter( 'wpai_pre_has_valid_credentials_check', [ ConnectorsIntegration::class, 'filter_ai_plugin_has_valid_credentials' ] );
+		add_filter( 'wpai_is_codex_connector_configured', [ ConnectorsIntegration::class, 'filter_ai_plugin_is_codex_connector_configured' ] );
 		add_filter( 'wpai_preferred_text_models', [ $this, 'filter_preferred_text_models' ] );
 
 		add_action( 'rest_api_init', [ ConnectController::class, 'register_routes' ] );

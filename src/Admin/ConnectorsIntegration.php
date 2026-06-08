@@ -28,18 +28,19 @@ final class ConnectorsIntegration {
 	 */
 	private static function connector_config(): array {
 		return [
-			'connectorId'        => self::CONNECTOR_ID,
-			'statusUrl'          => rest_url( 'codex-provider/v1/status' ),
-			'statusPath'         => '/codex-provider/v1/status',
-			'providerStatusUrl'  => rest_url( 'codex-provider/v1/status' ),
-			'providerStatusPath' => '/codex-provider/v1/status',
-			'startConnectUrl'    => rest_url( 'codex-provider/v1/connect/start' ),
-			'startConnectPath'   => '/codex-provider/v1/connect/start',
-			'connectStatusUrl'   => rest_url( 'codex-provider/v1/connect/status' ),
-			'connectStatusPath'  => '/codex-provider/v1/connect/status',
-			'siteSettingsUrl'    => SiteSettings::page_url(),
-			'userConnectionUrl'  => UserConnectionPage::page_url(),
-			'restNonce'          => wp_create_nonce( 'wp_rest' ),
+			'connectorId'           => self::CONNECTOR_ID,
+			'statusUrl'             => rest_url( 'codex-provider/v1/status' ),
+			'statusPath'            => '/codex-provider/v1/status',
+			'providerStatusUrl'     => rest_url( 'codex-provider/v1/status' ),
+			'providerStatusPath'    => '/codex-provider/v1/status',
+			'startConnectUrl'       => rest_url( 'codex-provider/v1/connect/start' ),
+			'startConnectPath'      => '/codex-provider/v1/connect/start',
+			'connectStatusUrl'      => rest_url( 'codex-provider/v1/connect/status' ),
+			'connectStatusPath'     => '/codex-provider/v1/connect/status',
+			'connectorApprovalsUrl' => admin_url( 'tools.php?page=ai-connector-approval' ),
+			'siteSettingsUrl'       => SiteSettings::page_url(),
+			'userConnectionUrl'     => UserConnectionPage::page_url(),
+			'restNonce'             => wp_create_nonce( 'wp_rest' ),
 		];
 	}
 
@@ -107,18 +108,25 @@ final class ConnectorsIntegration {
 	}
 
 	/**
-	 * Enqueues the custom connector module on the Connectors screen.
+	 * Lets the AI plugin's status widget show Codex as configured when the local runtime is ready.
 	 *
-	 * @param string $hook_suffix Admin hook suffix.
-	 * @return void
+	 * @param bool $is_configured Whether the AI plugin already considers the connector configured.
+	 * @return bool
 	 */
-	public static function enqueue_connectors_assets( string $hook_suffix ): void {
-		unset( $hook_suffix );
-
-		if ( ! self::is_connectors_screen() ) {
-			return;
+	public static function filter_ai_plugin_is_codex_connector_configured( bool $is_configured ): bool {
+		if ( $is_configured ) {
+			return true;
 		}
 
+		return Settings::has_required_configuration() && HealthMonitor::is_available();
+	}
+
+	/**
+	 * Registers the Codex connector script module.
+	 *
+	 * @return void
+	 */
+	private static function register_connectors_module(): void {
 		wp_register_script_module(
 			self::MODULE_ID,
 			plugins_url( 'assets/connectors.js', \AIProviderForCodex\PLUGIN_FILE ),
@@ -130,7 +138,14 @@ final class ConnectorsIntegration {
 			],
 			\AIProviderForCodex\VERSION
 		);
+	}
 
+	/**
+	 * Registers classic WordPress package prerequisites used by the connector module.
+	 *
+	 * @return void
+	 */
+	private static function register_connectors_prerequisites(): void {
 		wp_register_script(
 			self::SCRIPT_HANDLE,
 			'',
@@ -148,8 +163,35 @@ final class ConnectorsIntegration {
 			\AIProviderForCodex\VERSION,
 			false
 		);
+	}
+
+	/**
+	 * Enqueues the Codex module while the routed Connectors app builds its boot graph.
+	 *
+	 * @return void
+	 */
+	public static function enqueue_connectors_boot_module(): void {
+		self::register_connectors_module();
+		self::register_connectors_prerequisites();
+
 		wp_enqueue_script( self::SCRIPT_HANDLE );
 		wp_enqueue_script_module( self::MODULE_ID );
+	}
+
+	/**
+	 * Enqueues the custom connector module on the Connectors screen.
+	 *
+	 * @param string $hook_suffix Admin hook suffix.
+	 * @return void
+	 */
+	public static function enqueue_connectors_assets( string $hook_suffix ): void {
+		unset( $hook_suffix );
+
+		if ( ! self::is_connectors_screen() ) {
+			return;
+		}
+
+		self::enqueue_connectors_boot_module();
 	}
 
 	/**

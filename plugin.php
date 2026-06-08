@@ -5,7 +5,7 @@
  * Description:       Codex provider for the WordPress AI Client using a local runtime sidecar.
  * Requires at least: 7.0
  * Requires PHP:      7.4
- * Version:           0.1.2
+ * Version:           0.1.3
  * Author:            Lakefront Digital
  * License:           GPL-2.0-or-later
  * License URI:       https://spdx.org/licenses/GPL-2.0-or-later.html
@@ -19,6 +19,7 @@ declare( strict_types=1 );
 namespace AIProviderForCodex;
 
 use AIProviderForCodex\Auth\ConnectionRefreshScheduler;
+use AIProviderForCodex\Admin\ConnectorApprovalIntegration;
 use AIProviderForCodex\Database\Installer;
 use AIProviderForCodex\Provider\CodexProvider;
 use WordPress\AiClient\AiClient;
@@ -27,7 +28,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-const VERSION = '0.1.2';
+const VERSION = '0.1.3';
 const PLUGIN_URI = 'https://github.com/henryperkins/ai-provider-for-codex';
 const MIN_WP_VERSION = '7.0';
 const MIN_PHP_VERSION = '7.4';
@@ -150,6 +151,7 @@ function check_ai_client(): bool {
  */
 function activate_plugin(): void {
 	Installer::activate();
+	ConnectorApprovalIntegration::maybe_self_approve();
 	ConnectionRefreshScheduler::schedule();
 }
 

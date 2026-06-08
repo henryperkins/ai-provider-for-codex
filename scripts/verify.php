@@ -11,6 +11,7 @@ use AIProviderForCodex\Auth\ConnectionRefreshScheduler;
 use AIProviderForCodex\Auth\ConnectionService;
 use AIProviderForCodex\Auth\ConnectionSnapshotRepository;
 use AIProviderForCodex\Auth\PendingConnectionRepository;
+use AIProviderForCodex\Admin\ConnectorApprovalIntegration;
 use AIProviderForCodex\Admin\ConnectorsIntegration;
 use AIProviderForCodex\Admin\SiteSettings;
 use AIProviderForCodex\Admin\UserConnectionPage;
@@ -19,6 +20,7 @@ use AIProviderForCodex\Provider\CodexProvider;
 use AIProviderForCodex\Provider\ModelCatalogState;
 use AIProviderForCodex\Provider\SupportChecks;
 use AIProviderForCodex\REST\ConnectController;
+use AIProviderForCodex\Runtime\HealthMonitor;
 use AIProviderForCodex\Runtime\Settings;
 use WordPress\AiClient\AiClient;
 use WordPress\AiClient\Messages\DTO\MessagePart;
@@ -116,24 +118,27 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 			'Codex provider credentials URL should point to the per-user connection page.'
 		);
 
-		$codex_provider_original_options = [
-		Settings::OPTION_RUNTIME_BASE_URL => get_option( Settings::OPTION_RUNTIME_BASE_URL, null ),
-		Settings::OPTION_RUNTIME_BEARER   => get_option( Settings::OPTION_RUNTIME_BEARER, null ),
-		Settings::OPTION_ALLOWED_MODELS   => get_option( Settings::OPTION_ALLOWED_MODELS, null ),
-	];
-	$codex_provider_legacy_default_model_option = 'codex_runtime_default_model';
-	$codex_provider_temporary_user_id           = 0;
-	$codex_provider_original_user_id            = get_current_user_id();
-	$codex_provider_temporary_connection_id     = 'codex-verify-' . wp_generate_uuid4();
-	$codex_provider_model_token                 = strtolower( wp_generate_password( 8, false, false ) );
-	$codex_provider_temporary_model_a           = 'codex-verify-' . $codex_provider_model_token . '-alpha';
-	$codex_provider_temporary_model_b           = 'codex-verify-' . $codex_provider_model_token . '-beta';
-	$codex_provider_temporary_fallback_a        = 'codex-fallback-' . $codex_provider_model_token . '-alpha';
-	$codex_provider_temporary_fallback_b        = 'codex-fallback-' . $codex_provider_model_token . '-beta';
-	$codex_provider_original_env_bearer         = getenv( 'CODEX_WP_BEARER_TOKEN' );
-	$codex_provider_original_env_bearer_exists  = false !== $codex_provider_original_env_bearer;
-	/** @var \Throwable|null $codex_provider_failure */
-	$codex_provider_failure = null;
+		$codex_provider_original_options             = [
+			Settings::OPTION_RUNTIME_BASE_URL              => get_option( Settings::OPTION_RUNTIME_BASE_URL, null ),
+			Settings::OPTION_RUNTIME_BEARER                => get_option( Settings::OPTION_RUNTIME_BEARER, null ),
+			Settings::OPTION_ALLOWED_MODELS                => get_option( Settings::OPTION_ALLOWED_MODELS, null ),
+			'codex_provider_connector_self_approval_seeded' => get_option( 'codex_provider_connector_self_approval_seeded', null ),
+			'wpai_features_enabled'                        => get_option( 'wpai_features_enabled', null ),
+			'wpai_feature_connector-approval_enabled'      => get_option( 'wpai_feature_connector-approval_enabled', null ),
+		];
+		$codex_provider_legacy_default_model_option = 'codex_runtime_default_model';
+		$codex_provider_temporary_user_id           = 0;
+		$codex_provider_original_user_id            = get_current_user_id();
+		$codex_provider_temporary_connection_id     = 'codex-verify-' . wp_generate_uuid4();
+		$codex_provider_model_token                 = strtolower( wp_generate_password( 8, false, false ) );
+		$codex_provider_temporary_model_a           = 'codex-verify-' . $codex_provider_model_token . '-alpha';
+		$codex_provider_temporary_model_b           = 'codex-verify-' . $codex_provider_model_token . '-beta';
+		$codex_provider_temporary_fallback_a        = 'codex-fallback-' . $codex_provider_model_token . '-alpha';
+		$codex_provider_temporary_fallback_b        = 'codex-fallback-' . $codex_provider_model_token . '-beta';
+		$codex_provider_original_env_bearer         = getenv( 'CODEX_WP_BEARER_TOKEN' );
+		$codex_provider_original_env_bearer_exists  = false !== $codex_provider_original_env_bearer;
+		/** @var \Throwable|null $codex_provider_failure */
+		$codex_provider_failure = null;
 
 	try {
 		update_option( $codex_provider_legacy_default_model_option, 'legacy-model' );
@@ -453,6 +458,17 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 			ConnectorsIntegration::filter_ai_plugin_has_credentials( true, [] ) === true,
 			'AI plugin credential check should preserve an existing true result.'
 		);
+		HealthMonitor::record_success();
+		$codex_provider_assert(
+			true === apply_filters( 'wpai_is_codex_connector_configured', false ),
+			'AI plugin Codex status filter should report the configured, healthy local runtime as configured.'
+		);
+		HealthMonitor::record_failure( 'Verification runtime unavailable.' );
+		$codex_provider_assert(
+			false === apply_filters( 'wpai_is_codex_connector_configured', false ),
+			'AI plugin Codex status filter should not report an unreachable local runtime as configured.'
+		);
+		HealthMonitor::record_success();
 		$_GET['page'] = 'options-connectors';
 		$codex_provider_connector_data = ConnectorsIntegration::script_module_data( [] );
 		unset( $_GET['page'] );
@@ -461,6 +477,10 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 		$codex_provider_assert( '/codex-provider/v1/status' === (string) ( $codex_provider_connector_data['providerStatusPath'] ?? '' ), 'Connector module data should expose the passive provider status REST path.' );
 		$codex_provider_assert( ! empty( $codex_provider_connector_data['connectStatusUrl'] ), 'Connector module data should expose the connect/status REST URL.' );
 		$codex_provider_assert( ! empty( $codex_provider_connector_data['providerStatusUrl'] ), 'Connector module data should expose the provider status REST URL.' );
+		$codex_provider_assert(
+			admin_url( 'tools.php?page=ai-connector-approval' ) === (string) ( $codex_provider_connector_data['connectorApprovalsUrl'] ?? '' ),
+			'Connector module data should expose the WordPress AI Connector Approvals admin URL.'
+		);
 		$_GET['page'] = 'options-connectors-wp-admin';
 		$codex_provider_connector_app_data = ConnectorsIntegration::script_module_data( [] );
 		unset( $_GET['page'] );
@@ -470,6 +490,161 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 			ConnectorsIntegration::filter_ai_plugin_has_valid_credentials( true ) === true,
 			'AI plugin valid-credential check should preserve an existing true result.'
 		);
+		$codex_provider_assert(
+			false !== has_action( 'options-connectors_init', [ ConnectorsIntegration::class, 'enqueue_connectors_boot_module' ] ),
+			'Codex connector module should be enqueued through the full-page Connectors boot hook.'
+		);
+		$codex_provider_assert(
+			false !== has_action( 'options-connectors-wp-admin_init', [ ConnectorsIntegration::class, 'enqueue_connectors_boot_module' ] ),
+			'Codex connector module should be enqueued through the routed wp-admin Connectors boot hook.'
+		);
+		$codex_provider_assert(
+			false !== has_action( 'init', [ ConnectorApprovalIntegration::class, 'maybe_self_approve' ] ),
+			'Codex connector self-approval should run during normal boot so updated active installs are covered.'
+		);
+		ConnectorsIntegration::enqueue_connectors_boot_module();
+		$codex_provider_script_module_queue = function_exists( 'wp_script_modules' ) ? wp_script_modules()->get_queue() : [];
+		$codex_provider_assert(
+			in_array( 'ai-provider-for-codex/connectors', $codex_provider_script_module_queue, true ),
+			'Codex connector module should be queued when the routed Connectors app builds its boot dependency graph.'
+		);
+		$codex_provider_connectors_source = (string) file_get_contents( dirname( __DIR__ ) . '/assets/connectors.js' );
+		$codex_provider_assert(
+			false !== strpos( $codex_provider_connectors_source, 'scheduleRenderAssertion' ),
+			'Codex connector module should reassert its custom render after core default connectors register.'
+		);
+		$codex_provider_assert(
+			false !== strpos( $codex_provider_connectors_source, 'const RENDER_ASSERTION_ATTEMPTS =' ) && false !== strpos( $codex_provider_connectors_source, 'remainingAttempts - 1' ),
+			'Codex connector module should use a bounded repeated render reassertion instead of a single race-prone retry.'
+		);
+		$codex_provider_assert(
+			false !== strpos( $codex_provider_connectors_source, "status.reason === 'connector_unapproved'" )
+			&& false !== strpos( $codex_provider_connectors_source, 'config.connectorApprovalsUrl' )
+			&& false !== strpos( $codex_provider_connectors_source, 'status.runtime?.error' ),
+			'Codex connector card should render Connector Approval guidance and link to Tools > Connector Approvals when approval blocks the runtime probe.'
+		);
+		if ( class_exists( '\\WordPress\\AI\\Connector_Approval\\Approvals_Store' ) ) {
+			$codex_provider_approval_store_class                  = '\\WordPress\\AI\\Connector_Approval\\Approvals_Store';
+			$codex_provider_approval_basename                     = plugin_basename( \AIProviderForCodex\PLUGIN_FILE );
+			$codex_provider_approval_option                       = $codex_provider_approval_store_class::OPTION_APPROVALS;
+			$codex_provider_approval_pending_option               = $codex_provider_approval_store_class::OPTION_PENDING;
+			$codex_provider_approval_seed_option                  = 'codex_provider_connector_self_approval_seeded';
+			$codex_provider_had_approvals                         = false !== get_option( $codex_provider_approval_option, false );
+			$codex_provider_original_approvals                    = get_option( $codex_provider_approval_option, [] );
+			$codex_provider_had_pending_approvals                 = false !== get_option( $codex_provider_approval_pending_option, false );
+			$codex_provider_original_pending_approvals            = get_option( $codex_provider_approval_pending_option, [] );
+			$codex_provider_original_approval_feature_options     = [
+				$codex_provider_approval_seed_option       => get_option( $codex_provider_approval_seed_option, null ),
+				'wpai_features_enabled'                    => get_option( 'wpai_features_enabled', null ),
+				'wpai_feature_connector-approval_enabled' => get_option( 'wpai_feature_connector-approval_enabled', null ),
+			];
+
+			try {
+				delete_option( $codex_provider_approval_option );
+				delete_option( $codex_provider_approval_pending_option );
+				delete_option( $codex_provider_approval_seed_option );
+				update_option( 'wpai_features_enabled', false );
+				update_option( 'wpai_feature_connector-approval_enabled', false );
+
+				$codex_provider_approval_store = new $codex_provider_approval_store_class();
+
+				$codex_provider_assert(
+					! $codex_provider_approval_store->is_approved( $codex_provider_approval_basename, 'codex' ),
+					'Connector Approval fixture should start with Codex self-approval absent.'
+				);
+
+				ConnectorApprovalIntegration::maybe_self_approve();
+
+				$codex_provider_assert(
+					! $codex_provider_approval_store->is_approved( $codex_provider_approval_basename, 'codex' ),
+					'Activation should not pre-approve Codex while the Connector Approval experiment is disabled.'
+				);
+
+				update_option( 'wpai_features_enabled', true );
+				update_option( 'wpai_feature_connector-approval_enabled', true );
+
+				$codex_provider_block_approval_update = static function ( $value, $old_value ) {
+					unset( $value );
+
+					return $old_value;
+				};
+				add_filter( 'pre_update_option_' . $codex_provider_approval_option, $codex_provider_block_approval_update, 10, 2 );
+
+				try {
+					ConnectorApprovalIntegration::maybe_self_approve();
+				} finally {
+					remove_filter( 'pre_update_option_' . $codex_provider_approval_option, $codex_provider_block_approval_update, 10 );
+				}
+
+				$codex_provider_assert(
+					! $codex_provider_approval_store->is_approved( $codex_provider_approval_basename, 'codex' ),
+					'Connector Approval failed-write fixture should leave Codex self-approval absent.'
+				);
+				$codex_provider_assert(
+					false === get_option( $codex_provider_approval_seed_option, false ),
+					'Connector Approval self-approval should not record the seed marker when the approval write did not persist.'
+				);
+
+				$codex_provider_approval_pending_key = $codex_provider_approval_store->pending_key( $codex_provider_approval_basename, 'codex' );
+				$codex_provider_approval_store->record_pending(
+					[
+						'type'     => 'plugin',
+						'basename' => $codex_provider_approval_basename,
+						'name'     => 'AI Provider for Codex',
+					],
+					'codex'
+				);
+
+				$codex_provider_assert(
+					isset( $codex_provider_approval_store->get_pending()[ $codex_provider_approval_pending_key ] ),
+					'Connector Approval fixture should seed a pending Codex self-approval request.'
+				);
+
+				ConnectorApprovalIntegration::maybe_self_approve();
+
+				$codex_provider_assert(
+					$codex_provider_approval_store->is_approved( $codex_provider_approval_basename, 'codex' ),
+					'Activation and ordinary boot should self-approve the Codex provider plugin once when Connector Approval is enabled.'
+				);
+				$codex_provider_assert(
+					'1' === (string) get_option( $codex_provider_approval_seed_option, '' ),
+					'Connector Approval self-approval should record a one-time seed marker.'
+				);
+				$codex_provider_assert(
+					! isset( $codex_provider_approval_store->get_pending()[ $codex_provider_approval_pending_key ] ),
+					'Connector Approval self-approval should clear the matching pending request after approval persists.'
+				);
+
+				$codex_provider_approval_store->set_approval( $codex_provider_approval_basename, 'codex', false );
+				ConnectorApprovalIntegration::maybe_self_approve();
+
+				$codex_provider_assert(
+					! $codex_provider_approval_store->is_approved( $codex_provider_approval_basename, 'codex' ),
+					'Connector Approval self-approval should not restore access after an administrator revokes it.'
+				);
+			} finally {
+				if ( $codex_provider_had_approvals ) {
+					update_option( $codex_provider_approval_option, $codex_provider_original_approvals, false );
+				} else {
+					delete_option( $codex_provider_approval_option );
+				}
+
+				if ( $codex_provider_had_pending_approvals ) {
+					update_option( $codex_provider_approval_pending_option, $codex_provider_original_pending_approvals, false );
+				} else {
+					delete_option( $codex_provider_approval_pending_option );
+				}
+
+				foreach ( $codex_provider_original_approval_feature_options as $codex_provider_approval_option_name => $codex_provider_approval_option_value ) {
+					if ( null === $codex_provider_approval_option_value ) {
+						delete_option( $codex_provider_approval_option_name );
+						continue;
+					}
+
+					update_option( $codex_provider_approval_option_name, $codex_provider_approval_option_value );
+				}
+			}
+		}
 
 		$codex_provider_status = SupportChecks::current_user_status( $codex_provider_temporary_user_id );
 		$codex_provider_assert( array_key_exists( 'runtimeConfigured', $codex_provider_status ), 'Status payload should expose runtimeConfigured.' );
@@ -545,6 +720,81 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 					is_array( $request_body ) && $codex_provider_temporary_user_id === (int) ( $request_body['wpUserId'] ?? 0 ),
 					'Codex text generation should send the current WordPress user ID to the runtime.'
 				);
+			}
+		);
+		$codex_provider_with_mock_runtime(
+			static function ( $preempt, array $args, string $url ) use ( $codex_provider_base_url ) {
+				if ( 0 !== strpos( $url, $codex_provider_base_url ) ) {
+					return $preempt;
+				}
+
+				return new WP_Error(
+					'wpai_connector_not_approved',
+					'The "codex" AI connector has not been approved for use by "ai-provider-for-codex/plugin.php".',
+					[
+						'status'       => 403,
+						'connector_id' => 'codex',
+					]
+				);
+			},
+			static function () use ( $codex_provider_assert ) {
+				try {
+					try {
+						( new \AIProviderForCodex\Runtime\Client() )->get( '/healthz' );
+						$codex_provider_assert( false, 'Connector Approval transport blocks should raise a runtime exception.' );
+					} catch ( RuntimeException $exception ) {
+						$codex_provider_assert(
+							false !== strpos( $exception->getMessage(), 'Connector Approval' ),
+							'Connector Approval transport blocks should surface an actionable Connector Approval message.'
+						);
+					}
+
+					$codex_provider_health = HealthMonitor::get_status();
+					$codex_provider_assert(
+						'connector_unapproved' === (string) $codex_provider_health['status'],
+						'Connector Approval transport blocks should not be cached as runtime_unreachable health failures.'
+					);
+					$codex_provider_assert(
+						HealthMonitor::is_available(),
+						'Connector Approval transport blocks should keep the local runtime health distinct from sidecar reachability.'
+					);
+				} finally {
+					HealthMonitor::record_success();
+				}
+			}
+		);
+		$codex_provider_with_mock_runtime(
+			static function ( $preempt, array $args, string $url ) use ( $codex_provider_base_url ) {
+				if ( 0 !== strpos( $url, $codex_provider_base_url ) ) {
+					return $preempt;
+				}
+
+				return new WP_Error(
+					'wpai_connector_not_approved',
+					'The "codex" AI connector has not been approved for use by "ai-provider-for-codex/plugin.php".',
+					[
+						'status'       => 403,
+						'connector_id' => 'codex',
+						'caller'       => [
+							'basename' => 'ai-provider-for-codex/plugin.php',
+						],
+					]
+				);
+			},
+			static function () use ( $codex_provider_assert, $codex_provider_temporary_user_id ) {
+				try {
+					$codex_provider_status = SupportChecks::current_user_status( $codex_provider_temporary_user_id );
+					$codex_provider_assert(
+						'connector_unapproved' === (string) ( $codex_provider_status['reason'] ?? '' ),
+						'Status checks blocked by Connector Approval should report connector_unapproved instead of runtime_unreachable.'
+					);
+					$codex_provider_assert(
+						! empty( $codex_provider_status['runtime']['error'] ),
+						'Connector Approval status should include the actionable runtime error.'
+					);
+				} finally {
+					HealthMonitor::record_success();
+				}
 			}
 		);
 

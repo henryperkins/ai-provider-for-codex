@@ -55,6 +55,24 @@ final class HealthMonitor {
 	}
 
 	/**
+	 * Records a Connector Approval block without marking the sidecar unreachable.
+	 *
+	 * @param string $message Approval guidance message.
+	 * @return void
+	 */
+	public static function record_connector_unapproved( string $message ): void {
+		set_transient(
+			self::TRANSIENT_KEY,
+			[
+				'status'     => 'connector_unapproved',
+				'checked_at' => gmdate( 'Y-m-d H:i:s' ),
+				'error'      => sanitize_text_field( $message ),
+			],
+			self::FAILURE_TTL
+		);
+	}
+
+	/**
 	 * Returns the last-known local runtime health state.
 	 *
 	 * @return array{status:string,checked_at:?string,error:string}
@@ -78,10 +96,12 @@ final class HealthMonitor {
 	}
 
 	/**
-	 * Returns whether the cached runtime state is healthy or unknown.
+	 * Returns whether the cached runtime state is healthy, unknown, or approval-blocked.
 	 *
 	 * Unknown is treated as available so first-run sites are not blocked before
 	 * the plugin has made any runtime requests.
+	 * Connector Approval blocks are not sidecar reachability failures, so callers
+	 * should inspect the status reason instead of treating credentials as missing.
 	 *
 	 * @return bool
 	 */
@@ -112,7 +132,14 @@ final class HealthMonitor {
 		);
 
 		if ( is_wp_error( $response ) ) {
-			self::record_failure( Client::normalize_transport_error_message( $response, $base_url . '/healthz', self::PROBE_TIMEOUT ) );
+			$message = Client::normalize_transport_error_message( $response, $base_url . '/healthz', self::PROBE_TIMEOUT );
+
+			if ( Client::is_connector_approval_error( $response ) ) {
+				self::record_connector_unapproved( $message );
+				return self::get_status();
+			}
+
+			self::record_failure( $message );
 			return self::get_status();
 		}
 

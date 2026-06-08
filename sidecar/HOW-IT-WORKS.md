@@ -167,7 +167,7 @@ Response shape:
 {
   "ok": true,
   "service": "codex-wp-sidecar",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "codexBin": "/usr/local/bin/codex"
 }
 ```

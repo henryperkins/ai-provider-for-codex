@@ -18,6 +18,7 @@ foreach ( [
 	'codex_runtime_bearer_token',
 	'codex_runtime_allowed_models',
 	'codex_provider_schema_version',
+	'codex_provider_connector_self_approval_seeded',
 ] as $codex_provider_option_name ) {
 	delete_option( $codex_provider_option_name );
 }

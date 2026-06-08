@@ -10,6 +10,7 @@ WordPress AI Client provider plugin for Codex models using a local sidecar runti
 - The plugin talks only to the local runtime for health checks, account snapshots, and text generation.
 - Status screens stay read-only and use stored local connection state; explicit connect checks, snapshot refreshes, and live runtime requests reconcile auth against the sidecar.
 - Billing plan display is informational only and mirrors the latest account snapshot; if the runtime stops reporting a plan, the stored value is cleared.
+- If the WordPress AI plugin's experimental Connector Approval feature is enabled, this plugin performs a one-time approval for its own `codex` connector during activation or the next normal boot. It does not pre-approve while the experiment is disabled, and if the approval is later revoked, runtime calls stay blocked until an administrator re-approves it under `Tools > Connector Approvals` or disables the experiment.
 
 ## Included
 

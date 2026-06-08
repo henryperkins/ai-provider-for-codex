@@ -4,7 +4,7 @@ Tags: ai, codex, wordpress-ai-client
 Requires at least: 7.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.1.2
+Stable tag: 0.1.3
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -60,6 +60,7 @@ Architecture notes for reviewers:
 * each user connects their own Codex or ChatGPT account, so the plugin stores per-user connection and snapshot records
 * REST endpoints under `codex-provider/v1/*` power the local status, connection, disconnect, and refresh flows
 * WordPress/ai credential filters are used because Codex does not rely on a site-wide API key
+* if the WordPress AI plugin's experimental Connector Approval feature is enabled, this plugin performs a one-time approval for its own `codex` connector during activation or the next normal boot. It does not pre-approve while the experiment is disabled, and if the approval is later revoked, runtime calls stay blocked until an administrator re-approves it under `Tools > Connector Approvals` or disables the experiment.
 
 Developers can filter `codex_provider_runtime_request_timeout` to change local runtime HTTP timeouts.
 
@@ -119,6 +120,10 @@ The sidecar is designed for localhost-only communication between WordPress and t
 Support is limited to documented, self-managed environments that can run the local sidecar runtime and the `codex` CLI on the same host as WordPress.
 
 == Changelog ==
+
+= 0.1.3 =
+* Add Connector Approval self-approval handling so the Codex connector can unblock itself when the WordPress AI experiment is active.
+* Improve Connectors status messaging and local runtime health recovery for routed admin screens.
 
 = 0.1.2 =
 * Improve the Codex account connection flow with inline device-code approval, automatic status checks, copy-code support, and retry actions.

@@ -21,7 +21,7 @@ if [[ -z "${WP_PATH:-}" ]]; then
 fi
 
 EXCLUDE_DIRECTORIES="docs,scripts,sidecar/scripts"
-EXCLUDE_FILES=".gitignore,.distignore,phpstan-stubs.php,LOCAL-SIDECAR-SPEC.md,PLUGIN-SUBMISSION-READINESS-CHECKLIST.md,README.md,codex-app.err,composer.json,composer.lock,package.json,package-lock.json,phpstan.neon,phpstan-baseline.neon"
+EXCLUDE_FILES=".gitignore,.distignore,CLAUDE.md,phpstan-stubs.php,LOCAL-SIDECAR-SPEC.md,PLUGIN-SUBMISSION-READINESS-CHECKLIST.md,README.md,codex-app.err,composer.json,composer.lock,package.json,package-lock.json,phpstan.neon,phpstan-baseline.neon"
 
 if ! command -v wp >/dev/null 2>&1; then
 	echo "This script requires wp-cli." >&2

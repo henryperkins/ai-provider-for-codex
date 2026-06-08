@@ -35,6 +35,7 @@ Thumbs.db
 .remember
 .playwright-mcp
 .env
+CLAUDE.md
 
 # WP-CLI tooling (dev-only; we ship via package-release.sh, not dist-archive)
 .distignore

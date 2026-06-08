@@ -28,6 +28,8 @@ final class StatusLabels {
 				return __( 'Runtime not configured', 'ai-provider-for-codex' );
 			case 'runtime_unreachable':
 				return __( 'Runtime unreachable', 'ai-provider-for-codex' );
+			case 'connector_unapproved':
+				return __( 'Connector approval required', 'ai-provider-for-codex' );
 			case 'user_unlinked':
 				return __( 'Account not linked', 'ai-provider-for-codex' );
 			case 'connection_expired':
@@ -53,6 +55,8 @@ final class StatusLabels {
 				return __( 'Create and start the local sidecar service on the WordPress host, then enter the runtime URL and bearer token or make /etc/codex-wp-sidecar.env readable by PHP.', 'ai-provider-for-codex' );
 			case 'runtime_unreachable':
 				return __( 'The sidecar should be running on the same host as WordPress and answering the configured `/healthz` URL.', 'ai-provider-for-codex' );
+			case 'connector_unapproved':
+				return __( 'Open Tools > Connector Approvals and approve the pending caller for the Codex connector, or disable the Connector Approval experiment.', 'ai-provider-for-codex' );
 			case 'user_unlinked':
 				return __( 'Once the shared runtime is healthy, connect your Codex account to start using AI features.', 'ai-provider-for-codex' );
 			case 'connection_expired':
@@ -78,6 +82,8 @@ final class StatusLabels {
 				return __( 'Healthy', 'ai-provider-for-codex' );
 			case 'unreachable':
 				return __( 'Unreachable', 'ai-provider-for-codex' );
+			case 'connector_unapproved':
+				return __( 'Connector approval required', 'ai-provider-for-codex' );
 			case 'unknown':
 			default:
 				return __( 'Not yet checked', 'ai-provider-for-codex' );

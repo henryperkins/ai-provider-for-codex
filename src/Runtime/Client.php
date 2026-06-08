@@ -20,6 +20,8 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 final class Client {
 
+	public const CONNECTOR_APPROVAL_ERROR_CODE = 'wpai_connector_not_approved';
+
 	/**
 	 * Default timeout for short runtime control-plane requests.
 	 */
@@ -111,7 +113,11 @@ final class Client {
 
 		if ( is_wp_error( $response ) ) {
 			$message = self::normalize_transport_error_message( $response, $url, $timeout );
-			HealthMonitor::record_failure( $message );
+			if ( self::is_connector_approval_error( $response ) ) {
+				HealthMonitor::record_connector_unapproved( $message );
+			} else {
+				HealthMonitor::record_failure( $message );
+			}
 			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Transport message is escaped when rendered.
 			throw new RuntimeException( $message );
 		}
@@ -213,7 +219,54 @@ final class Client {
 	 * @return string
 	 */
 	public static function normalize_transport_error_message( \WP_Error $error, string $url, int $timeout ): string {
+		if ( self::is_connector_approval_error( $error ) ) {
+			return self::normalize_connector_approval_error_message( $error );
+		}
+
 		return self::normalize_transport_error_string( $error->get_error_message(), $url, $timeout );
+	}
+
+	/**
+	 * Returns whether a transport error came from WordPress AI Connector Approval.
+	 *
+	 * @param \WP_Error $error Transport error.
+	 * @return bool
+	 */
+	public static function is_connector_approval_error( \WP_Error $error ): bool {
+		return self::CONNECTOR_APPROVAL_ERROR_CODE === $error->get_error_code();
+	}
+
+	/**
+	 * Converts WordPress AI Connector Approval blocks into an actionable runtime message.
+	 *
+	 * @param \WP_Error $error Connector Approval error.
+	 * @return string
+	 */
+	private static function normalize_connector_approval_error_message( \WP_Error $error ): string {
+		$data         = $error->get_error_data();
+		$connector_id = is_array( $data ) ? sanitize_key( (string) ( $data['connector_id'] ?? 'codex' ) ) : 'codex';
+		$caller       = is_array( $data ) && isset( $data['caller'] ) && is_array( $data['caller'] )
+			? (string) ( $data['caller']['basename'] ?? '' )
+			: '';
+
+		if ( '' === $connector_id ) {
+			$connector_id = 'codex';
+		}
+
+		if ( '' !== $caller ) {
+			return sprintf(
+				/* translators: 1: connector ID, 2: plugin or theme basename. */
+				__( 'WordPress AI Connector Approval blocked the %1$s local-runtime request for %2$s. Open Tools > Connector Approvals and approve that caller for the Codex connector, or deactivate the Connector Approval experiment.', 'ai-provider-for-codex' ),
+				$connector_id,
+				$caller
+			);
+		}
+
+		return sprintf(
+			/* translators: %s: connector ID. */
+			__( 'WordPress AI Connector Approval blocked the %s local-runtime request. Open Tools > Connector Approvals and approve the pending caller for the Codex connector, or deactivate the Connector Approval experiment.', 'ai-provider-for-codex' ),
+			$connector_id
+		);
 	}
 
 	/**
