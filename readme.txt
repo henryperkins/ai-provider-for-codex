@@ -1,5 +1,5 @@
 === AI Provider for Codex ===
-Contributors: lakefrontdigital
+Contributors: htperkins
 Tags: ai, codex, wordpress-ai-client
 Requires at least: 7.0
 Tested up to: 7.0

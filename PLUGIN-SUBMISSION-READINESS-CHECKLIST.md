@@ -30,7 +30,7 @@ Version and requirement references refreshed: 2026-05-22
 
 Repo notes:
 
-- `Contributors: lakefrontdigital` is present in [`readme.txt`](./readme.txt). Verify that this is the exact WordPress.org username that should own the plugin.
+- `Contributors: htperkins` is present in [`readme.txt`](./readme.txt) and resolves to the WordPress.org profile at `https://profiles.wordpress.org/htperkins/`.
 
 ## 2. Name, Slug, And Trademark Risk
 
