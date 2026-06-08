@@ -5,7 +5,7 @@
  * Description:       Codex provider for the WordPress AI Client using a local runtime sidecar.
  * Requires at least: 7.0
  * Requires PHP:      7.4
- * Version:           0.1.3
+ * Version:           0.1.4
  * Author:            Lakefront Digital
  * License:           GPL-2.0-or-later
  * License URI:       https://spdx.org/licenses/GPL-2.0-or-later.html
@@ -28,7 +28,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-const VERSION = '0.1.3';
+const VERSION = '0.1.4';
 const PLUGIN_URI = 'https://github.com/henryperkins/ai-provider-for-codex';
 const MIN_WP_VERSION = '7.0';
 const MIN_PHP_VERSION = '7.4';
