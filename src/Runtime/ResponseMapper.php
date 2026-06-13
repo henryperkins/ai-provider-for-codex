@@ -106,7 +106,7 @@ final class ResponseMapper {
 			}
 		}
 
-		throw self::runtime_exception( esc_html__( 'The local Codex runtime response did not include text output.', 'ai-provider-for-codex' ) );
+		throw self::runtime_exception( esc_html__( 'The local Codex runtime response did not include text output.', 'scriptorium-ai-provider-for-codex' ) );
 	}
 
 	/**

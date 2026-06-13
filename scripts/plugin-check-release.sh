@@ -13,7 +13,7 @@ set -euo pipefail
 # When you add a dev-only file to release-exclude.txt, also add it here if it
 # is a literal name that lands in a developer's working tree.
 
-SLUG="ai-provider-for-codex"
+SLUG="scriptorium-ai-provider-for-codex"
 
 if [[ -z "${WP_PATH:-}" ]]; then
 	echo "Set WP_PATH=/path/to/wordpress and retry." >&2
@@ -21,7 +21,7 @@ if [[ -z "${WP_PATH:-}" ]]; then
 fi
 
 EXCLUDE_DIRECTORIES="docs,scripts,sidecar/scripts"
-EXCLUDE_FILES=".gitignore,.distignore,CLAUDE.md,phpstan-stubs.php,LOCAL-SIDECAR-SPEC.md,PLUGIN-SUBMISSION-READINESS-CHECKLIST.md,README.md,codex-app.err,composer.json,composer.lock,package.json,package-lock.json,phpstan.neon,phpstan-baseline.neon"
+EXCLUDE_FILES=".gitignore,IDEATION-ARTIFACT.md,leadership-lesson-side-convo.md,plato-leadership-lesson.md,.distignore,CLAUDE.md,phpstan-stubs.php,LOCAL-SIDECAR-SPEC.md,PLUGIN-SUBMISSION-READINESS-CHECKLIST.md,README.md,codex-app.err,composer.json,composer.lock,package.json,package-lock.json,phpstan.neon,phpstan-baseline.neon"
 
 if ! command -v wp >/dev/null 2>&1; then
 	echo "This script requires wp-cli." >&2

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document defines the runtime-native architecture for `ai-provider-for-codex`.
+This document defines the runtime-native architecture for `scriptorium-ai-provider-for-codex`.
 
 Goals:
 

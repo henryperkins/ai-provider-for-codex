@@ -3,7 +3,7 @@
  * Repeatable verification checks for the Codex provider plugin.
  *
  * Run with:
- * wp --path=/path/to/site eval-file wp-content/plugins/ai-provider-for-codex/scripts/verify.php
+ * wp --path=/path/to/site eval-file wp-content/plugins/scriptorium-ai-provider-for-codex/scripts/verify.php
  */
 
 use AIProviderForCodex\Auth\ConnectionRepository;
@@ -73,19 +73,19 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 
 		$codex_provider_assert(
 			is_wp_version_compatible( \AIProviderForCodex\MIN_WP_VERSION ),
-			'AI Provider for Codex verification requires WordPress 7.0 or newer.'
+			'Scriptorium AI Provider for Codex verification requires WordPress 7.0 or newer.'
 		);
 		$codex_provider_assert(
 			class_exists( AiClient::class ),
-			'AI Provider for Codex requires AI Client 1.0 or newer, but the AI Client class is not available.'
+			'Scriptorium AI Provider for Codex requires AI Client 1.0 or newer, but the AI Client class is not available.'
 		);
 		$codex_provider_assert(
 			version_compare( AiClient::VERSION, '1.0', '>=' ),
-			'AI Provider for Codex requires AI Client 1.0 or newer.'
+			'Scriptorium AI Provider for Codex requires AI Client 1.0 or newer.'
 		);
 		$codex_provider_assert(
 			! defined( 'WPAI_VERSION' ) || version_compare( (string) constant( 'WPAI_VERSION' ), '1.0', '>=' ),
-			'AI Provider for Codex requires WordPress AI plugin 1.0 or newer when the standalone plugin is installed.'
+			'Scriptorium AI Provider for Codex requires WordPress AI plugin 1.0 or newer when the standalone plugin is installed.'
 		);
 
 		$codex_provider_disable_ai_filter = static function (): bool {
@@ -309,6 +309,10 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 			'Site settings should render configured fallback models.'
 		);
 		$codex_provider_assert(
+			false === strpos( $codex_provider_site_settings_html, '<style' ),
+			'Site settings must not print inline style tags; styles are delivered through wp_add_inline_style().'
+		);
+		$codex_provider_assert(
 			false === strpos( $codex_provider_site_settings_html, 'Quick setup' ),
 			'Site settings should move the quick setup guidance into the contextual Help dropdown.'
 		);
@@ -342,7 +346,7 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 		$codex_provider_site_settings_filter_applied  = false;
 		$codex_provider_site_settings_translate_filter = static function ( string $translation, string $text, string $domain ) use ( &$codex_provider_site_settings_filter_applied ): string {
 			if (
-				'ai-provider-for-codex' === $domain
+				'scriptorium-ai-provider-for-codex' === $domain
 				&& str_contains( $text, 'Per-user account linking is on the' )
 			) {
 				$codex_provider_site_settings_filter_applied = true;
@@ -383,19 +387,23 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 			UserConnectionPage::render_page();
 			$codex_provider_connection_page_html = (string) ob_get_clean();
 
-				$codex_provider_assert( false !== strpos( $codex_provider_connection_page_html, 'id="codex-provider-connection-config"' ), 'User connection page should render JSON config for the enhanced connection flow.' );
+				$codex_provider_assert( false === strpos( $codex_provider_connection_page_html, '<style' ), 'User connection page must not print inline style tags; styles are delivered through wp_add_inline_style().' );
+				$codex_provider_assert( false === strpos( $codex_provider_connection_page_html, '<script' ), 'User connection page must not print inline script tags; config flows through script module data.' );
+				$codex_provider_connection_module_data = apply_filters( 'script_module_data_scriptorium-ai-provider-for-codex/user-connection', [] );
+				$codex_provider_assert( isset( $codex_provider_connection_module_data['startUrl'], $codex_provider_connection_module_data['restNonce'], $codex_provider_connection_module_data['text'] ), 'User connection page should expose its JSON config through script module data.' );
+				$codex_provider_assert( 'auth_verify' === (string) ( $codex_provider_connection_module_data['currentPending']['authSessionId'] ?? '' ), 'Script module data should carry the pending device-code session for the enhanced connection flow.' );
 			$codex_provider_user_page_source       = (string) file_get_contents( dirname( __DIR__ ) . '/src/Admin/UserConnectionPage.php' );
 			$codex_provider_connection_flow_source = (string) file_get_contents( dirname( __DIR__ ) . '/assets/connection-flow.js' );
 			$codex_provider_connector_source       = (string) file_get_contents( dirname( __DIR__ ) . '/assets/connectors.js' );
 			$codex_provider_user_connection_source = (string) file_get_contents( dirname( __DIR__ ) . '/assets/user-connection.js' );
-				$codex_provider_assert( false !== strpos( $codex_provider_user_page_source, 'JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT' ), 'User connection page JSON config should be encoded with hex flags for script-tag safety.' );
-				$codex_provider_assert( false !== strpos( $codex_provider_user_page_source, 'admin_print_scripts-{$hook}' ), 'User connection page should hook its script module enqueue to the concrete admin page hook.' );
+				$codex_provider_assert( false !== strpos( $codex_provider_user_page_source, 'script_module_data' ), 'User connection page should expose its config via the script module data filter.' );
+				$codex_provider_assert( false !== strpos( $codex_provider_user_page_source, 'admin_enqueue_scripts' ), 'User connection page should enqueue its assets through admin_enqueue_scripts.' );
 				$codex_provider_assert( false !== strpos( $codex_provider_connection_flow_source, 'getCodexConnectionPendingSupportText' ), 'Connection flow should expose a shared pending support-text helper.' );
 				$codex_provider_assert( false !== strpos( $codex_provider_connector_source, 'getCodexConnectionPendingSupportText' ), 'Connectors card should use the shared pending support-text helper so polling errors are visible.' );
 				$codex_provider_assert( false !== strpos( $codex_provider_user_connection_source, 'getCodexConnectionPendingSupportText' ), 'User connection page should use the shared pending support-text helper so polling errors are visible.' );
 				UserConnectionPage::enqueue_assets();
 			$codex_provider_script_module_queue = function_exists( 'wp_script_modules' ) ? wp_script_modules()->get_queue() : [];
-			$codex_provider_assert( in_array( 'ai-provider-for-codex/user-connection', $codex_provider_script_module_queue, true ), 'User connection page should enqueue the enhanced connection-flow script module.' );
+			$codex_provider_assert( in_array( 'scriptorium-ai-provider-for-codex/user-connection', $codex_provider_script_module_queue, true ), 'User connection page should enqueue the enhanced connection-flow script module.' );
 			$codex_provider_assert( false !== strpos( $codex_provider_connection_page_html, 'data-codex-connection-root' ), 'User connection page should render the enhanced connection root.' );
 			$codex_provider_assert( false !== strpos( $codex_provider_connection_page_html, 'data-codex-connection-console' ), 'User connection page should render an always-present enhanced connection console for first-time starts.' );
 			$codex_provider_assert( false !== strpos( $codex_provider_connection_page_html, 'data-codex-base-actions' ), 'User connection page should expose the base action container to hide during enhanced flows.' );
@@ -505,7 +513,7 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 		ConnectorsIntegration::enqueue_connectors_boot_module();
 		$codex_provider_script_module_queue = function_exists( 'wp_script_modules' ) ? wp_script_modules()->get_queue() : [];
 		$codex_provider_assert(
-			in_array( 'ai-provider-for-codex/connectors', $codex_provider_script_module_queue, true ),
+			in_array( 'scriptorium-ai-provider-for-codex/connectors', $codex_provider_script_module_queue, true ),
 			'Codex connector module should be queued when the routed Connectors app builds its boot dependency graph.'
 		);
 		$codex_provider_connectors_source = (string) file_get_contents( dirname( __DIR__ ) . '/assets/connectors.js' );
@@ -608,7 +616,7 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 					[
 						'type'     => 'plugin',
 						'basename' => $codex_provider_approval_basename,
-						'name'     => 'AI Provider for Codex',
+						'name'     => 'Scriptorium AI Provider for Codex',
 					],
 					'codex'
 				);
@@ -625,8 +633,8 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 					'Activation and ordinary boot should self-approve the Codex provider plugin once when Connector Approval is enabled.'
 				);
 				$codex_provider_assert(
-					'1' === (string) get_option( $codex_provider_approval_seed_option, '' ),
-					'Connector Approval self-approval should record a one-time seed marker.'
+					$codex_provider_approval_basename === (string) get_option( $codex_provider_approval_seed_option, '' ),
+					'Connector Approval self-approval should record the approved plugin basename as the seed marker.'
 				);
 				$codex_provider_assert(
 					! isset( $codex_provider_approval_store->get_pending()[ $codex_provider_approval_pending_key ] ),
@@ -639,6 +647,49 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 				$codex_provider_assert(
 					! $codex_provider_approval_store->is_approved( $codex_provider_approval_basename, 'codex' ),
 					'Connector Approval self-approval should not restore access after an administrator revokes it.'
+				);
+
+				// Regression (rename migration): a site upgraded from a release
+				// with a different main-file basename carries the legacy '1'
+				// seed marker. The migration must carry the PRIOR approval
+				// decision forward — approve the renamed basename when the old
+				// one was approved, but honor a prior admin revocation.
+				$codex_provider_legacy_basename = 'ai-provider-for-codex/plugin.php';
+
+				// Carry-over: prior basename approved -> renamed basename
+				// approved, and the stale prior grant is retired.
+				$codex_provider_approval_store->set_approval( $codex_provider_approval_basename, 'codex', false );
+				$codex_provider_approval_store->set_approval( $codex_provider_legacy_basename, 'codex', true );
+				update_option( $codex_provider_approval_seed_option, '1', false );
+				ConnectorApprovalIntegration::maybe_self_approve();
+
+				$codex_provider_assert(
+					$codex_provider_approval_store->is_approved( $codex_provider_approval_basename, 'codex' ),
+					'Connector Approval migration should carry a prior approval forward to the renamed basename.'
+				);
+				$codex_provider_assert(
+					! $codex_provider_approval_store->is_approved( $codex_provider_legacy_basename, 'codex' ),
+					'Connector Approval migration should retire the stale pre-rename basename grant.'
+				);
+				$codex_provider_assert(
+					$codex_provider_approval_basename === (string) get_option( $codex_provider_approval_seed_option, '' ),
+					'Connector Approval migration should record the renamed basename as the seed marker.'
+				);
+
+				// Preserve revocation: prior basename absent (admin revoked) ->
+				// the renamed basename must NOT be silently re-approved.
+				$codex_provider_approval_store->set_approval( $codex_provider_approval_basename, 'codex', false );
+				$codex_provider_approval_store->set_approval( $codex_provider_legacy_basename, 'codex', false );
+				update_option( $codex_provider_approval_seed_option, '1', false );
+				ConnectorApprovalIntegration::maybe_self_approve();
+
+				$codex_provider_assert(
+					! $codex_provider_approval_store->is_approved( $codex_provider_approval_basename, 'codex' ),
+					'Connector Approval migration must not re-approve the renamed basename when the prior approval was revoked.'
+				);
+				$codex_provider_assert(
+					$codex_provider_approval_basename === (string) get_option( $codex_provider_approval_seed_option, '' ),
+					'Connector Approval migration should record the renamed basename even when honoring a prior revocation.'
 				);
 			} finally {
 				if ( $codex_provider_had_approvals ) {
@@ -748,7 +799,7 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 
 				return new WP_Error(
 					'wpai_connector_not_approved',
-					'The "codex" AI connector has not been approved for use by "ai-provider-for-codex/plugin.php".',
+					'The "codex" AI connector has not been approved for use by "scriptorium-ai-provider-for-codex/scriptorium-ai-provider-for-codex.php".',
 					[
 						'status'       => 403,
 						'connector_id' => 'codex',
@@ -789,12 +840,12 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 
 				return new WP_Error(
 					'wpai_connector_not_approved',
-					'The "codex" AI connector has not been approved for use by "ai-provider-for-codex/plugin.php".',
+					'The "codex" AI connector has not been approved for use by "scriptorium-ai-provider-for-codex/scriptorium-ai-provider-for-codex.php".',
 					[
 						'status'       => 403,
 						'connector_id' => 'codex',
 						'caller'       => [
-							'basename' => 'ai-provider-for-codex/plugin.php',
+							'basename' => 'scriptorium-ai-provider-for-codex/scriptorium-ai-provider-for-codex.php',
 						],
 					]
 				);
@@ -1124,7 +1175,7 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 
 				$codex_provider_translate_filter = static function ( string $translation, string $text, string $domain ): string {
 					if (
-						'ai-provider-for-codex' === $domain
+						'scriptorium-ai-provider-for-codex' === $domain
 						&& str_contains( $text, 'This page manages your personal account link.' )
 					) {
 						return 'This page manages your personal account link. 100% reliable. <a href="%1$s">Plugin settings</a> control the local runtime shared by all users. <a href="%2$s">Settings &gt; Connectors</a> shows overall provider status.';
@@ -1683,9 +1734,9 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 	}
 
 	if ( class_exists( 'WP_CLI' ) ) {
-		WP_CLI::success( 'AI Provider for Codex verification passed.' );
+		WP_CLI::success( 'Scriptorium AI Provider for Codex verification passed.' );
 		return;
 	}
 
-	echo "AI Provider for Codex verification passed.\n";
+	echo "Scriptorium AI Provider for Codex verification passed.\n";
 } )();

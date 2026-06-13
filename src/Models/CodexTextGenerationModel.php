@@ -42,13 +42,13 @@ final class CodexTextGenerationModel extends AbstractApiBasedModel implements Te
 		$wp_user_id = get_current_user_id();
 
 		if ( $wp_user_id <= 0 ) {
-			throw self::runtime_exception( esc_html__( 'Codex generation requires a logged-in WordPress user.', 'ai-provider-for-codex' ) );
+			throw self::runtime_exception( esc_html__( 'Codex generation requires a logged-in WordPress user.', 'scriptorium-ai-provider-for-codex' ) );
 		}
 
 		$connection = ConnectionRepository::get_for_user( $wp_user_id );
 
 		if ( ! $connection ) {
-			throw self::runtime_exception( esc_html__( 'Connect a Codex account before requesting text generation.', 'ai-provider-for-codex' ) );
+			throw self::runtime_exception( esc_html__( 'Connect a Codex account before requesting text generation.', 'scriptorium-ai-provider-for-codex' ) );
 		}
 
 		$catalog  = ModelCatalogState::get_effective_catalog( $wp_user_id );
@@ -60,7 +60,7 @@ final class CodexTextGenerationModel extends AbstractApiBasedModel implements Te
 					/* translators: 1: requested model ID, 2: comma-separated available models */
 					esc_html__(
 						'The model "%1$s" is not available for your Codex account. Available models: %2$s.',
-						'ai-provider-for-codex'
+						'scriptorium-ai-provider-for-codex'
 					),
 					esc_html( $model_id ),
 					esc_html( implode( ', ', ModelCatalogState::labels_from_catalog( $catalog ) ) )
@@ -86,7 +86,7 @@ final class CodexTextGenerationModel extends AbstractApiBasedModel implements Te
 						'responseFormat'    => $this->build_response_format(),
 						'context'           => [
 							'surface'    => 'wordpress-ai-client',
-							'pluginSlug' => 'ai-provider-for-codex',
+							'pluginSlug' => 'scriptorium-ai-provider-for-codex',
 						],
 					],
 					static function ( $value ): bool {

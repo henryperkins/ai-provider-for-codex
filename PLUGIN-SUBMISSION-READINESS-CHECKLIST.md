@@ -1,6 +1,6 @@
 # WordPress.org Submission Readiness Checklist
 
-This checklist is specific to `ai-provider-for-codex`.
+This checklist is specific to `scriptorium-ai-provider-for-codex`.
 
 Use it before submitting a zip to the WordPress.org plugin directory and again before publishing the first approved SVN release.
 
@@ -9,7 +9,7 @@ Version and requirement references refreshed: 2026-06-08
 
 ## Current Status Summary
 
-- `[pass]` Header version and readme stable tag currently match: `0.1.4`
+- `[pass]` Header version and readme stable tag currently match: `0.1.5`
 - `[pass]` `Requires at least` and `Requires PHP` are aligned between the main plugin file and `readme.txt`
 - `[pass]` Local verification script currently passes
 - `[pass]` Plugin Check has been run locally against the release-style file set and currently reports no findings
@@ -17,7 +17,7 @@ Version and requirement references refreshed: 2026-06-08
 - `[pass]` The public readme now documents the external service/runtime requirement, Terms of Use, privacy, and data handling
 - `[pass]` A standalone GPL-2.0-or-later LICENSE file is present in the project root
 - `[pass]` The release zip includes `sidecar/` so the readme installation instructions work from the installed plugin directory
-- `[needs decision]` The plugin name and slug still reference `Codex`, which may create trademark or naming-review risk
+- `[pass]` The plugin was renamed to lead with `Scriptorium` so the display name no longer leads with `Codex`; `Codex` now appears only as a descriptive reference. The slug intentionally keeps the `codex` token for continuity. Confirm the residual descriptive use is acceptable at submission time.
 - `[verify at submission time]` `Tested up to: 7.0` is reasonable right now, but it must be re-checked against the current stable or release-candidate WordPress version on submission day
 
 ## 1. WordPress.org Account And Ownership
@@ -41,9 +41,9 @@ Repo notes:
 
 Repo notes:
 
-- The current display name is `AI Provider for Codex` in [`plugin.php`](./plugin.php).
-- The current text domain is `ai-provider-for-codex` in [`plugin.php`](./plugin.php).
-- Because the current name leads with `Codex`, this is one of the highest review-risk items.
+- The current display name is `Scriptorium AI Provider for Codex` in [`scriptorium-ai-provider-for-codex.php`](./scriptorium-ai-provider-for-codex.php).
+- The current text domain is `scriptorium-ai-provider-for-codex` in [`scriptorium-ai-provider-for-codex.php`](./scriptorium-ai-provider-for-codex.php).
+- The name was renamed to lead with `Scriptorium`, so it no longer leads with `Codex`; the residual `Codex` reference is descriptive, which lowers what was previously one of the highest review-risk items.
 
 ## 3. Main Plugin Headers And Readme Metadata
 
@@ -57,11 +57,11 @@ Repo notes:
 
 Repo notes:
 
-- `Version: 0.1.4` in [`plugin.php`](./plugin.php)
-- `Stable tag: 0.1.4` in [`readme.txt`](./readme.txt)
-- `Text Domain: ai-provider-for-codex` in [`plugin.php`](./plugin.php)
-- `Requires at least: 7.0` in [`plugin.php`](./plugin.php)
-- `Requires PHP: 7.4` in [`plugin.php`](./plugin.php)
+- `Version: 0.1.5` in [`scriptorium-ai-provider-for-codex.php`](./scriptorium-ai-provider-for-codex.php)
+- `Stable tag: 0.1.5` in [`readme.txt`](./readme.txt)
+- `Text Domain: scriptorium-ai-provider-for-codex` in [`scriptorium-ai-provider-for-codex.php`](./scriptorium-ai-provider-for-codex.php)
+- `Requires at least: 7.0` in [`scriptorium-ai-provider-for-codex.php`](./scriptorium-ai-provider-for-codex.php)
+- `Requires PHP: 7.4` in [`scriptorium-ai-provider-for-codex.php`](./scriptorium-ai-provider-for-codex.php)
 - `Tested up to: 7.0` in [`readme.txt`](./readme.txt)
 
 ## 4. Public Documentation Quality
@@ -102,7 +102,7 @@ Repo notes:
 
 Repo notes:
 
-- The plugin includes activation and uninstall hooks in [`plugin.php`](./plugin.php) and [`uninstall.php`](./uninstall.php).
+- The plugin includes activation and uninstall hooks in [`scriptorium-ai-provider-for-codex.php`](./scriptorium-ai-provider-for-codex.php) and [`uninstall.php`](./uninstall.php).
 - The sidecar runtime is real and implemented in [`sidecar/app/main.py`](./sidecar/app/main.py).
 - The release zip includes [`sidecar/`](./sidecar), including the Python runtime and systemd template. Shell installer scripts are excluded because Plugin Check reports `.sh` files as disallowed application files.
 - The plugin depends on WordPress 7.0+ with AI Client SDK 1.0+; if the standalone WordPress AI plugin provides the client, WordPress AI plugin 1.0+ is required.
@@ -135,7 +135,7 @@ Repo notes:
 
 Current packaged zip includes:
 
-- [`plugin.php`](./plugin.php)
+- [`scriptorium-ai-provider-for-codex.php`](./scriptorium-ai-provider-for-codex.php)
 - [`readme.txt`](./readme.txt)
 - [`uninstall.php`](./uninstall.php)
 - [`LICENSE`](./LICENSE)
@@ -179,7 +179,7 @@ Repo notes:
 
 - Local verification currently passes using [`scripts/verify.sh`](./scripts/verify.sh).
 - The verification script covers text generation through the default loopback runtime URL so regressions caused by `wp_safe_remote_request()` rejecting `http://127.0.0.1:4317` are caught before release.
-- A release-style zip currently builds successfully at `../plugin-builds/ai-provider-for-codex-0.1.4.zip`.
+- A release-style zip currently builds successfully at `../plugin-builds/scriptorium-ai-provider-for-codex-0.1.5.zip`.
 - Plugin Check 1.9.0 is installed on this site and `WP_PATH=/home/dev/wp-hperkins-com bash scripts/plugin-check-release.sh` currently reports no findings.
 
 ## 10. Submission Packet
@@ -207,7 +207,7 @@ Suggested submission description points for this plugin:
 
 ## Immediate Next Actions For This Repo
 
-- [ ] Decide whether the plugin name or slug should change to reduce trademark risk before submission.
+- [x] Renamed the plugin to `Scriptorium AI Provider for Codex` to reduce naming-review risk; the slug intentionally keeps the `codex` token for continuity.
 - [ ] Re-run release-style Plugin Check with `WP_PATH=/path/to/wordpress bash scripts/plugin-check-release.sh` on submission day, then install the final zip on a clean site if reviewer policy requires a raw installed-copy check.
 - [ ] Validate [`readme.txt`](./readme.txt) with the official readme validator.
 - [ ] Re-check `Tested up to` on the actual day of submission.

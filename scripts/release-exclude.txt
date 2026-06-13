@@ -116,6 +116,9 @@ LOCAL-SIDECAR-SPEC.md
 PLUGIN-SUBMISSION-READINESS-CHECKLIST.md
 /README.md
 codex-app.err
+IDEATION-ARTIFACT.md
+leadership-lesson-side-convo.md
+plato-leadership-lesson.md
 
 # Scripts that are not accepted in WordPress.org plugin zips
 /scripts

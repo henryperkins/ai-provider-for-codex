@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A WordPress plugin (`ai-provider-for-codex`) that registers a `codex` provider with the **WordPress AI Client** (WP 7.0+, `wordpress/php-ai-client` SDK 1.0+). Once registered, the `codex` provider becomes available to every consumer of `wp_ai_client_prompt()` and appears as a card under **Settings → Connectors**.
+A WordPress plugin (`scriptorium-ai-provider-for-codex`) that registers a `codex` provider with the **WordPress AI Client** (WP 7.0+, `wordpress/php-ai-client` SDK 1.0+). Once registered, the `codex` provider becomes available to every consumer of `wp_ai_client_prompt()` and appears as a card under **Settings → Connectors**.
 
 The defining constraint: **the PHP plugin never talks to OpenAI/Codex directly.** It talks only to a **localhost sidecar** over loopback HTTP. The sidecar (Python, `sidecar/app/main.py`) wraps the `codex` CLI's `app-server` over JSON-RPC, performs device-code login, and keeps each WordPress user's auth isolated in its own `CODEX_HOME`. Auth and billing are ChatGPT-managed; WordPress stores only connection metadata and cached snapshots — never tokens. Text generation only (vision/image route to other providers).
 
@@ -31,7 +31,7 @@ Per-user auth lives at `${CODEX_WP_STORAGE_ROOT}/users/<wp_user_id>/auth.json` (
 
 ## PHP architecture (`src/`, PSR-4 `AIProviderForCodex\`)
 
-Boot: `plugin.php` runs version/SDK gates (`check_php_version`/`check_wp_version`/`check_ai_client`) then `Plugin::init()` wires all hooks. `register_provider()` registers `CodexProvider` on `init` (priority 5), gated by `wp_supports_ai()`.
+Boot: `scriptorium-ai-provider-for-codex.php` runs version/SDK gates (`check_php_version`/`check_wp_version`/`check_ai_client`) then `Plugin::init()` wires all hooks. `register_provider()` registers `CodexProvider` on `init` (priority 5), gated by `wp_supports_ai()`.
 
 - **`Provider/`** — AI Client integration. `CodexProvider` (extends `AbstractApiProvider`; wires model factory, metadata, availability, catalog; metadata is version-gated against SDK 1.2.0/1.3.0 for description/logo). `CodexProviderAvailability::isConfigured()` = has runtime config **and** `HealthMonitor` not `unreachable`. `ModelCatalog`/`ModelCatalogState`, `SupportChecks`.
 - **`Models/CodexTextGenerationModel`** — the generation path. Flattens prompt messages, POSTs `/v1/responses/text`, maps reasoning effort + JSON-schema output, and calls `ConnectionService::invalidate_local_connection()` on an `auth_required` runtime error.
@@ -67,7 +67,7 @@ composer install        # dev deps only (PHPStan + SDK for analysis/stubs)
 composer phpstan
 ```
 
-Full verification — run this before claiming a change works. Orchestrates `php -l` on all non-vendor PHP, release-exclude/Plugin-Check consistency checks, a `composer.lock` SDK-version guard, plugin.php↔readme.txt "Requires at least" parity, JS `node --check` + `node --test`, then the big WP-CLI end-to-end check:
+Full verification — run this before claiming a change works. Orchestrates `php -l` on all non-vendor PHP, release-exclude/Plugin-Check consistency checks, a `composer.lock` SDK-version guard, scriptorium-ai-provider-for-codex.php↔readme.txt "Requires at least" parity, JS `node --check` + `node --test`, then the big WP-CLI end-to-end check:
 ```bash
 WP_PATH=/path/to/site ./scripts/verify.sh
 ```
@@ -80,7 +80,7 @@ node --test assets/user-connection.test.mjs
 
 WP-CLI end-to-end check on its own (the ~1.5k-line `scripts/verify.php` exercises the whole plugin with mocked HTTP via `pre_http_request`):
 ```bash
-wp --path=/path/to/site eval-file wp-content/plugins/ai-provider-for-codex/scripts/verify.php
+wp --path=/path/to/site eval-file wp-content/plugins/scriptorium-ai-provider-for-codex/scripts/verify.php
 ```
 
 Release-style Plugin Check (mirrors the release zip's exclusions against a symlinked dev checkout):
@@ -98,10 +98,10 @@ Sidecar (separate process, same host): Python 3.11+ and the `codex` CLI; configu
 ## Releasing — version sync gotcha
 
 A release must keep these in lockstep:
-- `plugin.php`: the `Version:` header **and** the `const VERSION` (and `MIN_WP_VERSION` if it changes)
-- `readme.txt`: `Stable tag:` (must equal the plugin.php `Version:`) and `Requires at least:` (must equal plugin.php's, and be referenced in `PLUGIN-SUBMISSION-READINESS-CHECKLIST.md`)
+- `scriptorium-ai-provider-for-codex.php`: the `Version:` header **and** the `const VERSION` (and `MIN_WP_VERSION` if it changes)
+- `readme.txt`: `Stable tag:` (must equal the scriptorium-ai-provider-for-codex.php `Version:`) and `Requires at least:` (must equal scriptorium-ai-provider-for-codex.php's, and be referenced in `PLUGIN-SUBMISSION-READINESS-CHECKLIST.md`)
 - `sidecar/app/main.py`: the reported `version` strings (`clientInfo`, the `/healthz` payload, `server_version`)
 
-`package-release.sh` enforces plugin.php `Version:` == readme `Stable tag:`, and `verify.sh` enforces the `Requires at least:` parity (plugin.php ↔ readme.txt ↔ checklist). The sidecar version strings are **not** script-enforced — bump them by hand.
+`package-release.sh` enforces scriptorium-ai-provider-for-codex.php `Version:` == readme `Stable tag:`, and `verify.sh` enforces the `Requires at least:` parity (scriptorium-ai-provider-for-codex.php ↔ readme.txt ↔ checklist). The sidecar version strings are **not** script-enforced — bump them by hand.
 
 `PLUGIN-SUBMISSION-READINESS-CHECKLIST.md` is the WordPress.org submission gate. Planning/spec artifacts live in `docs/superpowers/plans/` and `docs/superpowers/specs/`.

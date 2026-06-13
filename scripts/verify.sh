@@ -52,7 +52,7 @@ if [[ "$locked_ai_client_version" != dev-* ]] && ! php -r 'exit(version_compare(
 fi
 
 plugin_requires_wp="$(
-	sed -n 's/^ \* Requires at least:[[:space:]]*//p' "$ROOT_DIR/plugin.php" | head -n 1
+	sed -n 's/^ \* Requires at least:[[:space:]]*//p' "$ROOT_DIR/scriptorium-ai-provider-for-codex.php" | head -n 1
 )"
 readme_requires_wp="$(
 	sed -n 's/^Requires at least:[[:space:]]*//p' "$ROOT_DIR/readme.txt" | head -n 1
@@ -60,13 +60,13 @@ readme_requires_wp="$(
 readiness_checklist="$ROOT_DIR/PLUGIN-SUBMISSION-READINESS-CHECKLIST.md"
 
 if [[ -z "$plugin_requires_wp" ]]; then
-	echo "plugin.php must declare a Requires at least header." >&2
+	echo "scriptorium-ai-provider-for-codex.php must declare a Requires at least header." >&2
 	exit 1
 fi
 
 if [[ "$plugin_requires_wp" != "$readme_requires_wp" ]]; then
-	echo "plugin.php and readme.txt must declare the same Requires at least value." >&2
-	echo "  plugin.php: $plugin_requires_wp" >&2
+	echo "scriptorium-ai-provider-for-codex.php and readme.txt must declare the same Requires at least value." >&2
+	echo "  scriptorium-ai-provider-for-codex.php: $plugin_requires_wp" >&2
 	echo "  readme.txt: $readme_requires_wp" >&2
 	exit 1
 fi
@@ -79,6 +79,31 @@ fi
 if grep -Fq "WordPress 6.9" "$readiness_checklist"; then
 	echo "PLUGIN-SUBMISSION-READINESS-CHECKLIST.md still refers to unsupported WordPress 6.9 runtime support." >&2
 	exit 1
+fi
+
+# The sidecar reports its version in three hand-maintained spots (clientInfo,
+# the /healthz payload, and server_version). These are not derived from the
+# plugin header, so guard against the drift that shipped at 0.1.4.
+plugin_version="$(
+	sed -n 's/^ \* Version:[[:space:]]*//p' "$ROOT_DIR/scriptorium-ai-provider-for-codex.php" | head -n 1
+)"
+sidecar_main="$ROOT_DIR/sidecar/app/main.py"
+
+if [[ -z "$plugin_version" ]]; then
+	echo "scriptorium-ai-provider-for-codex.php must declare a Version header." >&2
+	exit 1
+fi
+
+if [[ -f "$sidecar_main" ]]; then
+	sidecar_version_hits="$(grep -c "\"version\": \"$plugin_version\"" "$sidecar_main" || true)"
+	if [[ "$sidecar_version_hits" -lt 2 ]]; then
+		echo "sidecar/app/main.py must report version $plugin_version in both clientInfo and the /healthz payload (found $sidecar_version_hits of 2)." >&2
+		exit 1
+	fi
+	if ! grep -Fq "server_version = \"CodexWPSidecar/$plugin_version\"" "$sidecar_main"; then
+		echo "sidecar/app/main.py server_version must be \"CodexWPSidecar/$plugin_version\"." >&2
+		exit 1
+	fi
 fi
 
 node --input-type=module --check < "$ROOT_DIR/assets/connection-flow.js" >/dev/null

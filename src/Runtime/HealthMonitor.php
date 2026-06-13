@@ -149,7 +149,7 @@ final class HealthMonitor {
 			self::record_failure(
 				sprintf(
 					/* translators: %d: HTTP status code. */
-					__( 'The local Codex runtime health check returned HTTP %d.', 'ai-provider-for-codex' ),
+					__( 'The local Codex runtime health check returned HTTP %d.', 'scriptorium-ai-provider-for-codex' ),
 					$status_code
 				)
 			);

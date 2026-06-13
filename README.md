@@ -1,4 +1,4 @@
-# AI Provider for Codex
+# Scriptorium AI Provider for Codex
 
 WordPress AI Client provider plugin for Codex models using a local sidecar runtime and ChatGPT-managed authentication and billing.
 
@@ -14,7 +14,7 @@ WordPress AI Client provider plugin for Codex models using a local sidecar runti
 
 ## Included
 
-- `plugin.php` bootstrap with WordPress and AI Client checks
+- `scriptorium-ai-provider-for-codex.php` bootstrap with WordPress and AI Client checks
 - provider registration for `codex`
 - Connectors integration for runtime status and user connection actions
 - site settings for runtime base URL, bearer token, and fallback models
@@ -42,7 +42,7 @@ WordPress AI Client provider plugin for Codex models using a local sidecar runti
 ## Verification
 
 - `WP_PATH=/path/to/site ./scripts/verify.sh`
-- `wp --path=/path/to/site eval-file wp-content/plugins/ai-provider-for-codex/scripts/verify.php`
+- `wp --path=/path/to/site eval-file wp-content/plugins/scriptorium-ai-provider-for-codex/scripts/verify.php`
 
 ## Automated Sidecar Setup
 

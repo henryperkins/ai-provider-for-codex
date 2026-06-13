@@ -3,7 +3,8 @@ import {
 	getCodexConnectionPendingSupportText,
 } from './connection-flow.js';
 
-const configElement = document.getElementById( 'codex-provider-connection-config' );
+const MODULE_ID = 'scriptorium-ai-provider-for-codex/user-connection';
+const configElement = document.getElementById( `wp-script-module-data-${ MODULE_ID }` );
 const root = document.querySelector( '[data-codex-connection-root]' );
 
 if ( configElement && root ) {

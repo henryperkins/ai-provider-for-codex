@@ -4,9 +4,9 @@ After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=/path/to/wp-content/plugins/ai-provider-for-codex
+WorkingDirectory=/path/to/wp-content/plugins/scriptorium-ai-provider-for-codex
 EnvironmentFile=/etc/codex-wp-sidecar.env
-ExecStart=/usr/bin/python3 /path/to/wp-content/plugins/ai-provider-for-codex/sidecar/app/main.py
+ExecStart=/usr/bin/python3 /path/to/wp-content/plugins/scriptorium-ai-provider-for-codex/sidecar/app/main.py
 Restart=always
 RestartSec=3
 

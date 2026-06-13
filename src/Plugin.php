@@ -44,7 +44,8 @@ final class Plugin {
 		add_action( 'admin_init', [ SiteSettings::class, 'register_settings' ] );
 		add_action( 'admin_init', [ UserConnectionPage::class, 'maybe_handle_actions' ] );
 		add_action( 'admin_enqueue_scripts', [ ConnectorsIntegration::class, 'enqueue_connectors_assets' ] );
-		add_filter( 'script_module_data_ai-provider-for-codex/connectors', [ ConnectorsIntegration::class, 'script_module_data' ] );
+		add_filter( 'script_module_data_scriptorium-ai-provider-for-codex/connectors', [ ConnectorsIntegration::class, 'script_module_data' ] );
+		add_filter( 'script_module_data_scriptorium-ai-provider-for-codex/user-connection', [ UserConnectionPage::class, 'script_module_data' ] );
 		add_action( 'options-connectors_init', [ ConnectorsIntegration::class, 'enqueue_connectors_boot_module' ] );
 		add_action( 'options-connectors-wp-admin_init', [ ConnectorsIntegration::class, 'enqueue_connectors_boot_module' ] );
 		add_action( 'wp_connectors_init', [ ConnectorsIntegration::class, 'register_connector_metadata' ] );

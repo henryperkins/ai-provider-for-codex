@@ -1,6 +1,6 @@
 # Codex WordPress Sidecar
 
-Local runtime service for `ai-provider-for-codex`.
+Local runtime service for `scriptorium-ai-provider-for-codex`.
 
 It wraps `codex app-server`, stores per-user ChatGPT/Codex auth state on disk, and exposes a localhost-only HTTP API for the WordPress plugin.
 
@@ -13,7 +13,7 @@ It wraps `codex app-server`, stores per-user ChatGPT/Codex auth state on disk, a
 ## Recommended Quick Start
 
 1. On the same host as WordPress, confirm Python 3.11+ and the `codex` CLI are installed.
-2. Copy `sidecar/systemd/codex-wp-sidecar.service` to `/etc/systemd/system/codex-wp-sidecar.service` and replace `/path/to/wp-content/plugins/ai-provider-for-codex` with the installed plugin directory.
+2. Copy `sidecar/systemd/codex-wp-sidecar.service` to `/etc/systemd/system/codex-wp-sidecar.service` and replace `/path/to/wp-content/plugins/scriptorium-ai-provider-for-codex` with the installed plugin directory.
 3. Create `/etc/codex-wp-sidecar.env` with the environment values below, then enable and start the service.
 4. In WordPress, open `Settings > Codex Provider`. If the values were not auto-detected, enter them manually.
 5. Open `Settings > Connectors` and confirm Codex reports a healthy local runtime.

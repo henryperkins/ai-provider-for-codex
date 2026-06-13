@@ -90,7 +90,7 @@ class JsonRpcSession:
                 "protocolVersion": "1",
                 "clientInfo": {
                     "name": "codex-wp-sidecar",
-                    "version": "0.1.4",
+                    "version": "0.1.5",
                 },
                 "capabilities": {
                     "optOutNotificationMethods": INITIALIZE_CAPABILITY_OPTOUTS,
@@ -730,7 +730,7 @@ STATE = RuntimeState()
 
 
 class RuntimeHandler(BaseHTTPRequestHandler):
-    server_version = "CodexWPSidecar/0.1"
+    server_version = "CodexWPSidecar/0.1.5"
 
     def do_GET(self) -> None:  # noqa: N802
         self._dispatch()
@@ -750,7 +750,7 @@ class RuntimeHandler(BaseHTTPRequestHandler):
                     {
                         "ok": True,
                         "service": "codex-wp-sidecar",
-                        "version": "0.1.4",
+                        "version": "0.1.5",
                         "codexBin": CODEX_BIN,
                     }
                 )

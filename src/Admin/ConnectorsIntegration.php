@@ -17,8 +17,8 @@ use AIProviderForCodex\Runtime\Settings;
  */
 final class ConnectorsIntegration {
 
-	private const MODULE_ID     = 'ai-provider-for-codex/connectors';
-	private const SCRIPT_HANDLE = 'ai-provider-for-codex-connectors';
+	private const MODULE_ID     = 'scriptorium-ai-provider-for-codex/connectors';
+	private const SCRIPT_HANDLE = 'scriptorium-ai-provider-for-codex-connectors';
 	private const CONNECTOR_ID  = 'codex';
 
 	/**
@@ -220,12 +220,12 @@ final class ConnectorsIntegration {
 			sprintf(
 				'<a href="%s">%s</a>',
 				esc_url( admin_url( 'options-connectors.php' ) ),
-				esc_html__( 'Connectors', 'ai-provider-for-codex' )
+				esc_html__( 'Connectors', 'scriptorium-ai-provider-for-codex' )
 			),
 			sprintf(
 				'<a href="%s">%s</a>',
 				esc_url( SiteSettings::page_url() ),
-				esc_html__( 'Settings', 'ai-provider-for-codex' )
+				esc_html__( 'Settings', 'scriptorium-ai-provider-for-codex' )
 			)
 		);
 
@@ -244,7 +244,7 @@ final class ConnectorsIntegration {
 
 		$current_screen = get_current_screen();
 
-		if ( $current_screen && in_array( $current_screen->id, [ 'options-connectors', 'settings_page_ai-provider-for-codex' ], true ) ) {
+		if ( $current_screen && in_array( $current_screen->id, [ 'options-connectors', 'settings_page_' . \AIProviderForCodex\SLUG ], true ) ) {
 			return;
 		}
 
@@ -254,8 +254,8 @@ final class ConnectorsIntegration {
 				SafeFormat::sprintf(
 					/* translators: 1: Settings URL, 2: Connectors URL. */
 					__(
-						'AI Provider for Codex is active, but it will not work until the local runtime sidecar is configured and running on this server. Open <a href="%1$s">plugin settings</a> for the systemd and environment-file setup guide, then confirm the result on <a href="%2$s">Connectors</a>.',
-						'ai-provider-for-codex'
+						'Scriptorium AI Provider for Codex is active, but it will not work until the local runtime sidecar is configured and running on this server. Open <a href="%1$s">plugin settings</a> for the systemd and environment-file setup guide, then confirm the result on <a href="%2$s">Connectors</a>.',
+						'scriptorium-ai-provider-for-codex'
 					),
 					esc_url( SiteSettings::page_url() ),
 					esc_url( admin_url( 'options-connectors.php' ) )
@@ -288,7 +288,7 @@ final class ConnectorsIntegration {
 
 		$current_screen = get_current_screen();
 
-		if ( $current_screen && in_array( $current_screen->id, [ 'options-connectors', 'users_page_ai-provider-for-codex', 'settings_page_ai-provider-for-codex' ], true ) ) {
+		if ( $current_screen && in_array( $current_screen->id, [ 'options-connectors', 'users_page_' . \AIProviderForCodex\SLUG, 'profile_page_' . \AIProviderForCodex\SLUG, 'settings_page_' . \AIProviderForCodex\SLUG ], true ) ) {
 			return;
 		}
 
@@ -299,7 +299,7 @@ final class ConnectorsIntegration {
 					/* translators: %s: user connection URL. */
 					__(
 						'Codex AI is available on this site. <a href="%s">Connect your Codex account</a> to start using AI features.',
-						'ai-provider-for-codex'
+						'scriptorium-ai-provider-for-codex'
 					),
 					esc_url( UserConnectionPage::page_url() )
 				)
@@ -318,7 +318,7 @@ final class ConnectorsIntegration {
 		if ( ! current_user_can( 'read' ) ) {
 			wp_send_json_error(
 				[
-					'message' => __( 'You are not allowed to dismiss this notice.', 'ai-provider-for-codex' ),
+					'message' => __( 'You are not allowed to dismiss this notice.', 'scriptorium-ai-provider-for-codex' ),
 				],
 				403
 			);

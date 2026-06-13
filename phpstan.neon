@@ -6,7 +6,7 @@ parameters:
 	level: 5
 
 	paths:
-		- plugin.php
+		- scriptorium-ai-provider-for-codex.php
 		- uninstall.php
 		- src/
 

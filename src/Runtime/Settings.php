@@ -161,12 +161,12 @@ final class Settings {
 			'base_url_managed'     => '' !== $base_url_override['value'],
 			'base_url_source'      => self::override_label(
 				$base_url_override,
-				__( 'Saved in WordPress options.', 'ai-provider-for-codex' )
+				__( 'Saved in WordPress options.', 'scriptorium-ai-provider-for-codex' )
 			),
 			'bearer_token_managed' => '' !== $bearer_override['value'],
 			'bearer_token_source'  => self::override_label(
 				$bearer_override,
-				__( 'Saved in WordPress options.', 'ai-provider-for-codex' )
+				__( 'Saved in WordPress options.', 'scriptorium-ai-provider-for-codex' )
 			),
 			'shared_env_file'      => self::shared_env_file(),
 		];
@@ -431,19 +431,19 @@ final class Settings {
 			case 'constant':
 				return sprintf(
 					/* translators: %s: PHP constant name. */
-					__( 'Managed by the `%s` constant.', 'ai-provider-for-codex' ),
+					__( 'Managed by the `%s` constant.', 'scriptorium-ai-provider-for-codex' ),
 					$override['detail']
 				);
 			case 'env':
 				return sprintf(
 					/* translators: %s: environment variable name. */
-					__( 'Managed by the `%s` environment variable.', 'ai-provider-for-codex' ),
+					__( 'Managed by the `%s` environment variable.', 'scriptorium-ai-provider-for-codex' ),
 					$override['detail']
 				);
 			case 'file':
 				return sprintf(
 					/* translators: %s: absolute shared env file path. */
-					__( 'Auto-detected from `%s`.', 'ai-provider-for-codex' ),
+					__( 'Auto-detected from `%s`.', 'scriptorium-ai-provider-for-codex' ),
 					$override['detail']
 				);
 			default:

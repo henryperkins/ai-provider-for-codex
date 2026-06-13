@@ -2,6 +2,11 @@
 .github
 .gitignore
 codex-app.err
+IDEATION-ARTIFACT.md
+leadership-lesson-side-convo.md
+plato-leadership-lesson.md
+__pycache__
+*.pyc
 composer.json
 composer.lock
 node_modules

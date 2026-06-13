@@ -1,10 +1,10 @@
-=== AI Provider for Codex ===
+=== Scriptorium AI Provider for Codex ===
 Contributors: htperkins
 Tags: ai, codex, wordpress-ai-client
 Requires at least: 7.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.1.4
+Stable tag: 0.1.5
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -12,11 +12,13 @@ Local-runtime Codex provider for the WordPress AI Client.
 
 == Description ==
 
-AI Provider for Codex adds a `codex` provider to the WordPress AI Client and sends text-generation requests through a localhost runtime that runs on the same host as WordPress.
+Scriptorium AI Provider for Codex adds a `codex` provider to the WordPress AI Client and sends text-generation requests through a localhost runtime that runs on the same host as WordPress.
 
 Text generation only; vision and image generation are routed to other providers.
 
 This plugin is intended for self-managed environments that can run a local service. It is not intended for shared hosting or managed hosts that cannot run background processes.
+
+Codex and ChatGPT are products of OpenAI. This plugin is an independent integration and is not affiliated with, endorsed by, or sponsored by OpenAI.
 
 Features:
 
@@ -44,7 +46,7 @@ Important: activating the plugin in wp-admin is only the first step. An administ
 1. Upload the plugin to `/wp-content/plugins/`.
 2. Activate the plugin through the WordPress admin.
 3. On the same host as WordPress, install Python 3.11+ and the `codex` CLI.
-4. Create a localhost service for the bundled sidecar. Use `sidecar/systemd/codex-wp-sidecar.service` as a systemd template and replace `/path/to/wp-content/plugins/ai-provider-for-codex` with the installed plugin directory.
+4. Create a localhost service for the bundled sidecar. Use `sidecar/systemd/codex-wp-sidecar.service` as a systemd template and replace `/path/to/wp-content/plugins/scriptorium-ai-provider-for-codex` with the installed plugin directory.
 5. Create `/etc/codex-wp-sidecar.env` with the runtime values documented in `sidecar/README.md`, start the service, and make the file readable by PHP if you want the plugin to auto-detect the Runtime URL and Runtime bearer token.
 6. In WordPress, open `Settings > Codex Provider`. If the values were not auto-detected, enter them manually. The default Runtime URL is `http://127.0.0.1:4317`.
 7. Open `Settings > Connectors` and confirm that the `Codex` connector reports a healthy local runtime.
@@ -121,6 +123,12 @@ Support is limited to documented, self-managed environments that can run the loc
 
 == Changelog ==
 
+= 0.1.5 =
+* Rename the plugin to Scriptorium AI Provider for Codex and the main plugin file to scriptorium-ai-provider-for-codex.php.
+* Carry the connector approval across the plugin rename (preserving any prior admin revocation) for sites using the WordPress AI Connector Approval experiment.
+* Deliver admin screen styles through wp_add_inline_style() and the connection-page config through script module data instead of inline style/script tags.
+* Document that the plugin is an independent integration not affiliated with OpenAI.
+
 = 0.1.4 =
 * Add an explicit capability check to the dismiss-notice AJAX handler before updating user metadata.
 * Add release-gate coverage for the dismiss-notice authorization contract.
@@ -141,3 +149,8 @@ Support is limited to documented, self-managed environments that can run the loc
 
 = 0.1.0 =
 * Initial local-runtime release with Connectors integration, per-user account linking, local runtime snapshots, and Codex provider support for the WordPress AI Client.
+
+== Upgrade Notice ==
+
+= 0.1.5 =
+Renaming the main plugin file means an in-place update deactivates the plugin (its previous file no longer exists). Reactivate it from the Plugins screen after updating; your settings and connections are preserved. Fresh installs are unaffected.

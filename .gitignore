@@ -22,3 +22,7 @@ Thumbs.db
 
 # Runtime artifacts
 codex-app.err
+
+# Python bytecode (sidecar)
+__pycache__/
+*.pyc

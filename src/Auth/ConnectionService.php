@@ -33,13 +33,13 @@ final class ConnectionService {
 	 */
 	public function start_connect( int $wp_user_id ): array {
 		if ( ! Settings::has_required_configuration() ) {
-			throw self::runtime_exception( esc_html__( 'The local Codex runtime settings are incomplete.', 'ai-provider-for-codex' ) );
+			throw self::runtime_exception( esc_html__( 'The local Codex runtime settings are incomplete.', 'scriptorium-ai-provider-for-codex' ) );
 		}
 
 		$user = get_userdata( $wp_user_id );
 
 		if ( ! $user ) {
-			throw self::runtime_exception( esc_html__( 'The current user could not be loaded.', 'ai-provider-for-codex' ) );
+			throw self::runtime_exception( esc_html__( 'The current user could not be loaded.', 'scriptorium-ai-provider-for-codex' ) );
 		}
 
 		$existing_connection = $this->reuse_stored_auth( $wp_user_id );
@@ -61,7 +61,7 @@ final class ConnectionService {
 		);
 
 		if ( empty( $response['authSessionId'] ) || empty( $response['verificationUrl'] ) || empty( $response['userCode'] ) ) {
-			throw self::runtime_exception( esc_html__( 'The local Codex runtime returned an incomplete login response.', 'ai-provider-for-codex' ) );
+			throw self::runtime_exception( esc_html__( 'The local Codex runtime returned an incomplete login response.', 'scriptorium-ai-provider-for-codex' ) );
 		}
 
 		PendingConnectionRepository::upsert( $wp_user_id, $response );
@@ -110,7 +110,7 @@ final class ConnectionService {
 		if ( 'completed' !== $status ) {
 			PendingConnectionRepository::delete_for_user( $wp_user_id );
 			return self::connect_error_response(
-				esc_html__( 'The local Codex runtime returned an unexpected login status.', 'ai-provider-for-codex' )
+				esc_html__( 'The local Codex runtime returned an unexpected login status.', 'scriptorium-ai-provider-for-codex' )
 			);
 		}
 
@@ -152,7 +152,7 @@ final class ConnectionService {
 	 */
 	public function refresh_snapshot( int $wp_user_id, ?string $connection_id = null ): array {
 		if ( ! Settings::has_required_configuration() ) {
-			throw self::runtime_exception( esc_html__( 'The local Codex runtime settings are incomplete.', 'ai-provider-for-codex' ) );
+			throw self::runtime_exception( esc_html__( 'The local Codex runtime settings are incomplete.', 'scriptorium-ai-provider-for-codex' ) );
 		}
 
 		$connection    = ConnectionRepository::get_for_user( $wp_user_id );
@@ -394,7 +394,7 @@ final class ConnectionService {
 			'verificationUrl' => null,
 			'userCode'        => null,
 			'error'           => sanitize_text_field(
-				(string) ( $payload['error'] ?? __( 'Login session was not found in the local runtime.', 'ai-provider-for-codex' ) )
+				(string) ( $payload['error'] ?? __( 'Login session was not found in the local runtime.', 'scriptorium-ai-provider-for-codex' ) )
 			),
 		];
 	}

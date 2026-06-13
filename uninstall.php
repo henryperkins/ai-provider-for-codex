@@ -1,6 +1,6 @@
 <?php
 /**
- * Uninstalls the AI Provider for Codex scaffold.
+ * Uninstalls the Scriptorium AI Provider for Codex scaffold.
  *
  * @package AIProviderForCodex
  */

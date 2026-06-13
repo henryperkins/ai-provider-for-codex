@@ -64,7 +64,7 @@ final class CodexProvider extends AbstractApiProvider {
 
 		// Provider description support was added in php-ai-client 1.2.0.
 		if ( version_compare( $ai_client_version, '1.2.0', '>=' ) ) {
-			$provider_metadata_args[] = __( 'AI text generation through a localhost Codex sidecar. Configure the shared runtime, then each user connects their own Codex or ChatGPT account.', 'ai-provider-for-codex' );
+			$provider_metadata_args[] = __( 'AI text generation through a localhost Codex sidecar. Configure the shared runtime, then each user connects their own Codex or ChatGPT account.', 'scriptorium-ai-provider-for-codex' );
 		}
 
 		// Provider logoPath support was added in php-ai-client 1.3.0.
