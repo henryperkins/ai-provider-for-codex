@@ -791,6 +791,159 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 				);
 			}
 		);
+
+		// Codex generations are mirrored into the AI plugin Request Log via the bridge sink.
+		$codex_provider_log_entries = [];
+		$codex_provider_log_sink    = static function ( array $entry ) use ( &$codex_provider_log_entries ): void {
+			$codex_provider_log_entries[] = $entry;
+		};
+		add_filter(
+			'codex_provider_request_log_sink',
+			static function () use ( $codex_provider_log_sink ) {
+				return $codex_provider_log_sink;
+			}
+		);
+		$codex_provider_with_mock_runtime(
+			static function ( $preempt, array $args, string $url ) use ( $codex_provider_base_url, $codex_provider_http_json_response ) {
+				if ( 0 !== strpos( $url, $codex_provider_base_url ) ) {
+					return $preempt;
+				}
+
+				if ( '/v1/responses/text' !== (string) wp_parse_url( $url, PHP_URL_PATH ) ) {
+					return $preempt;
+				}
+
+				return $codex_provider_http_json_response(
+					200,
+					[
+						'requestId'    => 'codex-verify-log',
+						'outputText'   => 'Logged generation output.',
+						'finishReason' => 'stop',
+						'usage'        => [
+							'inputTokens'  => 11,
+							'outputTokens' => 22,
+						],
+						'account'      => [],
+						'rateLimits'   => [],
+					]
+				);
+			},
+			static function () use ( $codex_provider_assert, $codex_provider_temporary_model_a, $codex_provider_temporary_user_id, &$codex_provider_log_entries ) {
+				$codex_provider_log_entries = [];
+				$model                      = AiClient::defaultRegistry()->getProviderModel( 'codex', $codex_provider_temporary_model_a );
+				$model->generateTextResult(
+					[
+						new UserMessage(
+							[
+								new MessagePart( 'Log this request.' ),
+							]
+						),
+					]
+				);
+
+				$codex_provider_assert(
+					1 === count( $codex_provider_log_entries ),
+					'A successful Codex generation should emit exactly one request-log entry.'
+				);
+
+				$codex_provider_log_entry = $codex_provider_log_entries[0] ?? [];
+				$codex_provider_assert(
+					'codex' === ( $codex_provider_log_entry['provider'] ?? null ),
+					'Codex request-log entries should attribute the codex provider.'
+				);
+				$codex_provider_assert(
+					'success' === ( $codex_provider_log_entry['status'] ?? null ),
+					'A successful Codex generation should be logged with status=success.'
+				);
+				$codex_provider_assert(
+					$codex_provider_temporary_model_a === ( $codex_provider_log_entry['model'] ?? null ),
+					'Codex request-log entries should record the model id.'
+				);
+				$codex_provider_assert(
+					11 === ( $codex_provider_log_entry['tokens_input'] ?? null ),
+					'Codex request-log entries should record input tokens from the runtime usage.'
+				);
+				$codex_provider_assert(
+					22 === ( $codex_provider_log_entry['tokens_output'] ?? null ),
+					'Codex request-log entries should record output tokens from the runtime usage.'
+				);
+				$codex_provider_assert(
+					$codex_provider_temporary_user_id === ( $codex_provider_log_entry['user_id'] ?? null ),
+					'Codex request-log entries should record the WordPress user id.'
+				);
+				$codex_provider_assert(
+					'Logged generation output.' === ( $codex_provider_log_entry['context']['output_preview'] ?? null ),
+					'Codex request-log entries should capture the response preview.'
+				);
+				$codex_provider_assert(
+					false !== strpos( (string) ( $codex_provider_log_entry['context']['input_preview'] ?? '' ), 'Log this request.' ),
+					'Codex request-log entries should capture the prompt preview.'
+				);
+			}
+		);
+		$codex_provider_with_mock_runtime(
+			static function ( $preempt, array $args, string $url ) use ( $codex_provider_base_url, $codex_provider_http_json_response ) {
+				if ( 0 !== strpos( $url, $codex_provider_base_url ) ) {
+					return $preempt;
+				}
+
+				if ( '/v1/responses/text' !== (string) wp_parse_url( $url, PHP_URL_PATH ) ) {
+					return $preempt;
+				}
+
+				return $codex_provider_http_json_response(
+					500,
+					[
+						'error' => [
+							'message' => 'sidecar exploded',
+						],
+					]
+				);
+			},
+			static function () use ( $codex_provider_assert, $codex_provider_temporary_model_a, &$codex_provider_log_entries ) {
+				$codex_provider_log_entries      = [];
+				$codex_provider_generation_threw = false;
+
+				try {
+					$model = AiClient::defaultRegistry()->getProviderModel( 'codex', $codex_provider_temporary_model_a );
+					$model->generateTextResult(
+						[
+							new UserMessage(
+								[
+									new MessagePart( 'This generation will fail.' ),
+								]
+							),
+						]
+					);
+				} catch ( \Throwable $codex_provider_generation_error ) {
+					$codex_provider_generation_threw = true;
+				}
+
+				$codex_provider_assert(
+					true === $codex_provider_generation_threw,
+					'A failed Codex generation should still raise to the caller.'
+				);
+				$codex_provider_assert(
+					1 === count( $codex_provider_log_entries ),
+					'A failed Codex generation should emit exactly one request-log entry.'
+				);
+
+				$codex_provider_log_entry = $codex_provider_log_entries[0] ?? [];
+				$codex_provider_assert(
+					'error' === ( $codex_provider_log_entry['status'] ?? null ),
+					'A failed Codex generation should be logged with status=error.'
+				);
+				$codex_provider_assert(
+					'codex' === ( $codex_provider_log_entry['provider'] ?? null ),
+					'A failed Codex generation log should attribute the codex provider.'
+				);
+				$codex_provider_assert(
+					'' !== (string) ( $codex_provider_log_entry['error_message'] ?? '' ),
+					'A failed Codex generation log should include an error message.'
+				);
+			}
+		);
+		remove_all_filters( 'codex_provider_request_log_sink' );
 		$codex_provider_with_mock_runtime(
 			static function ( $preempt, array $args, string $url ) use ( $codex_provider_base_url ) {
 				if ( 0 !== strpos( $url, $codex_provider_base_url ) ) {

@@ -11,6 +11,7 @@ namespace AIProviderForCodex\Models;
 
 use AIProviderForCodex\Auth\ConnectionRepository;
 use AIProviderForCodex\Auth\ConnectionService;
+use AIProviderForCodex\Logging\RequestLogWriter;
 use AIProviderForCodex\Provider\ModelCatalogState;
 use AIProviderForCodex\Runtime\Client;
 use AIProviderForCodex\Runtime\ResponseMapper;
@@ -68,8 +69,10 @@ final class CodexTextGenerationModel extends AbstractApiBasedModel implements Te
 			);
 		}
 
-		$client = new Client();
-		$config = $this->getConfig();
+		$client     = new Client();
+		$config     = $this->getConfig();
+		$input_text = $this->flatten_prompt( $prompt );
+		$started_at = hrtime( true );
 
 		try {
 			$response = $client->post(
@@ -78,7 +81,7 @@ final class CodexTextGenerationModel extends AbstractApiBasedModel implements Te
 					[
 						'wpUserId'          => $wp_user_id,
 						'requestId'         => wp_generate_uuid4(),
-						'input'             => $this->flatten_prompt( $prompt ),
+						'input'             => $input_text,
 						'systemInstruction' => $config->getSystemInstruction(),
 						'model'             => $model_id,
 						'modelPreferences'  => [ $model_id ],
@@ -95,6 +98,19 @@ final class CodexTextGenerationModel extends AbstractApiBasedModel implements Te
 				)
 			);
 		} catch ( RuntimeRequestException $exception ) {
+			RequestLogWriter::record(
+				RequestLogWriter::build_entry(
+					[
+						'status'        => 'error',
+						'model'         => $model_id,
+						'duration_ms'   => self::elapsed_ms( $started_at ),
+						'error_message' => $exception->getMessage(),
+						'input_preview' => $input_text,
+						'user_id'       => $wp_user_id,
+					]
+				)
+			);
+
 			if ( $exception->is_auth_required() ) {
 				ConnectionService::invalidate_local_connection( $wp_user_id );
 			}
@@ -103,11 +119,29 @@ final class CodexTextGenerationModel extends AbstractApiBasedModel implements Te
 			throw self::runtime_exception( $exception->getMessage() );
 		}
 
-		return ResponseMapper::to_generative_ai_result(
+		$result = ResponseMapper::to_generative_ai_result(
 			$response,
 			$this->providerMetadata(),
 			$this->metadata()
 		);
+
+		RequestLogWriter::record(
+			RequestLogWriter::build_entry(
+				[
+					'status'         => 'success',
+					'model'          => $model_id,
+					'duration_ms'    => self::elapsed_ms( $started_at ),
+					'tokens_input'   => (int) ( $response['usage']['inputTokens'] ?? 0 ),
+					'tokens_output'  => (int) ( $response['usage']['outputTokens'] ?? 0 ),
+					'request_id'     => (string) ( $response['requestId'] ?? '' ),
+					'input_preview'  => $input_text,
+					'output_preview' => $result->toText(),
+					'user_id'        => $wp_user_id,
+				]
+			)
+		);
+
+		return $result;
 	}
 
 	/**
@@ -224,6 +258,16 @@ final class CodexTextGenerationModel extends AbstractApiBasedModel implements Te
 		$value = sanitize_key( (string) $value );
 
 		return in_array( $value, self::REASONING_EFFORTS, true ) ? $value : null;
+	}
+
+	/**
+	 * Returns elapsed whole milliseconds since an hrtime( true ) marker.
+	 *
+	 * @param float|int $started_at Start marker captured from hrtime( true ).
+	 * @return int
+	 */
+	private static function elapsed_ms( $started_at ): int {
+		return (int) round( ( hrtime( true ) - $started_at ) / 1e6 );
 	}
 
 	/**
