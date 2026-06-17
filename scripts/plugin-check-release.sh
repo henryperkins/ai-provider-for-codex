@@ -13,6 +13,7 @@ set -euo pipefail
 # When you add a dev-only file to release-exclude.txt, also add it here if it
 # is a literal name that lands in a developer's working tree.
 
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SLUG="scriptorium-ai-provider-for-codex"
 
 if [[ -z "${WP_PATH:-}" ]]; then
@@ -32,6 +33,23 @@ if [[ ! -d "${WP_PATH}" ]]; then
 	echo "WordPress path does not exist: ${WP_PATH}" >&2
 	echo "Set WP_PATH=/path/to/wordpress and retry." >&2
 	exit 1
+fi
+
+# Enforce the same release-path guard the packager uses, without building a zip
+# or coupling this lint check to version-drift checks.
+bash "${ROOT_DIR}/scripts/check-untracked-release-paths.sh"
+
+# Mirror package-release.sh: the release zip excludes every git-untracked
+# working-tree file (local notes, command output, scratch markdown), so exclude
+# those from the check too. Otherwise this wrapper flags scratch files the
+# release never ships, and EXCLUDE_FILES would need hand-editing per file.
+# Plugin Check's --exclude-files does literal substring matching, so an empty
+# value would match every path — only append when the untracked set is non-empty.
+if git -C "${ROOT_DIR}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+	UNTRACKED_FILES="$(git -C "${ROOT_DIR}" ls-files --others --exclude-standard | paste -sd, -)"
+	if [[ -n "${UNTRACKED_FILES}" ]]; then
+		EXCLUDE_FILES="${EXCLUDE_FILES},${UNTRACKED_FILES}"
+	fi
 fi
 
 wp --path="${WP_PATH}" plugin check "${SLUG}" \

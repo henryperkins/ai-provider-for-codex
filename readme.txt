@@ -105,6 +105,7 @@ This plugin stores the following data in WordPress:
 
 * the local runtime URL
 * the shared bearer token, unless it is managed externally
+* a locally generated suggested bearer token, shown only as setup guidance and never transmitted; removed on uninstall
 * per-user connection metadata such as connection ID, account email, plan type, auth mode, and session expiry
 * cached model and rate-limit snapshots
 * pending device-code session metadata

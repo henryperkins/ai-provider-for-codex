@@ -3,7 +3,10 @@ from __future__ import annotations
 import hmac
 import json
 import os
+import platform
+import shutil
 import subprocess
+import sys
 import threading
 import time
 import uuid
@@ -22,6 +25,7 @@ AUTH_TOKEN = os.environ.get("CODEX_WP_BEARER_TOKEN", "")
 REQUEST_TIMEOUT = float(os.environ.get("CODEX_RUNTIME_REQUEST_TIMEOUT", "60"))
 TURN_TIMEOUT = float(os.environ.get("CODEX_RUNTIME_TURN_TIMEOUT", "300"))
 LOGIN_TIMEOUT = float(os.environ.get("CODEX_RUNTIME_LOGIN_TIMEOUT", "1800"))
+DIAGNOSTIC_HANDSHAKE_TIMEOUT = 10.0
 INITIALIZE_CAPABILITY_OPTOUTS = [
     "codex/event/agent_message_content_delta",
     "codex/event/reasoning_content_delta",
@@ -60,7 +64,7 @@ class JsonRpcSession:
         self._transport_error: str | None = None
         self._closed = False
 
-    def start(self) -> JsonRpcSession:
+    def start(self, initialize_timeout: float | None = None) -> JsonRpcSession:
         if self._proc is not None:
             return self
 
@@ -96,7 +100,7 @@ class JsonRpcSession:
                     "optOutNotificationMethods": INITIALIZE_CAPABILITY_OPTOUTS,
                 },
             },
-            timeout=REQUEST_TIMEOUT,
+            timeout=initialize_timeout or REQUEST_TIMEOUT,
         )
         return self
 
@@ -262,6 +266,84 @@ class JsonRpcSession:
     def _raise_if_broken(self) -> None:
         if self._transport_error:
             raise RuntimeError(self._transport_error)
+
+
+def _check_python_version() -> dict[str, Any]:
+    version = platform.python_version()
+    ok = sys.version_info >= (3, 11)
+    detail = f"Python {version}" if ok else f"Python {version} (3.11+ required)"
+    return {"id": "python_version", "label": "Python runtime", "status": "pass" if ok else "fail", "detail": detail}
+
+
+def _check_codex_cli() -> dict[str, Any]:
+    label = "Codex CLI"
+    try:
+        result = subprocess.run(
+            [CODEX_BIN, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except FileNotFoundError:
+        return {"id": "codex_cli", "label": label, "status": "fail", "detail": f"codex not found at {CODEX_BIN}"}
+    except subprocess.TimeoutExpired:
+        return {"id": "codex_cli", "label": label, "status": "fail", "detail": f"codex --version timed out at {CODEX_BIN}"}
+
+    if result.returncode != 0:
+        return {"id": "codex_cli", "label": label, "status": "fail", "detail": f"codex --version exited with code {result.returncode}"}
+
+    raw = (result.stdout or result.stderr).strip()
+    version = raw.splitlines()[0] if raw else "unknown version"
+    return {"id": "codex_cli", "label": label, "status": "pass", "detail": f"{version} at {CODEX_BIN}"}
+
+
+def _check_storage_root() -> dict[str, Any]:
+    label = "Storage root writable"
+    try:
+        STORAGE_ROOT.mkdir(parents=True, exist_ok=True)
+        probe = STORAGE_ROOT / ".diagnostics-write-probe"
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink()
+    except OSError as exc:
+        return {"id": "storage_root", "label": label, "status": "fail", "detail": f"{STORAGE_ROOT}: {exc}"}
+    return {"id": "storage_root", "label": label, "status": "pass", "detail": f"{STORAGE_ROOT} is writable"}
+
+
+def _check_app_server() -> dict[str, Any]:
+    label = "app-server handshake"
+    started = time.time()
+    home = STORAGE_ROOT / "_diagnostics"
+    session = JsonRpcSession(home)
+    try:
+        session.start(initialize_timeout=DIAGNOSTIC_HANDSHAKE_TIMEOUT)
+    except FileNotFoundError:
+        return {"id": "app_server", "label": label, "status": "fail", "detail": f"codex not found at {CODEX_BIN}"}
+    except Exception as exc:  # noqa: BLE001 - any startup failure is a diagnostic failure
+        return {"id": "app_server", "label": label, "status": "fail", "detail": f"initialize failed: {exc}"}
+    finally:
+        session.close()
+        # Probe only: don't leave a throwaway CODEX_HOME behind on disk.
+        shutil.rmtree(home, ignore_errors=True)
+    elapsed = time.time() - started
+    return {"id": "app_server", "label": label, "status": "pass", "detail": f"initialize completed in {elapsed:.1f}s"}
+
+
+def run_diagnostics() -> dict[str, Any]:
+    python_check = _check_python_version()
+    cli_check = _check_codex_cli()
+    storage_check = _check_storage_root()
+    checks = [python_check, cli_check, storage_check]
+    # The app-server handshake spawns codex; skip it when the CLI check already
+    # failed, to avoid a second failure row for the same root cause and a wasted
+    # spawn that would otherwise block on the handshake timeout.
+    if cli_check["status"] == "pass":
+        checks.append(_check_app_server())
+    ok = all(check["status"] == "pass" for check in checks)
+    return {"ok": ok, **_server_identity(), "checks": checks}
+
+
+def _server_identity() -> dict[str, Any]:
+    return {"service": "codex-wp-sidecar", "version": "0.1.5"}
 
 
 def ensure_storage_root() -> None:
@@ -446,6 +528,7 @@ class RuntimeState:
             output_parts: list[str] = []
             output_text: str | None = None
             finish_reason = "stop"
+            token_usage: dict[str, Any] | None = None
 
             while True:
                 notification = session.wait_for_notification(
@@ -467,6 +550,12 @@ class RuntimeState:
                         item_text = item.get("text")
                         if isinstance(item_text, str):
                             output_text = item_text
+                    continue
+
+                if "thread/tokenUsage/updated" == method and isinstance(params, dict):
+                    usage_update = params.get("tokenUsage")
+                    if isinstance(usage_update, dict):
+                        token_usage = usage_update
                     continue
 
                 if "turn/completed" != method or not isinstance(params, dict):
@@ -502,10 +591,7 @@ class RuntimeState:
             "rateLimits": normalize_rate_limits_payload(rate_limits),
             "requestId": request_id,
             "structuredOutput": structured_output,
-            "usage": {
-                "inputTokens": 0,
-                "outputTokens": 0,
-            },
+            "usage": extract_turn_token_usage(token_usage),
         }
 
     def clear_session(self, wp_user_id: int) -> None:
@@ -637,6 +723,36 @@ def notification_matches_turn(message: dict[str, Any], turn_id: str) -> bool:
     return "turn/completed" == method
 
 
+def extract_turn_token_usage(token_usage: Any) -> dict[str, int]:
+    """Maps a Codex ``thread/tokenUsage/updated`` payload to the sidecar usage
+    contract.
+
+    Prefers the per-turn ``last`` bucket and falls back to ``total`` (they are
+    equal for the ephemeral single-turn threads this sidecar uses). Surfaces the
+    raw Codex counts the PHP model needs — input, output, and reasoning output
+    tokens — defaulting to zero when usage is absent so the response shape stays
+    stable.
+    """
+    bucket: dict[str, Any] = {}
+    if isinstance(token_usage, dict):
+        candidate = token_usage.get("last")
+        if not isinstance(candidate, dict):
+            candidate = token_usage.get("total")
+        if isinstance(candidate, dict):
+            bucket = candidate
+
+    def _non_negative_int(value: Any) -> int:
+        if isinstance(value, bool) or not isinstance(value, int):
+            return 0
+        return value if value >= 0 else 0
+
+    return {
+        "inputTokens": _non_negative_int(bucket.get("inputTokens")),
+        "outputTokens": _non_negative_int(bucket.get("outputTokens")),
+        "reasoningOutputTokens": _non_negative_int(bucket.get("reasoningOutputTokens")),
+    }
+
+
 def optional_string(value: Any) -> str | None:
     return value.strip() if isinstance(value, str) and value.strip() else None
 
@@ -746,18 +862,15 @@ class RuntimeHandler(BaseHTTPRequestHandler):
             parsed = urlparse(self.path)
 
             if "GET" == self.command and parsed.path in {"/ping", "/healthz"}:
-                self._json_response(
-                    {
-                        "ok": True,
-                        "service": "codex-wp-sidecar",
-                        "version": "0.1.5",
-                        "codexBin": CODEX_BIN,
-                    }
-                )
+                self._json_response({"ok": True, **_server_identity(), "codexBin": CODEX_BIN})
                 return
 
             self._ensure_local_client()
             self._ensure_authorized()
+
+            if "GET" == self.command and "/v1/diagnostics" == parsed.path:
+                self._json_response(run_diagnostics())
+                return
 
             if "POST" == self.command and "/v1/login/start" == parsed.path:
                 payload = self._read_json_body()

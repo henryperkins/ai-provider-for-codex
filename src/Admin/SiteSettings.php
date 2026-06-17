@@ -23,6 +23,8 @@ final class SiteSettings {
 
 	private const STYLE_HANDLE = 'codex-provider-site-settings';
 
+	private const SCRIPT_MODULE_ID = 'scriptorium-ai-provider-for-codex/diagnostics';
+
 	/**
 	 * Registers the settings page.
 	 *
@@ -59,9 +61,39 @@ final class SiteSettings {
 	 * @return void
 	 */
 	public static function enqueue_assets(): void {
+		wp_register_script_module(
+			self::SCRIPT_MODULE_ID,
+			plugins_url( 'assets/diagnostics.js', \AIProviderForCodex\PLUGIN_FILE ),
+			[],
+			\AIProviderForCodex\VERSION
+		);
+		wp_enqueue_script_module( self::SCRIPT_MODULE_ID );
 		wp_register_style( self::STYLE_HANDLE, false, [], \AIProviderForCodex\VERSION );
 		wp_enqueue_style( self::STYLE_HANDLE );
 		wp_add_inline_style( self::STYLE_HANDLE, self::inline_css() );
+	}
+
+	/**
+	 * Supplies config + labels to the diagnostics script module.
+	 *
+	 * @param array<string,mixed> $data Existing module data.
+	 * @return array<string,mixed>
+	 */
+	public static function script_module_data( array $data ): array {
+		return array_merge(
+			$data,
+			[
+				'diagnosticsUrl' => rest_url( 'codex-provider/v1/diagnostics' ),
+				'restNonce'      => wp_create_nonce( 'wp_rest' ),
+				'labels'         => [
+					'run'     => __( 'Check runtime', 'scriptorium-ai-provider-for-codex' ),
+					'running' => __( 'Checking…', 'scriptorium-ai-provider-for-codex' ),
+					'healthy' => __( 'All checks passed.', 'scriptorium-ai-provider-for-codex' ),
+					'issues'  => __( 'Some checks failed.', 'scriptorium-ai-provider-for-codex' ),
+					'failed'  => __( 'The diagnostic request failed.', 'scriptorium-ai-provider-for-codex' ),
+				],
+			]
+		);
 	}
 
 	/**
@@ -109,9 +141,26 @@ final class SiteSettings {
 	/**
 	 * Renders the contextual help tab content.
 	 *
+	 * The full walkthrough lives in the in-page Setup section (see
+	 * render_setup_guide()); the help tab only points to it so the guidance is
+	 * not duplicated on the same screen.
+	 *
 	 * @return void
 	 */
 	public static function render_help_tab(): void {
+		?>
+		<p>
+			<?php esc_html_e( 'The full setup walkthrough — installing the local runtime, configuring the environment file, and linking each user’s account — is in the Setup section at the bottom of this screen.', 'scriptorium-ai-provider-for-codex' ); ?>
+		</p>
+		<?php
+	}
+
+	/**
+	 * Renders the shared setup guide content.
+	 *
+	 * @return void
+	 */
+	public static function render_setup_guide(): void {
 		$runtime_config   = Settings::configuration_metadata();
 		$plugin_dir       = untrailingslashit( \AIProviderForCodex\PLUGIN_DIR );
 		$shared_env_file  = (string) $runtime_config['shared_env_file'];
@@ -247,7 +296,8 @@ final class SiteSettings {
 		$notice          = self::read_notice();
 		$fallback_models = Settings::get_allowed_models();
 		$is_configured   = Settings::has_required_configuration();
-		$runtime_status  = $is_configured ? HealthMonitor::probe() : HealthMonitor::get_status();
+		$runtime_status  = HealthMonitor::get_status();
+		$last_diagnostic = get_transient( 'codex_provider_last_diagnostics' );
 		$runtime_config  = Settings::configuration_metadata();
 		$health_ind      = StatusLabels::status_indicator( (string) $runtime_status['status'] );
 		$base_url_locked = ! empty( $runtime_config['base_url_managed'] );
@@ -337,6 +387,43 @@ final class SiteSettings {
 				</table>
 				<?php submit_button( __( 'Save settings', 'scriptorium-ai-provider-for-codex' ) ); ?>
 			</form>
+
+			<h2><?php esc_html_e( 'Runtime diagnostics', 'scriptorium-ai-provider-for-codex' ); ?></h2>
+			<?php if ( is_array( $last_diagnostic ) ) : ?>
+				<p class="description">
+					<?php
+					echo esc_html(
+						SafeFormat::sprintf(
+							/* translators: 1: pass/fail summary, 2: relative time. */
+							__( 'Last check: %1$s (%2$s).', 'scriptorium-ai-provider-for-codex' ),
+							empty( $last_diagnostic['ok'] )
+								? sprintf(
+									/* translators: %d: number of failed checks. */
+									_n( '%d issue', '%d issues', count( (array) ( $last_diagnostic['failed'] ?? [] ) ), 'scriptorium-ai-provider-for-codex' ),
+									count( (array) ( $last_diagnostic['failed'] ?? [] ) )
+								)
+								: __( 'healthy', 'scriptorium-ai-provider-for-codex' ),
+							StatusLabels::relative_time( (string) ( $last_diagnostic['checked_at'] ?? '' ) )
+						)
+					);
+					?>
+				</p>
+			<?php endif; ?>
+			<p>
+				<button type="button" class="button button-secondary" data-codex-diagnostics-run>
+					<?php esc_html_e( 'Check runtime', 'scriptorium-ai-provider-for-codex' ); ?>
+				</button>
+			</p>
+			<div data-codex-diagnostics-results aria-live="polite"></div>
+
+			<h2><?php esc_html_e( 'Setup', 'scriptorium-ai-provider-for-codex' ); ?></h2>
+			<?php self::render_setup_guide(); ?>
+
+			<h3><?php esc_html_e( 'systemd unit (/etc/systemd/system/codex-wp-sidecar.service)', 'scriptorium-ai-provider-for-codex' ); ?></h3>
+			<textarea class="large-text code" rows="12" readonly><?php echo esc_textarea( SetupSnippets::systemd_unit() ); ?></textarea>
+
+			<h3><?php esc_html_e( 'Environment file (/etc/codex-wp-sidecar.env)', 'scriptorium-ai-provider-for-codex' ); ?></h3>
+			<textarea class="large-text code" rows="10" readonly><?php echo esc_textarea( SetupSnippets::env_file() ); ?></textarea>
 		</div>
 		<?php
 	}

@@ -88,6 +88,7 @@ codex app-server generate-json-schema --out /tmp/codex-app-schema
 - Record the exact `modelProvider/capabilities/read` request shape, response shape, and boolean field path.
 - Record the exact JSON-RPC notification that carries the image result during a turn, including `method`, `params.item.type`, status field, and base64 result field path.
 - Record the exact `thread/read` fallback shape for completed image-generation items.
+- Record whether the app-server exposes the underlying runtime model used for the image turn. If it does, record the exact notification or response field path. If it does not, the sidecar must not invent one from the synthetic WordPress model ID.
 - Update this spec or the implementation plan if the observed live shape differs from the design-time assumption below.
 
 Design-time assumption, to be verified in Phase 0:
@@ -189,6 +190,8 @@ Required behavior:
 - `normalize_models()` remains text-only for runtime `model/list` entries. Append the synthetic image entry after normalization only when snapshot capabilities allow it.
 - `model_ids` must include `codex-image` only when image generation is available for the current user.
 - `getModelMetadata( 'codex-image' )` must be capability-gated through the same catalog path as `listModelMetadata()`. Direct lookup must not synthesize image metadata for a user whose current snapshot lacks `imageGeneration: true`.
+- Keep existing text-model preference behavior text-only. The current admin "Choose model" form stores `codex_provider_preferred_model`, and `Plugin::filter_preferred_text_models()` prepends the selected model to `wpai_preferred_text_models`; neither path may accept or emit `codex-image`.
+- Add kind-specific catalog helpers or payload fields, for example `text_model_ids`, `image_model_ids`, and `selected_text_model`, so text generation and the admin text-model selector never derive their selected model from an image entry. If the UI mentions `codex-image`, present it as image-generation availability rather than as the model "used for all Codex requests."
 
 Image model metadata:
 
@@ -196,7 +199,10 @@ Image model metadata:
 new ModelMetadata(
     'codex-image',
     'Codex Image',
-    [ CapabilityEnum::imageGeneration() ],
+    [
+        CapabilityEnum::imageGeneration(),
+        CapabilityEnum::chatHistory(),
+    ],
     [
         new SupportedOption( OptionEnum::inputModalities(), [ [ ModalityEnum::text() ] ] ),
         new SupportedOption( OptionEnum::outputModalities(), [ [ ModalityEnum::image() ] ] ),
@@ -206,14 +212,14 @@ new ModelMetadata(
 )
 ```
 
-Do not advertise `outputSchema()` for the image model. Reasoning effort may remain text-only unless implementation proves Codex image turns accept it usefully.
+Advertise `chatHistory()` because the WordPress AI Client requires that capability whenever a prompt contains multiple messages, and the v1 image model flattens text across prompt messages before sending a single Codex turn. Do not advertise `outputSchema()` for the image model. Reasoning effort may remain text-only unless implementation proves Codex image turns accept it usefully.
 
 `CodexProvider::createModel()` must instantiate by capability, not by provider-wide default:
 
 - image-generation metadata -> `CodexImageGenerationModel`
 - text-generation metadata -> `CodexTextGenerationModel`
 
-If metadata has both capabilities, throw a runtime exception instead of guessing. The design should keep the two models disjoint.
+If metadata has both text-generation and image-generation capabilities, throw a runtime exception instead of guessing. The design should keep those two generation models disjoint.
 
 `CodexProvider::createModel()` currently returns `CodexTextGenerationModel` unconditionally. The implementation must change that branch before the provider can pass WordPress AI Client's `ImageGenerationModelInterface` dispatch guard.
 
@@ -228,6 +234,7 @@ Responsibilities:
 - Require an existing, non-expired local connection for that user.
 - Check that the requested model ID is the synthetic image model ID and that the current user's snapshot supports image generation.
 - Flatten text prompt parts only. If the prompt includes any file/image parts, throw a clear "reference images are not supported yet" exception.
+- Accept multiple text messages by preserving the current role-prefixed flattening style used by the text model, then sending the flattened prompt as the single sidecar image prompt. This is why the image metadata advertises `chatHistory()`.
 - Send `POST /v1/responses/image` to the local runtime.
 - Map the sidecar response to `GenerativeAiResult` with one image candidate.
 - Mirror success and failure into `RequestLogWriter`.
@@ -292,6 +299,7 @@ Response body:
 {
   "requestId": "uuid",
   "model": "codex-image",
+  "runtimeModel": null,
   "mimeType": "image/png",
   "imageBase64": "iVBORw0KGgo...",
   "revisedPrompt": "Optional revised prompt from Codex",
@@ -309,6 +317,8 @@ Response body:
 }
 ```
 
+`model` is the synthetic WordPress AI Client model ID returned for local contract consistency. `runtimeModel` is optional diagnostic metadata and may be `null` or omitted when Phase 0 does not identify a stable app-server source for the underlying model. Do not treat `codex-image` as the raw runtime model.
+
 `imageBase64` is the source of truth returned to WordPress. `savedPath` is diagnostic metadata from app-server and should not be exposed as a URL or assumed readable by PHP.
 
 The sidecar should continue to default token counts to zero when app-server does not emit usable token usage for image turns. Token accounting should not block image delivery.
@@ -325,7 +335,7 @@ Mapping rules:
 - `File` -> `new MessagePart( $file )`.
 - `MessagePart` -> `new ModelMessage( [ $part ] )`.
 - `ModelMessage` -> `new Candidate( ..., FinishReasonEnum::stop() )`.
-- `GenerativeAiResult` `additionalData` includes account, rate limits, revised prompt, artifacts, and the raw runtime model ID.
+- `GenerativeAiResult` `additionalData` includes account, rate limits, revised prompt, artifacts, and `runtimeModel` when the sidecar response includes a stable underlying runtime model ID.
 
 Validation:
 
@@ -335,7 +345,14 @@ Validation:
 
 ## Component 6: Request Logging
 
-Use the existing `RequestLogWriter` path.
+Use the existing `RequestLogWriter` sink path, but first make the entry builder generation-type aware. The current writer is text-specific: it hardcodes `type: text` and `operation: codex:responses/text`. Image generation must not be logged as a text response.
+
+Required logging behavior:
+
+- text generation remains unchanged with `type: text` and `operation: codex:responses/text`;
+- image generation uses `type: image` and `operation: codex:responses/image`;
+- `RequestLogWriter::build_entry()` should accept explicit type/operation fields or expose small text/image helper methods so the two call sites cannot accidentally share the text constants;
+- `scripts/test-request-log-writer.php` must cover both the existing text entry and the new image entry.
 
 For success:
 
@@ -406,13 +423,20 @@ Required test coverage:
   - image model is absent when snapshot capabilities are missing or false;
   - image model is present when `capabilities.imageGeneration` is true;
   - `getModelMetadata( 'codex-image' )` fails closed without image capability and succeeds only with it;
+  - `codex-image` appears in image-capable catalog metadata but does not become the selected text model, does not appear in the admin text-model selector, and is never emitted by `wpai_preferred_text_models`;
+  - image metadata includes `CapabilityEnum::chatHistory()` and a multi-message text prompt can select `codex-image` for image generation before being flattened by `CodexImageGenerationModel`;
   - provider creates `CodexImageGenerationModel` for the image metadata and `CodexTextGenerationModel` for text metadata;
   - image generation posts to `/v1/responses/image`;
   - base64 PNG runtime response maps to a `GenerativeAiResult` whose `toImageFile()->isImage()` is true;
+  - image result mapping tolerates a missing or null `runtimeModel` and includes it in `additionalData` only when the sidecar provides a stable value;
   - image generation rejects prompt file/image parts with the v1 reference-image unsupported message;
-  - image success and failure create request-log entries without base64 data;
+  - image success and failure create request-log entries with `type: image`, `operation: codex:responses/image`, and no base64 data;
   - `auth_required` invalidates local connection;
   - Connector Approval transport blocks stay actionable.
+- `scripts/test-request-log-writer.php`:
+  - existing text entries still use `type: text` and `operation: codex:responses/text`;
+  - image entries use `type: image` and `operation: codex:responses/image`;
+  - image previews are truncated safely and never include base64 payloads or local generated image paths.
 - Sidecar manual probe:
   - `codex app-server generate-json-schema --out <tmp>` still includes `imageGeneration` capability and `imageGeneration` thread item shape;
   - a real ChatGPT-authenticated runtime reports `imageGeneration: true`;

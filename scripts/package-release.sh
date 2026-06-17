@@ -63,6 +63,10 @@ fi
 # stray file cannot leak into the release zip. Modified tracked files still
 # ship, preserving the build-from-working-tree release-prep workflow. Falls
 # back to release-exclude.txt alone outside a Git work tree.
+# Fail loudly if a real release-path source file is untracked, before the block
+# below silently excludes the untracked set from the build.
+bash "${ROOT_DIR}/scripts/check-untracked-release-paths.sh"
+
 RSYNC_EXCLUDES=( --exclude-from="${EXCLUDE_FILE}" )
 if git -C "${ROOT_DIR}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
 	UNTRACKED_EXCLUDE_FILE="$(mktemp)"

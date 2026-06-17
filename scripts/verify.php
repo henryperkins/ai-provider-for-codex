@@ -313,12 +313,12 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 			'Site settings must not print inline style tags; styles are delivered through wp_add_inline_style().'
 		);
 		$codex_provider_assert(
-			false === strpos( $codex_provider_site_settings_html, 'Quick setup' ),
-			'Site settings should move the quick setup guidance into the contextual Help dropdown.'
+			false !== strpos( $codex_provider_site_settings_html, 'Quick setup' ),
+			'Site settings should render the quick setup guidance in the page body.'
 		);
 		$codex_provider_assert(
-			false === strpos( $codex_provider_site_settings_html, 'Codex uses a local runtime service' ),
-			'Site settings should move the introductory help text into the contextual Help dropdown.'
+			false !== strpos( $codex_provider_site_settings_html, 'Codex uses a local runtime service' ),
+			'Site settings should render the introductory setup guide text in the page body.'
 		);
 		$codex_provider_assert(
 			method_exists( SiteSettings::class, 'render_help_tab' ),
@@ -328,16 +328,20 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 		SiteSettings::render_help_tab();
 		$codex_provider_site_settings_help_html = (string) ob_get_clean();
 		$codex_provider_assert(
-			false !== strpos( $codex_provider_site_settings_help_html, 'Quick setup' ),
-			'Site settings contextual Help should render quick setup guidance.'
+			false === strpos( $codex_provider_site_settings_help_html, 'Quick setup' ),
+			'The contextual Help tab must not duplicate the full setup guide; the guide lives in the in-page Setup section.'
 		);
 		$codex_provider_assert(
-			false === strpos( $codex_provider_site_settings_help_html, 'sidecar/scripts/install-systemd.sh' ),
-			'Site settings contextual Help should not recommend non-shipped helper scripts.'
+			'' !== trim( $codex_provider_site_settings_help_html ),
+			'The contextual Help tab should still render a short pointer to the Setup section.'
 		);
 		$codex_provider_assert(
-			false !== strpos( $codex_provider_site_settings_help_html, 'sidecar/systemd/codex-wp-sidecar.service' ),
-			'Site settings contextual Help should recommend the shipped systemd service template.'
+			false === strpos( $codex_provider_site_settings_html, 'sidecar/scripts/install-systemd.sh' ),
+			'The setup guide should not recommend non-shipped helper scripts.'
+		);
+		$codex_provider_assert(
+			false !== strpos( $codex_provider_site_settings_html, 'sidecar/systemd/codex-wp-sidecar.service' ),
+			'The setup guide should recommend the shipped systemd service template.'
 		);
 		$codex_provider_assert(
 			false === strpos( $codex_provider_site_settings_html, $codex_provider_temporary_model_a ) && false === strpos( $codex_provider_site_settings_html, $codex_provider_temporary_model_b ),
@@ -361,14 +365,14 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 
 		try {
 			ob_start();
-			SiteSettings::render_help_tab();
+			SiteSettings::render_setup_guide();
 			$codex_provider_site_settings_translated_help_html = (string) ob_get_clean();
 		} finally {
 			remove_filter( 'gettext', $codex_provider_site_settings_translate_filter, 10 );
 		}
 
 		$codex_provider_assert( $codex_provider_site_settings_filter_applied, 'Site settings percent-sign translation filter was not applied.' );
-		$codex_provider_assert( false !== strpos( $codex_provider_site_settings_translated_help_html, '100% guided' ), 'Site settings Help should render translated strings containing a literal percent sign.' );
+		$codex_provider_assert( false !== strpos( $codex_provider_site_settings_translated_help_html, '100% guided' ), 'The setup guide should render translated strings containing a literal percent sign.' );
 
 		PendingConnectionRepository::upsert(
 			$codex_provider_temporary_user_id,
@@ -820,8 +824,9 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 						'outputText'   => 'Logged generation output.',
 						'finishReason' => 'stop',
 						'usage'        => [
-							'inputTokens'  => 11,
-							'outputTokens' => 22,
+							'inputTokens'           => 11,
+							'outputTokens'          => 22,
+							'reasoningOutputTokens' => 7,
 						],
 						'account'      => [],
 						'rateLimits'   => [],
@@ -865,7 +870,7 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 				);
 				$codex_provider_assert(
 					22 === ( $codex_provider_log_entry['tokens_output'] ?? null ),
-					'Codex request-log entries should record output tokens from the runtime usage.'
+					'Codex request-log output tokens must equal the runtime outputTokens and must not double-count reasoning output tokens, which the runtime already includes in outputTokens.'
 				);
 				$codex_provider_assert(
 					$codex_provider_temporary_user_id === ( $codex_provider_log_entry['user_id'] ?? null ),
@@ -1848,6 +1853,220 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 						$codex_provider_assert( null !== ConnectionRepository::get_for_user( $codex_provider_temporary_user_id ), 'Cron snapshot refresh should preserve local state after transient runtime failures.' );
 					}
 				);
+
+			// --- Runtime diagnostics: Client::diagnostics() does not touch HealthMonitor. ---
+			delete_transient( 'codex_provider_runtime_health' );
+			HealthMonitor::record_failure( 'sentinel-before-diagnostics' );
+
+			$codex_provider_with_mock_runtime(
+				static function ( $preempt, array $args, string $url ) use ( $codex_provider_http_json_response ) {
+					if ( false !== strpos( $url, '/v1/diagnostics' ) ) {
+						return $codex_provider_http_json_response(
+							200,
+							[
+								'ok'      => true,
+								'service' => 'codex-wp-sidecar',
+								'version' => '0.1.5',
+								'checks'  => [
+									[ 'id' => 'python_version', 'label' => 'Python runtime', 'status' => 'pass', 'detail' => 'Python 3.11.6' ],
+								],
+							]
+						);
+					}
+					return $preempt;
+				},
+				static function () use ( $codex_provider_assert ) {
+					$client = new \AIProviderForCodex\Runtime\Client();
+					$result = $client->diagnostics();
+					$codex_provider_assert( true === ( $result['ok'] ?? null ), 'Client::diagnostics() should return the sidecar ok flag.' );
+					$codex_provider_assert( 'pass' === $result['checks'][0]['status'], 'Client::diagnostics() should return sidecar checks.' );
+					$codex_provider_assert(
+						'sentinel-before-diagnostics' === HealthMonitor::get_status()['error'],
+						'Client::diagnostics() must not overwrite the HealthMonitor reachability cache.'
+					);
+				}
+			);
+
+			// --- Runtime diagnostics: controller row mapping + verdict storage. ---
+			$codex_provider_diagnostics_rows = static function ( array $body ): array {
+				$by_id = [];
+				foreach ( $body['rows'] as $row ) {
+					$by_id[ $row['id'] ] = $row;
+				}
+				return $by_id;
+			};
+
+			// 200 with a failing sidecar check => overall ok false, verdict recorded.
+			delete_transient( 'codex_provider_last_diagnostics' );
+			$codex_provider_with_mock_runtime(
+				static function ( $preempt, array $args, string $url ) use ( $codex_provider_http_json_response ) {
+					if ( false !== strpos( $url, '/v1/diagnostics' ) ) {
+						return $codex_provider_http_json_response(
+							200,
+							[
+								'ok'     => false,
+								'checks' => [
+									[ 'id' => 'codex_cli', 'label' => 'Codex CLI', 'status' => 'fail', 'detail' => 'codex not found' ],
+								],
+							]
+						);
+					}
+					return $preempt;
+				},
+				static function () use ( $codex_provider_assert, $codex_provider_diagnostics_rows ) {
+					$response = \AIProviderForCodex\REST\DiagnosticsController::run();
+					$body     = $response->get_data();
+					$rows     = $codex_provider_diagnostics_rows( $body );
+					$codex_provider_assert( false === $body['ok'], 'A 200 with a failing check must yield overall ok=false.' );
+					$codex_provider_assert( 'pass' === $rows['reachable']['status'], 'Reachable row should pass on HTTP 200.' );
+					$codex_provider_assert( 'pass' === $rows['bearer']['status'], 'Bearer row should pass on HTTP 200.' );
+					$codex_provider_assert( 'fail' === $rows['codex_cli']['status'], 'Failing sidecar check should surface as a fail row.' );
+					$verdict = get_transient( 'codex_provider_last_diagnostics' );
+					$codex_provider_assert( is_array( $verdict ) && false === $verdict['ok'], 'Verdict transient must record ok=false.' );
+				}
+			);
+
+			// 401 => bearer fail, reachable pass.
+			$codex_provider_with_mock_runtime(
+				static function ( $preempt, array $args, string $url ) use ( $codex_provider_http_json_response ) {
+					if ( false !== strpos( $url, '/v1/diagnostics' ) ) {
+						return $codex_provider_http_json_response( 401, [ 'error' => [ 'code' => 'unauthorized', 'message' => 'Invalid bearer token.' ] ] );
+					}
+					return $preempt;
+				},
+				static function () use ( $codex_provider_assert, $codex_provider_diagnostics_rows ) {
+					$rows = $codex_provider_diagnostics_rows( \AIProviderForCodex\REST\DiagnosticsController::run()->get_data() );
+					$codex_provider_assert( 'pass' === $rows['reachable']['status'], '401 still proves reachability.' );
+					$codex_provider_assert( 'fail' === $rows['bearer']['status'], '401 must mark the bearer row as failed.' );
+				}
+			);
+
+			// 500 => bearer warn (not 401), reachable pass; the verdict still records an issue.
+			delete_transient( 'codex_provider_last_diagnostics' );
+			$codex_provider_with_mock_runtime(
+				static function ( $preempt, array $args, string $url ) use ( $codex_provider_http_json_response ) {
+					if ( false !== strpos( $url, '/v1/diagnostics' ) ) {
+						return $codex_provider_http_json_response( 500, [ 'error' => [ 'message' => 'sidecar exploded' ] ] );
+					}
+					return $preempt;
+				},
+				static function () use ( $codex_provider_assert, $codex_provider_diagnostics_rows ) {
+					$rows = $codex_provider_diagnostics_rows( \AIProviderForCodex\REST\DiagnosticsController::run()->get_data() );
+					$codex_provider_assert( 'pass' === $rows['reachable']['status'], 'A 500 still proves reachability.' );
+					$codex_provider_assert( 'warn' === $rows['bearer']['status'], 'A non-401 runtime error should warn rather than fail the bearer row.' );
+					$verdict = get_transient( 'codex_provider_last_diagnostics' );
+					$codex_provider_assert(
+						is_array( $verdict ) && false === $verdict['ok'] && count( (array) $verdict['failed'] ) >= 1,
+						'A failed diagnostic (ok=false) must record at least one issue so the settings card never reports "0 issues".'
+					);
+				}
+			);
+
+			// Transport failure => reachable fail.
+			$codex_provider_with_mock_runtime(
+				static function ( $preempt, array $args, string $url ) {
+					if ( false !== strpos( $url, '/v1/diagnostics' ) ) {
+						return new WP_Error( 'http_request_failed', 'cURL error 7: Failed to connect to 127.0.0.1 port 4317: Connection refused' );
+					}
+					return $preempt;
+				},
+				static function () use ( $codex_provider_assert, $codex_provider_diagnostics_rows ) {
+					$rows = $codex_provider_diagnostics_rows( \AIProviderForCodex\REST\DiagnosticsController::run()->get_data() );
+					$codex_provider_assert( 'fail' === $rows['reachable']['status'], 'A transport failure must mark reachability as failed.' );
+				}
+			);
+
+			// --- Setup snippets + stable suggested token. ---
+			// suggested_bearer_token() returns the configured bearer when one is set
+			// and only generates+persists a token otherwise. Clear the configured
+			// bearer for this block so the generation/persistence path is actually
+			// exercised (env is already cleared above; the shared env file is not
+			// PHP-readable here), instead of passing vacuously.
+			$codex_provider_saved_bearer_option = get_option( Settings::OPTION_RUNTIME_BEARER, null );
+			update_option( Settings::OPTION_RUNTIME_BEARER, '' );
+			$codex_provider_assert(
+				'' === Settings::get_bearer_token(),
+				'Test setup: no bearer should be configured while exercising suggested-token generation.'
+			);
+			delete_option( 'codex_runtime_suggested_bearer_token' );
+			$codex_provider_unit = \AIProviderForCodex\Admin\SetupSnippets::systemd_unit();
+			$codex_provider_assert(
+				false === strpos( $codex_provider_unit, '/path/to/wp-content/plugins/scriptorium-ai-provider-for-codex' ),
+				'The systemd snippet must replace the placeholder plugin path.'
+			);
+			$codex_provider_assert(
+				false !== strpos( $codex_provider_unit, untrailingslashit( \AIProviderForCodex\PLUGIN_DIR ) ),
+				'The systemd snippet must contain the real plugin directory.'
+			);
+
+			$codex_provider_env = \AIProviderForCodex\Admin\SetupSnippets::env_file();
+			$codex_provider_assert(
+				false !== strpos( $codex_provider_env, 'CODEX_WP_BEARER_TOKEN=' ),
+				'The env snippet must include the bearer token line.'
+			);
+
+			$codex_provider_token_a = \AIProviderForCodex\Admin\SetupSnippets::suggested_bearer_token();
+			$codex_provider_token_b = \AIProviderForCodex\Admin\SetupSnippets::suggested_bearer_token();
+			$codex_provider_assert( '' !== $codex_provider_token_a, 'A suggested token must be generated.' );
+			$codex_provider_assert( $codex_provider_token_a === $codex_provider_token_b, 'The suggested token must be stable across calls.' );
+			// A non-autoloaded option is absent from wp_load_alloptions() (which holds autoloaded options only).
+			$codex_provider_assert(
+				! array_key_exists( 'codex_runtime_suggested_bearer_token', wp_load_alloptions() ),
+				'The suggested-token option must not autoload.'
+			);
+
+			// A race where another request stores a token between this function's
+			// cache-miss read and its add_option() call: it must return the
+			// persisted value, not the token it just generated. The pre_option
+			// filter only fools this function's own cache check (one read); add_option
+			// detects the existing row via its own DB query and returns false.
+			delete_option( 'codex_runtime_suggested_bearer_token' );
+			add_option( 'codex_runtime_suggested_bearer_token', 'codex-raced-winner', '', false );
+			$codex_provider_token_cache_miss_once = true;
+			$codex_provider_token_race_filter     = static function ( $pre ) use ( &$codex_provider_token_cache_miss_once ) {
+				if ( $codex_provider_token_cache_miss_once ) {
+					$codex_provider_token_cache_miss_once = false;
+					return '';
+				}
+				return $pre;
+			};
+			add_filter( 'pre_option_codex_runtime_suggested_bearer_token', $codex_provider_token_race_filter );
+			$codex_provider_raced_token = \AIProviderForCodex\Admin\SetupSnippets::suggested_bearer_token();
+			remove_filter( 'pre_option_codex_runtime_suggested_bearer_token', $codex_provider_token_race_filter );
+			$codex_provider_assert(
+				'codex-raced-winner' === $codex_provider_raced_token,
+				'suggested_bearer_token() must return the persisted token when add_option loses a race, not its own un-stored token.'
+			);
+			delete_option( 'codex_runtime_suggested_bearer_token' );
+
+			if ( null === $codex_provider_saved_bearer_option ) {
+				delete_option( Settings::OPTION_RUNTIME_BEARER );
+			} else {
+				update_option( Settings::OPTION_RUNTIME_BEARER, $codex_provider_saved_bearer_option );
+			}
+
+			// --- Settings page is passive on load (no runtime HTTP during render). ---
+			wp_set_current_user( 1 );
+			$codex_provider_assert(
+				current_user_can( 'manage_options' ),
+				'verify.php expects user 1 to be an administrator for the settings-render check.'
+			);
+
+			$codex_provider_http_calls = 0;
+			$codex_provider_with_mock_runtime(
+				static function ( $preempt, array $args, string $url ) use ( &$codex_provider_http_calls ) {
+					$codex_provider_http_calls++;
+					return new WP_Error( 'blocked', 'No runtime HTTP is allowed during settings render.' );
+				},
+				static function () use ( &$codex_provider_http_calls, $codex_provider_assert ) {
+					ob_start();
+					SiteSettings::render_page();
+					$html = (string) ob_get_clean();
+					$codex_provider_assert( 0 === $codex_provider_http_calls, 'render_page() must not make runtime HTTP calls on load.' );
+					$codex_provider_assert( false !== strpos( $html, 'data-codex-diagnostics-run' ), 'The settings page must render the Check runtime button.' );
+					$codex_provider_assert( false !== strpos( $html, 'EnvironmentFile=/etc/codex-wp-sidecar.env' ), 'The settings page must render the systemd snippet.' );
+				}
+			);
 			} catch ( \Throwable $codex_provider_throwable ) {
 		$codex_provider_failure = $codex_provider_throwable;
 	} finally {

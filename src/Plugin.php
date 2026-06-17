@@ -17,6 +17,7 @@ use AIProviderForCodex\Admin\UserConnectionPage;
 use AIProviderForCodex\Database\Installer;
 use AIProviderForCodex\Provider\ModelCatalogState;
 use AIProviderForCodex\REST\ConnectController;
+use AIProviderForCodex\REST\DiagnosticsController;
 use AIProviderForCodex\REST\StatusController;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -46,6 +47,7 @@ final class Plugin {
 		add_action( 'admin_enqueue_scripts', [ ConnectorsIntegration::class, 'enqueue_connectors_assets' ] );
 		add_filter( 'script_module_data_scriptorium-ai-provider-for-codex/connectors', [ ConnectorsIntegration::class, 'script_module_data' ] );
 		add_filter( 'script_module_data_scriptorium-ai-provider-for-codex/user-connection', [ UserConnectionPage::class, 'script_module_data' ] );
+		add_filter( 'script_module_data_scriptorium-ai-provider-for-codex/diagnostics', [ SiteSettings::class, 'script_module_data' ] );
 		add_action( 'options-connectors_init', [ ConnectorsIntegration::class, 'enqueue_connectors_boot_module' ] );
 		add_action( 'options-connectors-wp-admin_init', [ ConnectorsIntegration::class, 'enqueue_connectors_boot_module' ] );
 		add_action( 'wp_connectors_init', [ ConnectorsIntegration::class, 'register_connector_metadata' ] );
@@ -56,6 +58,7 @@ final class Plugin {
 
 		add_action( 'rest_api_init', [ ConnectController::class, 'register_routes' ] );
 		add_action( 'rest_api_init', [ StatusController::class, 'register_routes' ] );
+		add_action( 'rest_api_init', [ DiagnosticsController::class, 'register_routes' ] );
 
 		add_filter(
 			'plugin_action_links_' . plugin_basename( PLUGIN_FILE ),

@@ -132,6 +132,9 @@ final class CodexTextGenerationModel extends AbstractApiBasedModel implements Te
 					'model'          => $model_id,
 					'duration_ms'    => self::elapsed_ms( $started_at ),
 					'tokens_input'   => (int) ( $response['usage']['inputTokens'] ?? 0 ),
+					// outputTokens already includes reasoning tokens (Codex mirrors the
+					// OpenAI Responses convention where reasoningOutputTokens is a subset
+					// of outputTokens), so do not add reasoningOutputTokens here.
 					'tokens_output'  => (int) ( $response['usage']['outputTokens'] ?? 0 ),
 					'request_id'     => (string) ( $response['requestId'] ?? '' ),
 					'input_preview'  => $input_text,

@@ -62,7 +62,7 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now codex-wp-sidecar
 ```
 
-If PHP can read `/etc/codex-wp-sidecar.env`, the WordPress plugin can auto-detect
+If PHP can read `/etc/codex-wp-sidecar.env`, the WordPress plugin can auto-detect both the Runtime URL and bearer token, and the settings fields become informational.
 
 ## WordPress Plugin Settings
 
