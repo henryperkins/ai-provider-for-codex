@@ -72,6 +72,32 @@ WordPress AI Client facts verified at design time:
 - `GenerativeAiResult::toImageFile()` and `toImageFiles()` expect candidates whose content includes image `File` DTOs.
 - `File` accepts base64 image data when the MIME type is supplied.
 
+## Phase 0: Blocking App-Server Shape Probe
+
+Implementation must start with a live app-server probe before any PHP, database, or sidecar feature work. The spec intentionally depends on current Codex app-server behavior that does not exist in this repository, so implementers must pin the live contract from the deployed `codex` CLI version.
+
+Required Phase 0 outputs:
+
+- Generate schema from the deployed CLI:
+
+```bash
+codex app-server generate-json-schema --out /tmp/codex-app-schema
+```
+
+- Run one authenticated text-to-image turn against `codex app-server` using the same ChatGPT-authenticated account path the sidecar will use.
+- Record the exact `modelProvider/capabilities/read` request shape, response shape, and boolean field path.
+- Record the exact JSON-RPC notification that carries the image result during a turn, including `method`, `params.item.type`, status field, and base64 result field path.
+- Record the exact `thread/read` fallback shape for completed image-generation items.
+- Update this spec or the implementation plan if the observed live shape differs from the design-time assumption below.
+
+Design-time assumption, to be verified in Phase 0:
+
+- Raw Responses API items are `type: "image_generation_call"` with base64 `result`.
+- Codex app-server v2 wraps those as thread items with `type: "imageGeneration"`, `result`, `status`, optional `revisedPrompt`, and optional `savedPath`.
+- `item/completed` may carry the app-server thread item wrapper, while lower-level raw events may carry the snake_case Responses item. The sidecar parser must be written against the observed JSON-RPC event shape, not against the names in this paragraph.
+
+If Phase 0 cannot produce an authenticated completed image item, stop and do not advertise `codex-image`.
+
 ## Recommended Architecture
 
 Add image generation as a first-class provider model alongside the existing text model.
@@ -138,7 +164,16 @@ Normalize the result to:
 
 If the method fails because an older Codex CLI does not support it, the sidecar must return all capability booleans as `false` and include no hard failure in the snapshot. The provider should not advertise image generation from an unknown capability state.
 
-Store capabilities in a dedicated `capabilities_json` column on `{prefix}codex_provider_connection_snapshots`. Bump the local schema version and include upgrade/uninstall coverage. Capabilities are connection snapshot state, not model metadata, and should not be hidden inside `models_json` or `rate_limits_json`.
+Store capabilities in a dedicated `capabilities_json` column on `{prefix}codex_provider_connection_snapshots`. Capabilities are connection snapshot state, not model metadata, and should not be hidden inside `models_json` or `rate_limits_json`.
+
+Schema mechanics:
+
+- Bump `Installer::SCHEMA_VERSION` from `'5'` to `'6'` so `Installer::maybe_upgrade()` re-runs `dbDelta()`.
+- Add `capabilities_json longtext NOT NULL` to the snapshot table definition.
+- Update `ConnectionSnapshotRepository::get()` and `list_active_for_site_catalog()` to decode the new column into `$row['capabilities']`.
+- Update `ConnectionSnapshotRepository::upsert()` in lockstep: add the `capabilities_json` entry to `$data` and the matching `%s` entry to `$formats` at the same relative position. The current parallel-array pattern is easy to misalign.
+- Ensure uninstall cleanup still drops the whole custom table; no separate option cleanup is needed for capabilities.
+- Extend `scripts/verify.php` to prove an activation/upgrade creates the new column and that existing snapshots without capabilities fail closed.
 
 ## Component 2: Model Catalog Split
 
@@ -149,6 +184,11 @@ Required behavior:
 - Text metadata remains unchanged for runtime models returned by `model/list`.
 - Image metadata is exposed as a separate model only when the current user's connection snapshot says `capabilities.imageGeneration === true`.
 - Fallback site models remain text-only. A site fallback list is not proof that a disconnected user has image-generation entitlement.
+- `ModelCatalogState` must carry a model kind discriminator through the catalog. The current entry shape is only `array{id,label}`; v1 should add `kind: text|image` or an equivalent internal field so `ModelCatalog::create_metadata()` can choose the correct metadata.
+- Update every `ModelCatalogState` docblock and return shape touched by the new discriminator, including `get_effective_catalog()`, `get_user_snapshot_catalog()`, `get_settings_catalog()`, `normalize_models()`, and `empty_catalog()`.
+- `normalize_models()` remains text-only for runtime `model/list` entries. Append the synthetic image entry after normalization only when snapshot capabilities allow it.
+- `model_ids` must include `codex-image` only when image generation is available for the current user.
+- `getModelMetadata( 'codex-image' )` must be capability-gated through the same catalog path as `listModelMetadata()`. Direct lookup must not synthesize image metadata for a user whose current snapshot lacks `imageGeneration: true`.
 
 Image model metadata:
 
@@ -175,6 +215,8 @@ Do not advertise `outputSchema()` for the image model. Reasoning effort may rema
 
 If metadata has both capabilities, throw a runtime exception instead of guessing. The design should keep the two models disjoint.
 
+`CodexProvider::createModel()` currently returns `CodexTextGenerationModel` unconditionally. The implementation must change that branch before the provider can pass WordPress AI Client's `ImageGenerationModelInterface` dispatch guard.
+
 ## Component 3: WordPress Image Model
 
 Create `src/Models/CodexImageGenerationModel.php`.
@@ -191,7 +233,15 @@ Responsibilities:
 - Mirror success and failure into `RequestLogWriter`.
 - Invalidate local connection on `auth_required`, exactly like the text path.
 
-The prompt flattener may share a small helper with `CodexTextGenerationModel` if duplication becomes meaningful. Do not refactor the text path broadly just to add the image path.
+The meaningful reuse target is not the prompt flattener. Add a small shared trait or helper for the common model bracket:
+
+- current user resolution and logged-in guard;
+- local connection lookup and expired-connection handling;
+- request-log success/error scaffolding;
+- `RuntimeRequestException::is_auth_required()` -> `ConnectionService::invalidate_local_connection()`;
+- elapsed-time calculation.
+
+Keep prompt parsing separate. The text model intentionally drops non-text parts while flattening; the image model must reject file/image parts for v1.
 
 ## Component 4: Sidecar Image Endpoint
 
@@ -231,8 +281,8 @@ Behavior:
 4. Create an ephemeral thread.
 5. Start a turn with text input only.
 6. Wait for turn notifications.
-7. Capture completed `imageGeneration` items from `item/completed`.
-8. If no image item was captured by the time `turn/completed` arrives, call `thread/read` and search completed turn items for `type === "imageGeneration"`.
+7. Capture completed image items from the Phase 0-verified `item/completed` shape. The existing text parser only handles `item.type === "agentMessage"` and must gain an explicit image branch.
+8. If no image item was captured by the time `turn/completed` arrives, call `thread/read` and search completed turn items using the Phase 0-verified `type` and base64 field path.
 9. Return the first completed image item. If multiple are present, keep v1 deterministic by returning the first and include a count in `additionalData`.
 10. Refresh `account/read` and `account/rateLimits/read` after generation, matching the text path.
 
@@ -262,6 +312,8 @@ Response body:
 `imageBase64` is the source of truth returned to WordPress. `savedPath` is diagnostic metadata from app-server and should not be exposed as a URL or assumed readable by PHP.
 
 The sidecar should continue to default token counts to zero when app-server does not emit usable token usage for image turns. Token accounting should not block image delivery.
+
+`Runtime\Client` already applies the long generation timeout to every `/v1/responses/` path, so `/v1/responses/image` inherits the existing 360s generation timeout. No timeout special case is required unless Phase 0 proves image turns need a different bound.
 
 ## Component 5: Result Mapping
 
@@ -332,15 +384,28 @@ Update docs only after implementation lands:
 
 Do not update public readme claims before the feature is implemented and verified.
 
+## Operational Notes
+
+- Codex app-server persists generated PNG files under the user's `CODEX_HOME` in `generated_images/<session>/<call>.png`. V1 accepts that local artifact growth and does not delete files behind Codex's back. Treat disk usage as a monitored operational concern; add cleanup only after understanding Codex's own retention expectations.
+- Capability visibility is snapshot-driven. A newly entitled user may not see `codex-image` until the next scheduled snapshot refresh or an explicit account refresh updates `capabilities_json`.
+- If another image-capable provider is installed, this feature only makes `codex-image` available under the `codex` provider. Provider choice remains WordPress AI Client / caller behavior and is outside this plugin's v1 scope.
+- SDK enum calls must use the php-ai-client dynamic constructor style, for example `ModalityEnum::image()` and `CapabilityEnum::imageGeneration()`, not constant syntax.
+
 ## Testing And Verification
 
 The implementation plan should include focused tests before code changes.
 
 Required test coverage:
 
+- Phase 0:
+  - generated schema contains the capability response and image item shape needed by the implementation;
+  - authenticated app-server probe records the exact event names and base64 field path used by the sidecar parser.
 - `scripts/verify.php`:
+  - schema version upgrades from `5` to `6` and creates `capabilities_json`;
+  - snapshot repository reads, lists, and writes `capabilities_json` without misaligning `$data` and `$formats`;
   - image model is absent when snapshot capabilities are missing or false;
   - image model is present when `capabilities.imageGeneration` is true;
+  - `getModelMetadata( 'codex-image' )` fails closed without image capability and succeeds only with it;
   - provider creates `CodexImageGenerationModel` for the image metadata and `CodexTextGenerationModel` for text metadata;
   - image generation posts to `/v1/responses/image`;
   - base64 PNG runtime response maps to a `GenerativeAiResult` whose `toImageFile()->isImage()` is true;
@@ -360,7 +425,7 @@ Required test coverage:
 
 ## Implementation Notes
 
-- Extract a shared prompt flattener only if the image implementation repeats more than trivial code from the text model.
+- Prefer a small shared model trait/helper for the auth, connection, request-log, auth-invalidation, and elapsed-time bracket. Do not share the prompt flattener between text and image unless it can preserve the image model's required file-part rejection.
 - Do not expose a filter for the synthetic image model ID/name in v1; keep the model stable and simple.
 - Include `savedPath` only in runtime response `artifacts` and result `additionalData`. Never treat it as a public URL.
 
