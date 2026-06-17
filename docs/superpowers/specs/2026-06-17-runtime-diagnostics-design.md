@@ -30,7 +30,7 @@ These observations were verified against the current tree on 2026-06-17.
 **Non-Goals**
 
 - No OS-level installation, no writing to `/etc`, no executing installers from PHP. The plugin only *displays* text.
-- No new database tables; the diagnostic is a live, stateless check.
+- No new database tables. The check runs live; only a compact verdict summary (a transient) and the suggested bearer token (an option) are persisted.
 - No version bump as part of this work (see Versioning And Release).
 - No change to the passive status path used by `/status`, Connectors, or the user page (see Passive-Status Scope).
 
@@ -44,7 +44,7 @@ Settings > Codex Provider        WordPress REST (new)              Sidecar (new)
   + results panel        <--JSON--  diagnostics                     (Bearer auth)     (authenticated)
                                     (manage_options)                                       |
                                          |                                          runs server-side checks
-                                         └─ updates HealthMonitor cache
+                                         └─ records last-diagnostics verdict
 ```
 
 The browser never talks to the sidecar directly; all traffic is proxied through WordPress REST exactly as the existing connect/status routes are.
@@ -112,13 +112,15 @@ Defaulting to `REQUEST_TIMEOUT` preserves every existing caller (`app_server_ses
 
 - `permission_callback` = `current_user_can( 'manage_options' )`. This is stricter than the existing connect/status routes (logged-in + `read`) because the diagnostic exposes host paths and binary versions and spawns a process. POST (not GET) signals a non-idempotent action and avoids caching.
 - Calls a new `Runtime\Client::diagnostics()`, then composes the final row list: the PHP-derived rows (reachability, bearer-match, resolved configuration) followed by the sidecar `checks`.
-- Updates `HealthMonitor` from the outcome: overall success ⇒ `record_success()`; a reachability/auth failure ⇒ `record_failure()` (or `record_connector_unapproved()` when the existing connector-approval detection fires). This keeps the passive page status current after an explicit check.
+- Records the run's verdict in a **dedicated transient `codex_provider_last_diagnostics`** — compact (`checked_at`, `ok`, labels of any failed checks), short TTL, always shown with its timestamp — on **every** run: success, an authenticated `200` whose `ok` is `false` (a critical check failed), and transport/`401` failures alike. It does **not** write the shared `HealthMonitor` reachability transient.
 
-**`Runtime\Client::diagnostics(): array`** — issues `GET /v1/diagnostics` with the bearer header, reusing the existing transport-error normalization (including connector-approval rewriting). Mapping:
+This decoupling is deliberate. `HealthMonitor::probe()` records success on any sub-`400` response (`src/Runtime/HealthMonitor.php:146-162`) and is still invoked by `SupportChecks::current_user_status()` (`src/Provider/SupportChecks.php:48`) for `/status`, the Connectors card, and the user page. If the diagnostic wrote its verdict into the same transient, the next passive unauthenticated `/healthz` probe — which returns `200` even with a wrong bearer or a broken `codex` binary — would erase it. Keeping the authoritative verdict in its own store means a passive reachability probe can never overwrite it, and a sidecar `ok:false` (HTTP `200`, failing checks) is still recorded as a failure instead of leaving the card green.
 
-- Transport/connection error ⇒ *Sidecar reachable: fail* (and no sidecar rows).
-- `401` (`is_auth_required()`) ⇒ *Bearer token matches: fail*.
-- `200` ⇒ *Sidecar reachable: pass*, *Bearer token matches: pass*, plus the decoded `checks`.
+**`Runtime\Client::diagnostics(): array`** — issues `GET /v1/diagnostics` with the bearer header, reusing the existing transport-error normalization (including connector-approval rewriting). On a non-2xx it throws `RuntimeRequestException` carrying `get_status_code()`, `get_runtime_error_code()`, and the payload, exactly like the other client methods. The controller maps outcomes to rows:
+
+- Transport/connection error (`WP_Error`) ⇒ *Sidecar reachable: fail* (no sidecar rows).
+- `get_status_code() === 401` (sidecar code `unauthorized` from `_ensure_authorized()`, `sidecar/app/main.py:848`) ⇒ *Sidecar reachable: pass*, *Bearer token matches: fail*. Do **not** use `is_auth_required()` — that predicate matches the unrelated `auth_required` code (HTTP `409`, missing per-user Codex login, `src/Runtime/RuntimeRequestException.php:110`), which `/v1/diagnostics` never emits.
+- `200` ⇒ *Sidecar reachable: pass*, *Bearer token matches: pass*, plus the decoded `checks` (whose individual `status` values may still be `fail`, making the overall `ok` false).
 
 The diagnostics path uses the standard 20s control-plane timeout (it is not a `/v1/responses/` path).
 
@@ -127,6 +129,8 @@ The diagnostics path uses the standard 20s control-plane timeout (it is not a `/
 **Passive on load (scoped).** `SiteSettings::render_page()` stops calling `HealthMonitor::probe()` at `src/Admin/SiteSettings.php:250` and instead reads `HealthMonitor::get_status()` for the status card. This removes the up-to-5s render block. A freshly configured site shows the last-known/`unknown` state until the admin clicks "Check runtime".
 
 This change is **deliberately limited to `render_page()`**. `SupportChecks::current_user_status()` still calls `HealthMonitor::probe()` (`src/Provider/SupportChecks.php:48`), and that path remains unchanged — `/status`, the Connectors card, and the user connection page keep their existing cheap `/healthz` probe. This design does not claim that all status reads become passive; only the settings page stops blocking.
+
+The card shows **two distinct signals**: reachability from `HealthMonitor::get_status()` (passive), and — when present — the last full diagnostic verdict and timestamp from `codex_provider_last_diagnostics`. They are shown separately so a green reachability probe never masks a failed deep check (e.g. a missing `codex` binary while `/healthz` still answers `200`).
 
 **Check runtime button + results panel.** A new hand-written `assets/diagnostics.js` (matching the existing no-build `connection-flow.js` pattern) is enqueued only on this screen. On click it POSTs to the REST route with the `wp_rest` nonce, shows a spinner, and renders the returned rows with pass/warn/fail indicators reusing the existing `.codex-indicator` CSS classes. A `node --test assets/diagnostics.test.mjs` covers the row-rendering logic. The flow is JS-driven for parity with the existing connect flow; with JS disabled the panel shows a short "enable JavaScript to run diagnostics" note.
 
@@ -188,7 +192,7 @@ The literal `"version": "0.1.5"` then appears exactly twice in the file — once
 
 ## Testing Plan
 
-- **`scripts/verify.php`** (mocked sidecar via `pre_http_request`): assert the `manage_options` gate on the new route; the merged row output for success, `401`, and connection-refused; the `HealthMonitor` update after a check; and that `render_page()` makes no HTTP request on load.
+- **`scripts/verify.php`** (mocked sidecar via `pre_http_request`): assert the `manage_options` gate on the new route; the row mapping for success, a `200` with `ok:false` (failing sidecar checks), `401` (bearer-fail, keyed off `get_status_code()`/`unauthorized`, **not** `is_auth_required()`), and connection-refused; that `codex_provider_last_diagnostics` is written on each of those outcomes while the `HealthMonitor` reachability transient is left untouched by the diagnostic (a subsequent `probe()` is unaffected); and that `render_page()` makes no HTTP request on load.
 - **`assets/diagnostics.test.mjs`** via `node --test`: row rendering for pass/warn/fail and the empty/error states.
 - **Sidecar checks**: validated by a manual run plus a standalone invocation of `run_diagnostics()`; the repository has no Python test harness today, and `verify.php` exercises the PHP side against a mocked sidecar.
 - **`scripts/verify.sh`** must continue to pass unchanged (the liveness-helper refactor keeps the version-literal count at two).
@@ -196,12 +200,12 @@ The literal `"version": "0.1.5"` then appears exactly twice in the file — once
 ## File-By-File Change Summary
 
 - `sidecar/app/main.py` — add `import sys`; `_server_identity()` helper; `DIAGNOSTIC_HANDSHAKE_TIMEOUT`; `JsonRpcSession.start(initialize_timeout=None)`; `run_diagnostics()`; route `GET /v1/diagnostics` after auth; reuse helper in `/ping` and `/healthz`.
-- `src/REST/DiagnosticsController.php` — new controller, `manage_options` gate, row composition, `HealthMonitor` update.
+- `src/REST/DiagnosticsController.php` — new controller, `manage_options` gate, exception→row mapping (incl. the `401`/`unauthorized` bearer-fail predicate), writes the `codex_provider_last_diagnostics` verdict transient; does **not** write `HealthMonitor`.
 - `src/Runtime/Client.php` — new `diagnostics()` method.
 - `src/Admin/SiteSettings.php` — drop the page-load probe; extract `render_setup_guide()`; render guide, resolved-config block, Check-runtime button, results panel, and snippets in the body; enqueue `diagnostics.js`.
 - `src/Admin/SetupSnippets.php` — new snippet generator and suggested-token resolution.
 - `assets/diagnostics.js`, `assets/diagnostics.test.mjs` — new admin asset and test.
-- `uninstall.php` — add `codex_runtime_suggested_bearer_token` to the cleanup array.
+- `uninstall.php` — add `codex_runtime_suggested_bearer_token` to the option cleanup array and `delete_transient( 'codex_provider_last_diagnostics' )` alongside the existing transient cleanup.
 - `readme.txt` — extend the Privacy section for the cached suggested token.
 - `sidecar/README.md` — fix the truncated sentence at line 65.
 - `scripts/verify.php` — new assertions described above.
