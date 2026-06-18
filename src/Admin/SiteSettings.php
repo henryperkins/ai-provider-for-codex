@@ -317,7 +317,7 @@ final class SiteSettings {
 								</div>
 							</div>
 							<div class="codex-provider-card__action">
-								<span class="codex-provider-badge<?php echo esc_attr( $is_configured ? '' : ' is-error' ); ?>">
+								<span class="codex-provider-badge<?php echo esc_attr( ! $is_configured ? ' is-error' : ( 'good' === $health_ind ? '' : ( 'warning' === $health_ind ? ' is-warning' : ' is-error' ) ) ); ?>">
 									<?php
 									if ( ! $is_configured ) {
 										esc_html_e( 'Not configured', 'scriptorium-ai-provider-for-codex' );
@@ -408,6 +408,7 @@ final class SiteSettings {
 									<label for="<?php echo esc_attr( Settings::OPTION_RUNTIME_BEARER ); ?>"><?php esc_html_e( 'Runtime bearer token', 'scriptorium-ai-provider-for-codex' ); ?></label>
 									<input class="regular-text code" id="<?php echo esc_attr( Settings::OPTION_RUNTIME_BEARER ); ?>" name="<?php echo esc_attr( Settings::OPTION_RUNTIME_BEARER ); ?>" type="password" value="<?php echo esc_attr( $bearer_locked ? '' : Settings::get_bearer_token() ); ?>" <?php disabled( $bearer_locked ); ?> autocomplete="off" placeholder="<?php echo esc_attr( $bearer_locked ? __( 'Managed automatically', 'scriptorium-ai-provider-for-codex' ) : '' ); ?>" />
 									<p class="description"><?php esc_html_e( 'Shared raw token used between WordPress and the local runtime.', 'scriptorium-ai-provider-for-codex' ); ?></p>
+									<p class="description"><?php esc_html_e( 'Enter only the raw token value here, not a full Authorization header or Bearer prefix.', 'scriptorium-ai-provider-for-codex' ); ?></p>
 									<p class="description"><?php echo esc_html( (string) $runtime_config['bearer_token_source'] ); ?></p>
 								</div>
 								<div class="codex-provider-field">

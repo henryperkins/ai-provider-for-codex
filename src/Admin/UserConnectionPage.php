@@ -299,7 +299,7 @@ final class UserConnectionPage {
 
 				<div class="codex-provider-stack">
 					<section class="codex-provider-card codex-provider-card--connection-console codex-device-box" data-codex-connection-console hidden>
-						<h3 data-codex-connection-heading><?php esc_html_e( 'Complete account connection', 'scriptorium-ai-provider-for-codex' ); ?></h3>
+						<h2 class="codex-provider-card__title" data-codex-connection-heading><?php esc_html_e( 'Complete account connection', 'scriptorium-ai-provider-for-codex' ); ?></h2>
 						<p data-codex-connection-status aria-live="polite"></p>
 						<p class="codex-device-code" data-codex-connection-code hidden></p>
 						<p data-codex-code-actions hidden>
@@ -379,7 +379,7 @@ final class UserConnectionPage {
 					<?php if ( $pending && ! empty( $pending['authSessionId'] ) ) : ?>
 						<section class="codex-provider-card codex-provider-card--connection-fallback codex-device-box" data-codex-server-fallback>
 							<?php if ( 'pending' === $pending_status ) : ?>
-								<h3><?php esc_html_e( 'Complete account connection', 'scriptorium-ai-provider-for-codex' ); ?></h3>
+								<h2 class="codex-provider-card__title"><?php esc_html_e( 'Complete account connection', 'scriptorium-ai-provider-for-codex' ); ?></h2>
 								<p><?php esc_html_e( 'Finish the connection in three quick steps:', 'scriptorium-ai-provider-for-codex' ); ?></p>
 								<ol>
 									<li><?php esc_html_e( 'Open the verification page.', 'scriptorium-ai-provider-for-codex' ); ?></li>
@@ -397,7 +397,7 @@ final class UserConnectionPage {
 									<p class="description codex-provider-error"><?php echo esc_html( (string) $pending['error'] ); ?></p>
 								<?php endif; ?>
 							<?php elseif ( 'completed' === $pending_status ) : ?>
-								<h3><?php esc_html_e( 'Retry account sync', 'scriptorium-ai-provider-for-codex' ); ?></h3>
+								<h2 class="codex-provider-card__title"><?php esc_html_e( 'Retry account sync', 'scriptorium-ai-provider-for-codex' ); ?></h2>
 								<p><?php esc_html_e( 'Your device-code login finished, but WordPress could not finish syncing your Codex account yet.', 'scriptorium-ai-provider-for-codex' ); ?></p>
 								<ol>
 									<li><?php esc_html_e( 'Confirm the local sidecar is still running.', 'scriptorium-ai-provider-for-codex' ); ?></li>
@@ -408,7 +408,7 @@ final class UserConnectionPage {
 									<p class="description codex-provider-error"><?php echo esc_html( (string) $pending['error'] ); ?></p>
 								<?php endif; ?>
 							<?php elseif ( 'error' === $pending_status ) : ?>
-								<h3><?php esc_html_e( 'Connection attempt failed', 'scriptorium-ai-provider-for-codex' ); ?></h3>
+								<h2 class="codex-provider-card__title"><?php esc_html_e( 'Connection attempt failed', 'scriptorium-ai-provider-for-codex' ); ?></h2>
 								<p><?php esc_html_e( 'The previous device-code login did not finish successfully.', 'scriptorium-ai-provider-for-codex' ); ?></p>
 								<ol>
 									<li><?php esc_html_e( 'Review the error below.', 'scriptorium-ai-provider-for-codex' ); ?></li>
