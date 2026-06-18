@@ -1941,7 +1941,7 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 				}
 			);
 
-			// 500 => bearer warn (not 401), reachable pass; the verdict still records an issue.
+			// 500 => its own sidecar_error row (not bearer), reachable pass; the verdict still records an issue.
 			delete_transient( 'codex_provider_last_diagnostics' );
 			$codex_provider_with_mock_runtime(
 				static function ( $preempt, array $args, string $url ) use ( $codex_provider_http_json_response ) {
@@ -1953,12 +1953,30 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 				static function () use ( $codex_provider_assert, $codex_provider_diagnostics_rows ) {
 					$rows = $codex_provider_diagnostics_rows( \AIProviderForCodex\REST\DiagnosticsController::run()->get_data() );
 					$codex_provider_assert( 'pass' === $rows['reachable']['status'], 'A 500 still proves reachability.' );
-					$codex_provider_assert( 'warn' === $rows['bearer']['status'], 'A non-401 runtime error should warn rather than fail the bearer row.' );
+					$codex_provider_assert( 'warn' === ( $rows['sidecar_error']['status'] ?? '' ), 'A non-401 runtime error becomes its own sidecar_error row.' );
+					$codex_provider_assert( ! isset( $rows['bearer'] ), 'A non-401 runtime error must not be attributed to the bearer token.' );
 					$verdict = get_transient( 'codex_provider_last_diagnostics' );
 					$codex_provider_assert(
 						is_array( $verdict ) && false === $verdict['ok'] && count( (array) $verdict['failed'] ) >= 1,
 						'A failed diagnostic (ok=false) must record at least one issue so the settings card never reports "0 issues".'
 					);
+				}
+			);
+
+			// 404 => dedicated "endpoint" row (the stale-sidecar case), never the bearer row.
+			$codex_provider_with_mock_runtime(
+				static function ( $preempt, array $args, string $url ) use ( $codex_provider_http_json_response ) {
+					if ( false !== strpos( $url, '/v1/diagnostics' ) ) {
+						return $codex_provider_http_json_response( 404, [ 'error' => [ 'code' => 'not_found', 'message' => 'Runtime route not found.' ] ] );
+					}
+					return $preempt;
+				},
+				static function () use ( $codex_provider_assert, $codex_provider_diagnostics_rows ) {
+					$rows = $codex_provider_diagnostics_rows( \AIProviderForCodex\REST\DiagnosticsController::run()->get_data() );
+					$codex_provider_assert( 'pass' === $rows['reachable']['status'], 'A 404 still proves reachability.' );
+					$codex_provider_assert( isset( $rows['endpoint'] ) && 'fail' === $rows['endpoint']['status'], 'A 404 must surface a dedicated endpoint failure row.' );
+					$codex_provider_assert( '' !== ( $rows['endpoint']['remediation'] ?? '' ), 'The endpoint failure row must include remediation.' );
+					$codex_provider_assert( ! isset( $rows['bearer'] ), 'A 404 must not be misattributed to the bearer token.' );
 				}
 			);
 

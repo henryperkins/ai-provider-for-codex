@@ -86,11 +86,16 @@ final class SiteSettings {
 				'diagnosticsUrl' => rest_url( 'codex-provider/v1/diagnostics' ),
 				'restNonce'      => wp_create_nonce( 'wp_rest' ),
 				'labels'         => [
-					'run'     => __( 'Check runtime', 'scriptorium-ai-provider-for-codex' ),
-					'running' => __( 'Checking…', 'scriptorium-ai-provider-for-codex' ),
-					'healthy' => __( 'All checks passed.', 'scriptorium-ai-provider-for-codex' ),
-					'issues'  => __( 'Some checks failed.', 'scriptorium-ai-provider-for-codex' ),
-					'failed'  => __( 'The diagnostic request failed.', 'scriptorium-ai-provider-for-codex' ),
+					'run'           => __( 'Check runtime', 'scriptorium-ai-provider-for-codex' ),
+					'running'       => __( 'Checking…', 'scriptorium-ai-provider-for-codex' ),
+					'healthy'       => __( 'All checks passed.', 'scriptorium-ai-provider-for-codex' ),
+					'issues'        => __( 'Some checks need attention:', 'scriptorium-ai-provider-for-codex' ),
+					'failed'        => __( 'The diagnostics request failed.', 'scriptorium-ai-provider-for-codex' ),
+					'requestFailed' => __( 'The diagnostics request failed', 'scriptorium-ai-provider-for-codex' ),
+					'networkError'  => __( 'Could not reach WordPress to run diagnostics.', 'scriptorium-ai-provider-for-codex' ),
+					'networkHint'   => __( 'Check your connection and try again.', 'scriptorium-ai-provider-for-codex' ),
+					'nonceHint'     => __( 'Your session may have expired. Reload this page and try again.', 'scriptorium-ai-provider-for-codex' ),
+					'permHint'      => __( 'You may not have permission to run diagnostics, or your session expired — reload the page and try again.', 'scriptorium-ai-provider-for-codex' ),
 				],
 			]
 		);
@@ -112,6 +117,9 @@ final class SiteSettings {
 		.codex-indicator.good { background: #00a32a; }
 		.codex-indicator.warning { background: #dba617; }
 		.codex-indicator.error { background: #d63638; }
+		.codex-diagnostics-rows { margin: 0.5rem 0 0.75rem; padding-left: 0; list-style: none; }
+		.codex-diagnostics-rows > li { margin: 0 0 0.5rem; }
+		.codex-remediation { margin: 0.15rem 0 0 16px; padding: 0.35rem 0.6rem; border-left: 3px solid #2271b1; background: #f6f7f7; font-size: 12px; line-height: 1.5; }
 		.codex-models-list { display: flex; flex-wrap: wrap; gap: 0.375rem; margin-top: 0.25rem; }
 		.codex-model-pill { display: inline-block; background: #f0f0f1; border-radius: 3px; padding: 2px 8px; font-size: 12px; }
 		';
