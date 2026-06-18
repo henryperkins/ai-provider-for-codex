@@ -478,6 +478,46 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 			$codex_provider_script_module_queue = function_exists( 'wp_script_modules' ) ? wp_script_modules()->get_queue() : [];
 			$codex_provider_assert( in_array( 'scriptorium-ai-provider-for-codex/user-connection', $codex_provider_script_module_queue, true ), 'User connection page should enqueue the enhanced connection-flow script module.' );
 			$codex_provider_assert( false !== strpos( $codex_provider_connection_page_html, 'data-codex-connection-root' ), 'User connection page should render the enhanced connection root.' );
+			$codex_provider_assert(
+				false !== strpos( $codex_provider_connection_page_html, 'codex-provider-admin-page' ),
+				'User connection page should render the shared Connectors-like page wrapper.'
+			);
+			$codex_provider_assert(
+				false !== strpos( $codex_provider_connection_page_html, 'codex-provider-page-header' ),
+				'User connection page should render a compact page header.'
+			);
+			$codex_provider_assert(
+				false !== strpos( $codex_provider_connection_page_html, 'Connect your Codex or ChatGPT account and choose the model' ),
+				'User connection page should render the compact Connectors-style subtitle.'
+			);
+			$codex_provider_assert(
+				false !== strpos( $codex_provider_connection_page_html, 'codex-provider-card codex-provider-card--account' ),
+				'User connection page should render an account card.'
+			);
+			$codex_provider_assert(
+				false !== strpos( $codex_provider_connection_page_html, 'codex-provider-card codex-provider-card--connection-console' ),
+				'User connection page should render the enhanced connection console as a card.'
+			);
+			$codex_provider_assert(
+				false !== strpos( $codex_provider_connection_page_html, 'codex-provider-card codex-provider-card--model' ),
+				'User connection page should render a model card.'
+			);
+			$codex_provider_assert(
+				false === strpos( $codex_provider_connection_page_html, 'class="widefat striped"' ),
+				'User connection page should no longer render the old wide status table.'
+			);
+			$codex_provider_assert(
+				false === strpos( $codex_provider_connection_page_html, 'codex-models-section' ),
+				'User connection page should no longer render the old loose model section.'
+			);
+			$codex_provider_assert(
+				false !== strpos( $codex_provider_connection_page_html, 'id="codex_provider_model"' ),
+				'User connection page should preserve the model selector.'
+			);
+			$codex_provider_assert(
+				false !== strpos( $codex_provider_connection_page_html, 'name="codex_provider_action" value="set-model"' ),
+				'User connection page should preserve the set-model form action.'
+			);
 			$codex_provider_assert( false !== strpos( $codex_provider_connection_page_html, 'data-codex-connection-console' ), 'User connection page should render an always-present enhanced connection console for first-time starts.' );
 			$codex_provider_assert( false !== strpos( $codex_provider_connection_page_html, 'data-codex-base-actions' ), 'User connection page should expose the base action container to hide during enhanced flows.' );
 			$codex_provider_assert( false !== strpos( $codex_provider_connection_page_html, 'data-codex-start-connect' ), 'User connection page should mark start/restart links for progressive enhancement while preserving href fallbacks.' );
