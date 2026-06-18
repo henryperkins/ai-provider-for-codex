@@ -296,127 +296,163 @@ final class SiteSettings {
 		$base_url_locked = ! empty( $runtime_config['base_url_managed'] );
 		$bearer_locked   = ! empty( $runtime_config['bearer_token_managed'] );
 		?>
-		<div class="wrap">
-			<h1><?php esc_html_e( 'Scriptorium AI Provider for Codex', 'scriptorium-ai-provider-for-codex' ); ?></h1>
+		<div class="wrap codex-provider-admin-page">
+			<div class="codex-provider-shell">
+				<header class="codex-provider-page-header">
+					<h1><?php esc_html_e( 'Codex Provider', 'scriptorium-ai-provider-for-codex' ); ?></h1>
+					<p class="codex-provider-page-subtitle"><?php esc_html_e( 'Configure the local Codex runtime used by this site\'s AI connector.', 'scriptorium-ai-provider-for-codex' ); ?></p>
+				</header>
 
-			<?php self::render_notice( $notice ); ?>
-			<?php settings_errors(); ?>
+				<?php self::render_notice( $notice ); ?>
+				<?php settings_errors(); ?>
 
-			<div class="codex-status-cards">
-				<div class="codex-status-card">
-					<h3><?php esc_html_e( 'Runtime', 'scriptorium-ai-provider-for-codex' ); ?></h3>
-					<div class="value">
-						<span class="codex-indicator <?php echo esc_attr( $is_configured ? $health_ind : 'error' ); ?>"></span>
-						<?php
-						if ( ! $is_configured ) {
-							esc_html_e( 'Not configured', 'scriptorium-ai-provider-for-codex' );
-						} else {
-							echo esc_html( StatusLabels::runtime_health_label( (string) $runtime_status['status'] ) );
-						}
-						?>
-					</div>
-					<?php if ( ! empty( $runtime_status['checked_at'] ) ) : ?>
-						<div class="meta"><?php echo esc_html( StatusLabels::relative_time( (string) $runtime_status['checked_at'] ) ); ?></div>
-					<?php endif; ?>
-					<?php if ( ! empty( $runtime_status['error'] ) ) : ?>
-						<div class="meta" style="color: #d63638;"><?php echo esc_html( (string) $runtime_status['error'] ); ?></div>
-					<?php endif; ?>
-				</div>
+				<div class="codex-provider-stack">
+					<section class="codex-provider-card codex-provider-card--runtime">
+						<div class="codex-provider-card__header">
+							<div class="codex-provider-card__identity">
+								<span class="codex-provider-card__icon" aria-hidden="true">C</span>
+								<div>
+									<h2 class="codex-provider-card__title"><?php esc_html_e( 'Runtime', 'scriptorium-ai-provider-for-codex' ); ?></h2>
+									<p class="codex-provider-card__description"><?php esc_html_e( 'Local sidecar status and diagnostics.', 'scriptorium-ai-provider-for-codex' ); ?></p>
+								</div>
+							</div>
+							<div class="codex-provider-card__action">
+								<span class="codex-provider-badge<?php echo esc_attr( $is_configured ? '' : ' is-error' ); ?>">
+									<?php
+									if ( ! $is_configured ) {
+										esc_html_e( 'Not configured', 'scriptorium-ai-provider-for-codex' );
+									} else {
+										echo esc_html( StatusLabels::runtime_health_label( (string) $runtime_status['status'] ) );
+									}
+									?>
+								</span>
+							</div>
+						</div>
+						<div class="codex-provider-card__body">
+							<p class="codex-provider-status-line">
+								<span class="codex-indicator <?php echo esc_attr( $is_configured ? $health_ind : 'error' ); ?>"></span>
+								<span>
+									<?php
+									if ( ! $is_configured ) {
+										esc_html_e( 'Runtime configuration is incomplete.', 'scriptorium-ai-provider-for-codex' );
+									} else {
+										echo esc_html( StatusLabels::runtime_health_label( (string) $runtime_status['status'] ) );
+									}
+									?>
+								</span>
+							</p>
+							<dl class="codex-provider-meta-list">
+								<?php if ( ! empty( $runtime_status['checked_at'] ) ) : ?>
+									<dt><?php esc_html_e( 'Last check', 'scriptorium-ai-provider-for-codex' ); ?></dt>
+									<dd><?php echo esc_html( StatusLabels::relative_time( (string) $runtime_status['checked_at'] ) ); ?></dd>
+								<?php endif; ?>
+								<?php if ( ! empty( $runtime_status['error'] ) ) : ?>
+									<dt><?php esc_html_e( 'Error', 'scriptorium-ai-provider-for-codex' ); ?></dt>
+									<dd class="codex-provider-error"><?php echo esc_html( (string) $runtime_status['error'] ); ?></dd>
+								<?php endif; ?>
+								<dt><?php esc_html_e( 'Runtime URL', 'scriptorium-ai-provider-for-codex' ); ?></dt>
+								<dd><?php echo esc_html( (string) $runtime_config['base_url_source'] ); ?></dd>
+								<dt><?php esc_html_e( 'Bearer token', 'scriptorium-ai-provider-for-codex' ); ?></dt>
+								<dd><?php echo esc_html( (string) $runtime_config['bearer_token_source'] ); ?></dd>
+							</dl>
+							<div class="codex-provider-actions">
+								<button type="button" class="button button-secondary" data-codex-diagnostics-run>
+									<?php esc_html_e( 'Check runtime', 'scriptorium-ai-provider-for-codex' ); ?>
+								</button>
+								<a class="button button-secondary" href="<?php echo esc_url( admin_url( 'options-connectors.php' ) ); ?>"><?php esc_html_e( 'Open Connectors', 'scriptorium-ai-provider-for-codex' ); ?></a>
+							</div>
+							<?php if ( is_array( $last_diagnostic ) ) : ?>
+								<p class="codex-provider-guidance">
+									<?php
+									echo esc_html(
+										SafeFormat::sprintf(
+											/* translators: 1: pass/fail summary, 2: relative time. */
+											__( 'Last diagnostics check: %1$s (%2$s).', 'scriptorium-ai-provider-for-codex' ),
+											empty( $last_diagnostic['ok'] )
+												? sprintf(
+													/* translators: %d: number of failed checks. */
+													_n( '%d issue', '%d issues', count( (array) ( $last_diagnostic['failed'] ?? [] ) ), 'scriptorium-ai-provider-for-codex' ),
+													count( (array) ( $last_diagnostic['failed'] ?? [] ) )
+												)
+												: __( 'healthy', 'scriptorium-ai-provider-for-codex' ),
+											StatusLabels::relative_time( (string) ( $last_diagnostic['checked_at'] ?? '' ) )
+										)
+									);
+									?>
+								</p>
+							<?php endif; ?>
+							<div data-codex-diagnostics-results aria-live="polite"></div>
+						</div>
+					</section>
 
-				<div class="codex-status-card">
-					<h3><?php esc_html_e( 'Fallback models', 'scriptorium-ai-provider-for-codex' ); ?></h3>
-					<div class="value">
-						<?php
-						echo esc_html(
-							SafeFormat::sprintf(
-								/* translators: %d: number of models. */
-								_n( '%d model configured', '%d models configured', count( $fallback_models ), 'scriptorium-ai-provider-for-codex' ),
-								count( $fallback_models )
-							)
-						);
-						?>
-					</div>
-					<div class="meta"><?php esc_html_e( 'Used before a user links a Codex account.', 'scriptorium-ai-provider-for-codex' ); ?></div>
+					<form method="post" action="options.php">
+						<?php settings_fields( \AIProviderForCodex\SLUG ); ?>
+						<section class="codex-provider-card codex-provider-card--settings">
+							<div class="codex-provider-card__header">
+								<div class="codex-provider-card__identity">
+									<span class="codex-provider-card__icon" aria-hidden="true">R</span>
+									<div>
+										<h2 class="codex-provider-card__title"><?php esc_html_e( 'Runtime settings', 'scriptorium-ai-provider-for-codex' ); ?></h2>
+										<p class="codex-provider-card__description"><?php esc_html_e( 'Shared sidecar endpoint and fallback model catalog.', 'scriptorium-ai-provider-for-codex' ); ?></p>
+									</div>
+								</div>
+							</div>
+							<div class="codex-provider-card__body codex-provider-fields">
+								<div class="codex-provider-field">
+									<label for="<?php echo esc_attr( Settings::OPTION_RUNTIME_BASE_URL ); ?>"><?php esc_html_e( 'Runtime URL', 'scriptorium-ai-provider-for-codex' ); ?></label>
+									<input class="regular-text code" id="<?php echo esc_attr( Settings::OPTION_RUNTIME_BASE_URL ); ?>" name="<?php echo esc_attr( Settings::OPTION_RUNTIME_BASE_URL ); ?>" type="url" value="<?php echo esc_attr( Settings::get_base_url() ); ?>" <?php disabled( $base_url_locked ); ?> />
+									<p class="description"><?php esc_html_e( 'Base URL for the local Codex runtime, typically http://127.0.0.1:4317.', 'scriptorium-ai-provider-for-codex' ); ?></p>
+									<p class="description"><?php echo esc_html( (string) $runtime_config['base_url_source'] ); ?></p>
+								</div>
+								<div class="codex-provider-field">
+									<label for="<?php echo esc_attr( Settings::OPTION_RUNTIME_BEARER ); ?>"><?php esc_html_e( 'Runtime bearer token', 'scriptorium-ai-provider-for-codex' ); ?></label>
+									<input class="regular-text code" id="<?php echo esc_attr( Settings::OPTION_RUNTIME_BEARER ); ?>" name="<?php echo esc_attr( Settings::OPTION_RUNTIME_BEARER ); ?>" type="password" value="<?php echo esc_attr( $bearer_locked ? '' : Settings::get_bearer_token() ); ?>" <?php disabled( $bearer_locked ); ?> autocomplete="off" placeholder="<?php echo esc_attr( $bearer_locked ? __( 'Managed automatically', 'scriptorium-ai-provider-for-codex' ) : '' ); ?>" />
+									<p class="description"><?php esc_html_e( 'Shared raw token used between WordPress and the local runtime.', 'scriptorium-ai-provider-for-codex' ); ?></p>
+									<p class="description"><?php echo esc_html( (string) $runtime_config['bearer_token_source'] ); ?></p>
+								</div>
+								<div class="codex-provider-field">
+									<label for="<?php echo esc_attr( Settings::OPTION_ALLOWED_MODELS ); ?>"><?php esc_html_e( 'Fallback models', 'scriptorium-ai-provider-for-codex' ); ?></label>
+									<textarea class="large-text code" id="<?php echo esc_attr( Settings::OPTION_ALLOWED_MODELS ); ?>" name="<?php echo esc_attr( Settings::OPTION_ALLOWED_MODELS ); ?>" rows="4"><?php echo esc_textarea( Settings::allowed_models_as_text() ); ?></textarea>
+									<p class="description"><?php esc_html_e( 'One text model ID per line. Used until a user links an account.', 'scriptorium-ai-provider-for-codex' ); ?></p>
+									<?php if ( ! empty( $fallback_models ) ) : ?>
+										<div class="codex-provider-models-list" aria-label="<?php esc_attr_e( 'Configured fallback models', 'scriptorium-ai-provider-for-codex' ); ?>">
+											<?php foreach ( $fallback_models as $model_id ) : ?>
+												<span class="codex-model-pill"><?php echo esc_html( $model_id ); ?></span>
+											<?php endforeach; ?>
+										</div>
+									<?php endif; ?>
+								</div>
+								<div class="codex-provider-actions">
+									<?php submit_button( __( 'Save settings', 'scriptorium-ai-provider-for-codex' ), 'primary', 'submit', false ); ?>
+								</div>
+							</div>
+						</section>
+					</form>
+
+					<section class="codex-provider-card codex-provider-card--setup">
+						<div class="codex-provider-card__header">
+							<div class="codex-provider-card__identity">
+								<span class="codex-provider-card__icon" aria-hidden="true">S</span>
+								<div>
+									<h2 class="codex-provider-card__title"><?php esc_html_e( 'Setup', 'scriptorium-ai-provider-for-codex' ); ?></h2>
+									<p class="codex-provider-card__description"><?php esc_html_e( 'Install the local sidecar and link each user account.', 'scriptorium-ai-provider-for-codex' ); ?></p>
+								</div>
+							</div>
+						</div>
+						<div class="codex-provider-card__body">
+							<?php self::render_setup_guide(); ?>
+							<details class="codex-provider-details">
+								<summary><?php esc_html_e( 'systemd unit (/etc/systemd/system/codex-wp-sidecar.service)', 'scriptorium-ai-provider-for-codex' ); ?></summary>
+								<textarea class="large-text code" rows="12" readonly><?php echo esc_textarea( SetupSnippets::systemd_unit() ); ?></textarea>
+							</details>
+							<details class="codex-provider-details">
+								<summary><?php esc_html_e( 'Environment file (/etc/codex-wp-sidecar.env)', 'scriptorium-ai-provider-for-codex' ); ?></summary>
+								<textarea class="large-text code" rows="10" readonly><?php echo esc_textarea( SetupSnippets::env_file() ); ?></textarea>
+							</details>
+						</div>
+					</section>
 				</div>
 			</div>
-
-			<?php if ( ! empty( $fallback_models ) ) : ?>
-				<div class="codex-models-list" style="max-width: 960px; margin-bottom: 2rem;">
-					<?php foreach ( $fallback_models as $model_id ) : ?>
-						<span class="codex-model-pill">
-							<?php echo esc_html( $model_id ); ?>
-						</span>
-					<?php endforeach; ?>
-				</div>
-			<?php endif; ?>
-
-			<form method="post" action="options.php">
-				<?php settings_fields( \AIProviderForCodex\SLUG ); ?>
-				<table class="form-table" role="presentation">
-					<tr>
-						<th scope="row"><label for="<?php echo esc_attr( Settings::OPTION_RUNTIME_BASE_URL ); ?>"><?php esc_html_e( 'Runtime URL', 'scriptorium-ai-provider-for-codex' ); ?></label></th>
-						<td>
-							<input class="regular-text code" id="<?php echo esc_attr( Settings::OPTION_RUNTIME_BASE_URL ); ?>" name="<?php echo esc_attr( Settings::OPTION_RUNTIME_BASE_URL ); ?>" type="url" value="<?php echo esc_attr( Settings::get_base_url() ); ?>" <?php disabled( $base_url_locked ); ?> />
-							<p class="description"><?php esc_html_e( 'The base URL of the local Codex runtime service, typically http://127.0.0.1:4317.', 'scriptorium-ai-provider-for-codex' ); ?></p>
-							<p class="description"><?php echo esc_html( (string) $runtime_config['base_url_source'] ); ?></p>
-						</td>
-					</tr>
-					<tr>
-						<th scope="row"><label for="<?php echo esc_attr( Settings::OPTION_RUNTIME_BEARER ); ?>"><?php esc_html_e( 'Runtime bearer token', 'scriptorium-ai-provider-for-codex' ); ?></label></th>
-						<td>
-							<input class="regular-text code" id="<?php echo esc_attr( Settings::OPTION_RUNTIME_BEARER ); ?>" name="<?php echo esc_attr( Settings::OPTION_RUNTIME_BEARER ); ?>" type="password" value="<?php echo esc_attr( $bearer_locked ? '' : Settings::get_bearer_token() ); ?>" <?php disabled( $bearer_locked ); ?> autocomplete="off" placeholder="<?php echo esc_attr( $bearer_locked ? __( 'Managed automatically', 'scriptorium-ai-provider-for-codex' ) : '' ); ?>" />
-							<p class="description"><?php esc_html_e( 'The shared bearer token used between WordPress and the local Codex runtime.', 'scriptorium-ai-provider-for-codex' ); ?></p>
-							<p class="description"><?php esc_html_e( 'Enter only the raw token value here, not a full Authorization header or Bearer prefix.', 'scriptorium-ai-provider-for-codex' ); ?></p>
-							<p class="description"><?php echo esc_html( (string) $runtime_config['bearer_token_source'] ); ?></p>
-						</td>
-					</tr>
-					<tr>
-						<th scope="row"><label for="<?php echo esc_attr( Settings::OPTION_ALLOWED_MODELS ); ?>"><?php esc_html_e( 'Fallback models', 'scriptorium-ai-provider-for-codex' ); ?></label></th>
-						<td>
-							<textarea class="large-text code" id="<?php echo esc_attr( Settings::OPTION_ALLOWED_MODELS ); ?>" name="<?php echo esc_attr( Settings::OPTION_ALLOWED_MODELS ); ?>" rows="4"><?php echo esc_textarea( Settings::allowed_models_as_text() ); ?></textarea>
-							<p class="description"><?php esc_html_e( 'Model list used before a user links their Codex account. One model ID per line.', 'scriptorium-ai-provider-for-codex' ); ?></p>
-						</td>
-					</tr>
-				</table>
-				<?php submit_button( __( 'Save settings', 'scriptorium-ai-provider-for-codex' ) ); ?>
-			</form>
-
-			<h2><?php esc_html_e( 'Runtime diagnostics', 'scriptorium-ai-provider-for-codex' ); ?></h2>
-			<?php if ( is_array( $last_diagnostic ) ) : ?>
-				<p class="description">
-					<?php
-					echo esc_html(
-						SafeFormat::sprintf(
-							/* translators: 1: pass/fail summary, 2: relative time. */
-							__( 'Last check: %1$s (%2$s).', 'scriptorium-ai-provider-for-codex' ),
-							empty( $last_diagnostic['ok'] )
-								? sprintf(
-									/* translators: %d: number of failed checks. */
-									_n( '%d issue', '%d issues', count( (array) ( $last_diagnostic['failed'] ?? [] ) ), 'scriptorium-ai-provider-for-codex' ),
-									count( (array) ( $last_diagnostic['failed'] ?? [] ) )
-								)
-								: __( 'healthy', 'scriptorium-ai-provider-for-codex' ),
-							StatusLabels::relative_time( (string) ( $last_diagnostic['checked_at'] ?? '' ) )
-						)
-					);
-					?>
-				</p>
-			<?php endif; ?>
-			<p>
-				<button type="button" class="button button-secondary" data-codex-diagnostics-run>
-					<?php esc_html_e( 'Check runtime', 'scriptorium-ai-provider-for-codex' ); ?>
-				</button>
-			</p>
-			<div data-codex-diagnostics-results aria-live="polite"></div>
-
-			<h2><?php esc_html_e( 'Setup', 'scriptorium-ai-provider-for-codex' ); ?></h2>
-			<?php self::render_setup_guide(); ?>
-
-			<h3><?php esc_html_e( 'systemd unit (/etc/systemd/system/codex-wp-sidecar.service)', 'scriptorium-ai-provider-for-codex' ); ?></h3>
-			<textarea class="large-text code" rows="12" readonly><?php echo esc_textarea( SetupSnippets::systemd_unit() ); ?></textarea>
-
-			<h3><?php esc_html_e( 'Environment file (/etc/codex-wp-sidecar.env)', 'scriptorium-ai-provider-for-codex' ); ?></h3>
-			<textarea class="large-text code" rows="10" readonly><?php echo esc_textarea( SetupSnippets::env_file() ); ?></textarea>
 		</div>
 		<?php
 	}

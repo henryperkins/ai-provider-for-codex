@@ -309,6 +309,58 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 			'Site settings should render configured fallback models.'
 		);
 		$codex_provider_assert(
+			false !== strpos( $codex_provider_site_settings_html, 'codex-provider-admin-page' ),
+			'Site settings should render the shared Connectors-like page wrapper.'
+		);
+		$codex_provider_assert(
+			false !== strpos( $codex_provider_site_settings_html, 'codex-provider-page-header' ),
+			'Site settings should render a compact page header.'
+		);
+		$codex_provider_assert(
+			false !== strpos( $codex_provider_site_settings_html, 'Configure the local Codex runtime used by this site' ),
+			'Site settings should render the compact Connectors-style subtitle.'
+		);
+		$codex_provider_assert(
+			false !== strpos( $codex_provider_site_settings_html, 'codex-provider-card codex-provider-card--runtime' ),
+			'Site settings should render a runtime card.'
+		);
+		$codex_provider_assert(
+			false !== strpos( $codex_provider_site_settings_html, 'codex-provider-card codex-provider-card--settings' ),
+			'Site settings should render a runtime settings card.'
+		);
+		$codex_provider_assert(
+			false !== strpos( $codex_provider_site_settings_html, 'codex-provider-card codex-provider-card--setup' ),
+			'Site settings should render a setup card.'
+		);
+		$codex_provider_assert(
+			false !== strpos( $codex_provider_site_settings_html, 'codex-provider-details' ),
+			'Site settings should keep generated setup snippets in compact details blocks.'
+		);
+		$codex_provider_assert(
+			false === strpos( $codex_provider_site_settings_html, 'codex-status-cards' ),
+			'Site settings should no longer render the old wide status-card layout.'
+		);
+		$codex_provider_assert(
+			false === strpos( $codex_provider_site_settings_html, 'class="form-table"' ),
+			'Site settings should no longer render a WordPress form table.'
+		);
+		$codex_provider_assert(
+			false !== strpos( $codex_provider_site_settings_html, 'data-codex-diagnostics-results' ),
+			'Site settings should preserve the diagnostics results container.'
+		);
+		$codex_provider_assert(
+			false !== strpos( $codex_provider_site_settings_html, Settings::OPTION_RUNTIME_BASE_URL ),
+			'Site settings should preserve the runtime URL option field.'
+		);
+		$codex_provider_assert(
+			false !== strpos( $codex_provider_site_settings_html, Settings::OPTION_RUNTIME_BEARER ),
+			'Site settings should preserve the runtime bearer token option field.'
+		);
+		$codex_provider_assert(
+			false !== strpos( $codex_provider_site_settings_html, Settings::OPTION_ALLOWED_MODELS ),
+			'Site settings should preserve the allowed models option field.'
+		);
+		$codex_provider_assert(
 			false === strpos( $codex_provider_site_settings_html, '<style' ),
 			'Site settings must not print inline style tags; styles are delivered through wp_add_inline_style().'
 		);
