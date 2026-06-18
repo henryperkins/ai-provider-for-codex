@@ -39,7 +39,7 @@ final class AdminPageStyle {
 		body.profile_page_scriptorium-ai-provider-for-codex #wpbody-content { background: #fff; }
 		body.settings_page_scriptorium-ai-provider-for-codex #wpwrap,
 		body.users_page_scriptorium-ai-provider-for-codex #wpwrap,
-		body.profile_page_scriptorium-ai-provider-for-codex #wpwrap { background: var(--wpds-color-fg-content-neutral, #1e1e1e); }
+		body.profile_page_scriptorium-ai-provider-for-codex #wpwrap { background: #fff; }
 		body.settings_page_scriptorium-ai-provider-for-codex #wpcontent,
 		body.users_page_scriptorium-ai-provider-for-codex #wpcontent,
 		body.profile_page_scriptorium-ai-provider-for-codex #wpcontent { padding-inline-start: 0; }
