@@ -107,22 +107,7 @@ final class SiteSettings {
 	 * @return string
 	 */
 	private static function inline_css(): string {
-		return '
-		.codex-status-cards { display: flex; flex-wrap: wrap; gap: 1rem; margin-bottom: 2rem; max-width: 960px; }
-		.codex-status-card { background: #fff; border: 1px solid #ddd; border-radius: 4px; padding: 1rem 1.25rem; flex: 1 1 200px; min-width: 200px; }
-		.codex-status-card h3 { margin: 0 0 0.5rem; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; color: #666; }
-		.codex-status-card .value { font-size: 16px; font-weight: 600; }
-		.codex-status-card .meta { font-size: 12px; color: #888; margin-top: 0.25rem; }
-		.codex-indicator { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
-		.codex-indicator.good { background: #00a32a; }
-		.codex-indicator.warning { background: #dba617; }
-		.codex-indicator.error { background: #d63638; }
-		.codex-diagnostics-rows { margin: 0.5rem 0 0.75rem; padding-left: 0; list-style: none; }
-		.codex-diagnostics-rows > li { margin: 0 0 0.5rem; }
-		.codex-remediation { margin: 0.15rem 0 0 16px; padding: 0.35rem 0.6rem; border-left: 3px solid #2271b1; background: #f6f7f7; font-size: 12px; line-height: 1.5; }
-		.codex-models-list { display: flex; flex-wrap: wrap; gap: 0.375rem; margin-top: 0.25rem; }
-		.codex-model-pill { display: inline-block; background: #f0f0f1; border-radius: 3px; padding: 2px 8px; font-size: 12px; }
-		';
+		return AdminPageStyle::css();
 	}
 
 	/**

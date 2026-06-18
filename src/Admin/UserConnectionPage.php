@@ -90,20 +90,7 @@ final class UserConnectionPage {
 	 * @return string
 	 */
 	private static function inline_css(): string {
-		return '
-		.codex-indicator { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
-		.codex-indicator.good { background: #00a32a; }
-		.codex-indicator.warning { background: #dba617; }
-		.codex-indicator.error { background: #d63638; }
-		.codex-models-section { margin: 1.5rem 0; max-width: 960px; }
-		.codex-models-list { display: flex; flex-wrap: wrap; gap: 0.375rem; margin-top: 0.5rem; }
-		.codex-model-pill { display: inline-block; background: #f0f0f1; border-radius: 3px; padding: 2px 8px; font-size: 12px; }
-		.codex-model-pill.selected { background: #2271b1; color: #fff; }
-		.codex-device-box { background: #fff; border: 1px solid #c3c4c7; border-radius: 4px; padding: 1rem 1.25rem; max-width: 960px; margin-top: 1rem; }
-		.codex-device-box ol { margin: 0.5rem 0 1rem 1.25rem; }
-		.codex-device-box li { margin-bottom: 0.35rem; }
-		.codex-device-code { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 24px; font-weight: 600; letter-spacing: 0.18em; }
-		';
+		return AdminPageStyle::css();
 	}
 
 	/**
