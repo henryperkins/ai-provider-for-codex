@@ -9,6 +9,8 @@ declare( strict_types=1 );
 
 namespace AIProviderForCodex\Admin;
 
+use AIProviderForCodex\Auth\ConnectionService;
+use AIProviderForCodex\Provider\ModelCatalogState;
 use AIProviderForCodex\Runtime\HealthMonitor;
 use AIProviderForCodex\Runtime\Settings;
 
@@ -20,6 +22,7 @@ final class ConnectorsIntegration {
 	private const MODULE_ID     = 'scriptorium-ai-provider-for-codex/connectors';
 	private const SCRIPT_HANDLE = 'scriptorium-ai-provider-for-codex-connectors';
 	private const CONNECTOR_ID  = 'codex';
+	private const AI_IMAGE_GENERATION_SCRIPT_HANDLE = 'ai_image_generation';
 
 	/**
 	 * Returns the connector module config payload.
@@ -119,6 +122,63 @@ final class ConnectorsIntegration {
 		}
 
 		return Settings::has_required_configuration() && HealthMonitor::is_available();
+	}
+
+	/**
+	 * Lets WordPress AI's image-generation UI recognize Codex's non-API-key connector.
+	 *
+	 * The AI plugin's page-load support helper only considers API-key connectors.
+	 * Codex uses per-user local runtime auth, so patch the already-localized script
+	 * data when the current user's Codex snapshot exposes the image model.
+	 *
+	 * @return void
+	 */
+	public static function maybe_override_ai_image_generation_support(): void {
+		if ( ! wp_script_is( self::AI_IMAGE_GENERATION_SCRIPT_HANDLE, 'enqueued' ) ) {
+			return;
+		}
+
+		$catalog = self::get_current_user_image_catalog();
+
+		if ( ! in_array( ModelCatalogState::IMAGE_MODEL_ID, $catalog['image_model_ids'], true ) ) {
+			return;
+		}
+
+		wp_add_inline_script(
+			self::AI_IMAGE_GENERATION_SCRIPT_HANDLE,
+			'window.aiImageGenerationData = window.aiImageGenerationData || {}; window.aiImageGenerationData.hasImageGenerationSupport = true;',
+			'after'
+		);
+	}
+
+	/**
+	 * Returns the current catalog, recovering a stored sidecar auth snapshot when possible.
+	 *
+	 * @return array<string,mixed>
+	 */
+	private static function get_current_user_image_catalog(): array {
+		$wp_user_id = get_current_user_id();
+		$catalog    = ModelCatalogState::get_effective_catalog( $wp_user_id );
+
+		if ( in_array( ModelCatalogState::IMAGE_MODEL_ID, $catalog['image_model_ids'], true ) ) {
+			return $catalog;
+		}
+
+		if ( $wp_user_id <= 0 || ! Settings::has_required_configuration() ) {
+			return $catalog;
+		}
+
+		if ( in_array( HealthMonitor::get_status()['status'], [ 'connector_unapproved', 'unreachable' ], true ) ) {
+			return $catalog;
+		}
+
+		try {
+			( new ConnectionService() )->refresh_snapshot( $wp_user_id );
+		} catch ( \Throwable $exception ) {
+			return $catalog;
+		}
+
+		return ModelCatalogState::get_effective_catalog( $wp_user_id );
 	}
 
 	/**

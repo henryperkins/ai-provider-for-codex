@@ -23,8 +23,16 @@ use AIProviderForCodex\REST\ConnectController;
 use AIProviderForCodex\Runtime\HealthMonitor;
 use AIProviderForCodex\Runtime\Settings;
 use WordPress\AiClient\AiClient;
+use WordPress\AiClient\Files\DTO\File;
+use WordPress\AiClient\Files\Enums\FileTypeEnum;
 use WordPress\AiClient\Messages\DTO\MessagePart;
 use WordPress\AiClient\Messages\DTO\UserMessage;
+use WordPress\AiClient\Messages\Enums\ModalityEnum;
+use WordPress\AiClient\Providers\Models\DTO\ModelConfig;
+use WordPress\AiClient\Providers\Models\DTO\ModelRequirements;
+use WordPress\AiClient\Providers\Models\DTO\RequiredOption;
+use WordPress\AiClient\Providers\Models\Enums\CapabilityEnum;
+use WordPress\AiClient\Providers\Models\Enums\OptionEnum;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	throw new RuntimeException( 'Run this script with wp eval-file.' );
@@ -69,6 +77,10 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 			$property = new ReflectionProperty( AiClient::class, 'defaultRegistry' );
 			$property->setAccessible( true );
 			$property->setValue( null, null );
+
+			$property = new ReflectionProperty( \WordPress\AiClient\Providers\AbstractProvider::class, 'modelMetadataDirectoryCache' );
+			$property->setAccessible( true );
+			$property->setValue( null, [] );
 		};
 
 		$codex_provider_assert(
@@ -132,10 +144,11 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 		$codex_provider_temporary_connection_id     = 'codex-verify-' . wp_generate_uuid4();
 		$codex_provider_model_token                 = strtolower( wp_generate_password( 8, false, false ) );
 		$codex_provider_temporary_model_a           = 'codex-verify-' . $codex_provider_model_token . '-alpha';
-		$codex_provider_temporary_model_b           = 'codex-verify-' . $codex_provider_model_token . '-beta';
-		$codex_provider_temporary_fallback_a        = 'codex-fallback-' . $codex_provider_model_token . '-alpha';
-		$codex_provider_temporary_fallback_b        = 'codex-fallback-' . $codex_provider_model_token . '-beta';
-		$codex_provider_original_env_bearer         = getenv( 'CODEX_WP_BEARER_TOKEN' );
+			$codex_provider_temporary_model_b           = 'codex-verify-' . $codex_provider_model_token . '-beta';
+			$codex_provider_temporary_fallback_a        = 'codex-fallback-' . $codex_provider_model_token . '-alpha';
+			$codex_provider_temporary_fallback_b        = 'codex-fallback-' . $codex_provider_model_token . '-beta';
+			$codex_provider_image_model                 = 'codex-image';
+			$codex_provider_original_env_bearer         = getenv( 'CODEX_WP_BEARER_TOKEN' );
 		$codex_provider_original_env_bearer_exists  = false !== $codex_provider_original_env_bearer;
 		/** @var \Throwable|null $codex_provider_failure */
 		$codex_provider_failure = null;
@@ -156,10 +169,10 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 			$codex_provider_assert( $codex_provider_table_name === $codex_provider_existing_table, sprintf( 'Missing expected table: %s', $codex_provider_table_name ) );
 		}
 
-		$codex_provider_assert(
-			'5' === (string) get_option( 'codex_provider_schema_version', '' ),
-			'Schema version was not upgraded to 5.'
-		);
+			$codex_provider_assert(
+				'6' === (string) get_option( 'codex_provider_schema_version', '' ),
+				'Schema version was not upgraded to 6.'
+			);
 		$codex_provider_assert(
 			false === get_option( $codex_provider_legacy_default_model_option, false ),
 			'Legacy default-model option should be removed during upgrade.'
@@ -170,8 +183,15 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 			$wpdb->prepare( 'SHOW COLUMNS FROM %i', ConnectionRepository::table_name() ),
 			0
 		);
-		$codex_provider_assert( is_array( $codex_provider_connection_columns ), 'Could not read connection table columns.' );
-		$codex_provider_assert( ! in_array( 'broker_user_id', $codex_provider_connection_columns, true ), 'Legacy broker_user_id column should not exist.' );
+			$codex_provider_assert( is_array( $codex_provider_connection_columns ), 'Could not read connection table columns.' );
+			$codex_provider_assert( ! in_array( 'broker_user_id', $codex_provider_connection_columns, true ), 'Legacy broker_user_id column should not exist.' );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Verification inspects plugin custom tables directly.
+			$codex_provider_snapshot_columns = $wpdb->get_col(
+				$wpdb->prepare( 'SHOW COLUMNS FROM %i', ConnectionSnapshotRepository::table_name() ),
+				0
+			);
+			$codex_provider_assert( is_array( $codex_provider_snapshot_columns ), 'Could not read snapshot table columns.' );
+			$codex_provider_assert( in_array( 'capabilities_json', $codex_provider_snapshot_columns, true ), 'Snapshot table should include capabilities_json.' );
 
 		$codex_provider_sanitized_models = Settings::sanitize_allowed_models( " gpt-5-codex \n\n gpt-5.3-codex, gpt-5-codex " );
 		$codex_provider_assert(
@@ -261,6 +281,38 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 						'id'    => $codex_provider_temporary_model_a,
 						'label' => 'Codex Verify Alpha',
 					],
+				],
+				'defaultModel' => $codex_provider_temporary_model_a,
+				'checkedAt'    => gmdate( 'c' ),
+			]
+		);
+		$codex_provider_no_image_catalog = ModelCatalogState::get_user_snapshot_catalog( $codex_provider_temporary_user_id );
+		$codex_provider_assert(
+			! in_array( $codex_provider_image_model, $codex_provider_no_image_catalog['model_ids'], true ),
+			'Snapshots without imageGeneration capability must not expose codex-image.'
+		);
+		wp_set_current_user( $codex_provider_temporary_user_id );
+		$codex_provider_reset_ai_client_registry();
+		\AIProviderForCodex\register_provider();
+		$codex_provider_direct_image_lookup_failed = false;
+		try {
+			AiClient::defaultRegistry()->getProviderModel( 'codex', $codex_provider_image_model );
+		} catch ( \Throwable $codex_provider_direct_image_lookup_error ) {
+			$codex_provider_direct_image_lookup_failed = true;
+		}
+		$codex_provider_assert(
+			true === $codex_provider_direct_image_lookup_failed,
+			'Direct codex-image lookup must fail closed without imageGeneration capability.'
+		);
+
+		ConnectionSnapshotRepository::upsert(
+			$codex_provider_temporary_connection_id,
+			[
+				'models'       => [
+					[
+						'id'    => $codex_provider_temporary_model_a,
+						'label' => 'Codex Verify Alpha',
+					],
 					[
 						'id'    => $codex_provider_temporary_model_b,
 						'label' => 'Codex Verify Beta',
@@ -271,8 +323,15 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 					'reasoningEffort' => 'medium',
 				],
 				'checkedAt'    => gmdate( 'c' ),
+				'capabilities' => [
+					'imageGeneration' => true,
+					'namespaceTools'  => true,
+					'webSearch'       => false,
+				],
 			]
 		);
+		$codex_provider_reset_ai_client_registry();
+		\AIProviderForCodex\register_provider();
 
 		$codex_provider_snapshot = ConnectionSnapshotRepository::get( $codex_provider_temporary_connection_id );
 		$codex_provider_assert( is_array( $codex_provider_snapshot ), 'Snapshot upsert failed.' );
@@ -284,10 +343,29 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 			);
 		}
 
-		$codex_provider_assert(
-			is_array( $codex_provider_snapshot['models'] ?? null ) && 2 === count( $codex_provider_snapshot['models'] ),
-			'Snapshot models were not persisted.'
-		);
+			$codex_provider_assert(
+				is_array( $codex_provider_snapshot['models'] ?? null ) && 2 === count( $codex_provider_snapshot['models'] ),
+				'Snapshot models were not persisted.'
+			);
+			$codex_provider_assert(
+				true === ( $codex_provider_snapshot['capabilities']['imageGeneration'] ?? null )
+				&& true === ( $codex_provider_snapshot['capabilities']['namespaceTools'] ?? null )
+				&& false === ( $codex_provider_snapshot['capabilities']['webSearch'] ?? null ),
+				'Snapshot capabilities were not persisted.'
+			);
+			$codex_provider_site_snapshots = ConnectionSnapshotRepository::list_active_for_site_catalog();
+			$codex_provider_site_snapshot  = null;
+			foreach ( $codex_provider_site_snapshots as $codex_provider_candidate_snapshot ) {
+				if ( $codex_provider_temporary_connection_id === (string) ( $codex_provider_candidate_snapshot['connection_id'] ?? '' ) ) {
+					$codex_provider_site_snapshot = $codex_provider_candidate_snapshot;
+					break;
+				}
+			}
+			$codex_provider_assert(
+				is_array( $codex_provider_site_snapshot )
+				&& true === ( $codex_provider_site_snapshot['capabilities']['imageGeneration'] ?? null ),
+				'Site catalog snapshots should expose decoded capabilities.'
+			);
 
 		$codex_provider_user_catalog = ModelCatalogState::get_user_snapshot_catalog( $codex_provider_temporary_user_id );
 		$codex_provider_assert( 'user_snapshot' === (string) $codex_provider_user_catalog['source'], 'User catalog did not use the snapshot source.' );
@@ -295,14 +373,145 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 			in_array( $codex_provider_temporary_model_a, $codex_provider_user_catalog['model_ids'], true ) && in_array( $codex_provider_temporary_model_b, $codex_provider_user_catalog['model_ids'], true ),
 			'User catalog did not include snapshot models.'
 		);
-		$codex_provider_assert(
-			$codex_provider_temporary_model_a === (string) $codex_provider_user_catalog['selected_model'],
-			'User catalog selected model did not default to first available.'
-		);
+			$codex_provider_assert(
+				$codex_provider_temporary_model_a === (string) $codex_provider_user_catalog['selected_model'],
+				'User catalog selected model did not default to first available.'
+			);
+			$codex_provider_assert(
+				$codex_provider_temporary_model_a === (string) ( $codex_provider_user_catalog['selected_text_model'] ?? '' ),
+				'User catalog selected_text_model should default to the first text model.'
+			);
+			$codex_provider_assert(
+				in_array( $codex_provider_image_model, $codex_provider_user_catalog['model_ids'], true ),
+				'Image-capable user catalog should include codex-image.'
+			);
+			$codex_provider_assert(
+				in_array( $codex_provider_image_model, $codex_provider_user_catalog['image_model_ids'] ?? [], true ),
+				'Image-capable user catalog should expose codex-image in image_model_ids.'
+			);
+			$codex_provider_assert(
+				! in_array( $codex_provider_image_model, $codex_provider_user_catalog['text_model_ids'] ?? [], true ),
+				'Image model should not be listed as a text model.'
+			);
 
-		wp_set_current_user( $codex_provider_temporary_user_id );
-		ob_start();
-		SiteSettings::render_page();
+			wp_set_current_user( $codex_provider_temporary_user_id );
+			ModelCatalogState::update_user_preferred_model( $codex_provider_temporary_user_id, $codex_provider_image_model );
+			$codex_provider_catalog_with_image_preference = ModelCatalogState::get_user_snapshot_catalog( $codex_provider_temporary_user_id );
+			$codex_provider_assert(
+				$codex_provider_temporary_model_a === (string) ( $codex_provider_catalog_with_image_preference['selected_text_model'] ?? '' ),
+				'codex-image must not become the selected text model.'
+			);
+			$codex_provider_preferred_text_models = ( new \AIProviderForCodex\Plugin() )->filter_preferred_text_models( [] );
+			$codex_provider_assert(
+				[ [ 'codex', $codex_provider_temporary_model_a ] ] === $codex_provider_preferred_text_models,
+				'wpai_preferred_text_models must never emit codex-image.'
+			);
+			$codex_provider_preferred_image_models = ( new \AIProviderForCodex\Plugin() )->filter_preferred_image_models( [] );
+			$codex_provider_assert(
+				[ [ 'codex', $codex_provider_image_model ] ] === $codex_provider_preferred_image_models,
+				'wpai_preferred_image_models should prefer codex-image when the current user has image generation support.'
+			);
+			$codex_provider_preferred_vision_models = ( new \AIProviderForCodex\Plugin() )->filter_preferred_vision_models( [] );
+			$codex_provider_assert(
+				[ [ 'codex', $codex_provider_temporary_model_a ] ] === $codex_provider_preferred_vision_models,
+				'wpai_preferred_vision_models should prefer the selected Codex text model for vision workflows.'
+			);
+			$codex_provider_filtered_image_models = apply_filters( 'wpai_preferred_image_models', [] );
+			$codex_provider_assert(
+				[ 'codex', $codex_provider_image_model ] === ( $codex_provider_filtered_image_models[0] ?? null ),
+				'The registered wpai_preferred_image_models filter should put codex-image before other image providers.'
+			);
+			$codex_provider_filtered_vision_models = apply_filters( 'wpai_preferred_vision_models', [] );
+			$codex_provider_assert(
+				[ 'codex', $codex_provider_temporary_model_a ] === ( $codex_provider_filtered_vision_models[0] ?? null ),
+				'The registered wpai_preferred_vision_models filter should put Codex before other vision providers.'
+			);
+			ModelCatalogState::update_user_preferred_model( $codex_provider_temporary_user_id, $codex_provider_temporary_model_a );
+
+			$codex_provider_image_model_instance = AiClient::defaultRegistry()->getProviderModel( 'codex', $codex_provider_image_model );
+			$codex_provider_assert(
+				is_a( $codex_provider_image_model_instance, 'AIProviderForCodex\\Models\\CodexImageGenerationModel' ),
+				'codex-image should instantiate CodexImageGenerationModel.'
+			);
+			$codex_provider_image_metadata   = $codex_provider_image_model_instance->metadata();
+			$codex_provider_capability_names = array_map(
+				static function ( $capability ): string {
+					return $capability->value;
+				},
+				$codex_provider_image_metadata->getSupportedCapabilities()
+			);
+			$codex_provider_option_names = array_map(
+				static function ( $option ): string {
+					return $option->getName()->value;
+				},
+				$codex_provider_image_metadata->getSupportedOptions()
+			);
+			$codex_provider_assert(
+				in_array( CapabilityEnum::imageGeneration()->value, $codex_provider_capability_names, true )
+				&& in_array( CapabilityEnum::chatHistory()->value, $codex_provider_capability_names, true ),
+				'codex-image metadata should support image generation and chat history.'
+			);
+			$codex_provider_assert(
+				! in_array( OptionEnum::outputSchema()->value, $codex_provider_option_names, true ),
+				'codex-image metadata should not support output schema.'
+			);
+			$codex_provider_assert(
+				in_array( OptionEnum::outputFileType()->value, $codex_provider_option_names, true ),
+				'codex-image metadata should support inline output file requests from the WordPress AI plugin.'
+			);
+			$codex_provider_image_config = new ModelConfig();
+			$codex_provider_image_config->setOutputFileType( FileTypeEnum::inline() );
+			$codex_provider_image_requirements = ModelRequirements::fromPromptData(
+				CapabilityEnum::imageGeneration(),
+				[
+					new UserMessage(
+						[
+							new MessagePart( 'Draw a blue square.' ),
+						]
+					),
+				],
+				$codex_provider_image_config
+			);
+			HealthMonitor::record_success();
+			$codex_provider_image_matches      = AiClient::defaultRegistry()->findProviderModelsMetadataForSupport( 'codex', $codex_provider_image_requirements );
+			$codex_provider_image_match_ids    = array_map(
+				static function ( $model_metadata ): string {
+					return $model_metadata->getId();
+				},
+				$codex_provider_image_matches
+			);
+			$codex_provider_assert(
+				in_array( $codex_provider_image_model, $codex_provider_image_match_ids, true ),
+				'The AI Client should match codex-image for inline image-generation prompts.'
+			);
+			$codex_provider_text_model_instance = AiClient::defaultRegistry()->getProviderModel( 'codex', $codex_provider_temporary_model_a );
+			$codex_provider_assert(
+				is_a( $codex_provider_text_model_instance, 'AIProviderForCodex\\Models\\CodexTextGenerationModel' ),
+				'Text model IDs should still instantiate CodexTextGenerationModel.'
+			);
+			$codex_provider_vision_requirements = new ModelRequirements(
+				[ CapabilityEnum::textGeneration() ],
+				[
+					new RequiredOption(
+						OptionEnum::inputModalities(),
+						[ ModalityEnum::text(), ModalityEnum::image() ]
+					),
+				]
+			);
+			$codex_provider_vision_matches      = AiClient::defaultRegistry()->findProviderModelsMetadataForSupport( 'codex', $codex_provider_vision_requirements );
+			$codex_provider_vision_match_ids    = array_map(
+				static function ( $model_metadata ): string {
+					return $model_metadata->getId();
+				},
+				$codex_provider_vision_matches
+			);
+			$codex_provider_assert(
+				in_array( $codex_provider_temporary_model_a, $codex_provider_vision_match_ids, true ),
+				'The AI Client should match Codex text models for vision prompts used by Alt Text Generation.'
+			);
+
+			ob_start();
+			SiteSettings::render_page();
 		$codex_provider_site_settings_html = (string) ob_get_clean();
 		$codex_provider_assert(
 			false !== strpos( $codex_provider_site_settings_html, $codex_provider_temporary_fallback_a ) && false !== strpos( $codex_provider_site_settings_html, $codex_provider_temporary_fallback_b ),
@@ -333,8 +542,22 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 			'Site settings should render a setup card.'
 		);
 		$codex_provider_assert(
+			false !== strpos( $codex_provider_site_settings_html, 'codex-provider-card__logo' )
+			&& false !== strpos( $codex_provider_site_settings_html, 'src/Provider/logo.svg' ),
+			'Site settings cards should use the Codex provider logo instead of custom letter tiles.'
+		);
+		$codex_provider_assert(
+			false === strpos( $codex_provider_site_settings_html, 'codex-provider-card__icon' ),
+			'Site settings should not render bespoke letter-tile card icons.'
+		);
+		$codex_provider_assert(
 			false !== strpos( $codex_provider_site_settings_html, 'codex-provider-details' ),
 			'Site settings should keep generated setup snippets in compact details blocks.'
+		);
+		$codex_provider_assert(
+			false !== strpos( $codex_provider_site_settings_html, 'codex-provider-details--setup' )
+			&& false !== strpos( $codex_provider_site_settings_html, 'Setup walkthrough' ),
+			'Site settings should keep the long setup walkthrough behind a compact details summary.'
 		);
 		$codex_provider_assert(
 			false === strpos( $codex_provider_site_settings_html, 'codex-status-cards' ),
@@ -471,6 +694,9 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 				$codex_provider_assert( false !== strpos( $codex_provider_admin_style_source, '#wpcontent' ), 'Shared admin CSS should own the Codex Provider page content surface.' );
 				$codex_provider_assert( false !== strpos( $codex_provider_admin_style_source, '#wpfooter' ), 'Shared admin CSS should hide the footer on Codex Provider screens to match the Connectors app surface.' );
 				$codex_provider_assert( false === strpos( $codex_provider_admin_style_source, '#wpbody-content > div:not' ), 'Shared admin CSS must not copy the core Connectors sibling-hiding rule.' );
+				$codex_provider_assert( false !== strpos( $codex_provider_admin_style_source, '.codex-provider-card__logo' ), 'Shared admin CSS should style real provider logos in card headers.' );
+				$codex_provider_assert( false === strpos( $codex_provider_admin_style_source, 'codex-provider-card__icon' ), 'Shared admin CSS should not preserve the bespoke letter-tile icon style.' );
+				$codex_provider_assert( false !== strpos( $codex_provider_admin_style_source, '[hidden] { display: none !important; }' ), 'Shared admin CSS should preserve hidden-state semantics when styled elements are progressively enhanced.' );
 				$codex_provider_assert( false !== strpos( $codex_provider_connection_flow_source, 'getCodexConnectionPendingSupportText' ), 'Connection flow should expose a shared pending support-text helper.' );
 				$codex_provider_assert( false !== strpos( $codex_provider_connector_source, 'getCodexConnectionPendingSupportText' ), 'Connectors card should use the shared pending support-text helper so polling errors are visible.' );
 				$codex_provider_assert( false !== strpos( $codex_provider_user_connection_source, 'getCodexConnectionPendingSupportText' ), 'User connection page should use the shared pending support-text helper so polling errors are visible.' );
@@ -501,6 +727,23 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 			$codex_provider_assert(
 				false !== strpos( $codex_provider_connection_page_html, 'codex-provider-card codex-provider-card--model' ),
 				'User connection page should render a model card.'
+			);
+			$codex_provider_assert(
+				false !== strpos( $codex_provider_connection_page_html, 'codex-provider-card__logo' )
+				&& false !== strpos( $codex_provider_connection_page_html, 'src/Provider/logo.svg' ),
+				'User connection page cards should use the Codex provider logo instead of custom letter tiles.'
+			);
+			$codex_provider_assert(
+				false === strpos( $codex_provider_connection_page_html, 'codex-provider-card__icon' ),
+				'User connection page should not render bespoke letter-tile card icons.'
+			);
+			$codex_provider_account_card_position = strpos( $codex_provider_connection_page_html, 'codex-provider-card codex-provider-card--account' );
+			$codex_provider_console_card_position = strpos( $codex_provider_connection_page_html, 'codex-provider-card codex-provider-card--connection-console' );
+			$codex_provider_assert(
+				false !== $codex_provider_account_card_position
+				&& false !== $codex_provider_console_card_position
+				&& $codex_provider_account_card_position < $codex_provider_console_card_position,
+				'User connection page should keep the account card before the progressively enhanced connection console.'
 			);
 			$codex_provider_assert(
 				false === strpos( $codex_provider_connection_page_html, 'class="widefat striped"' ),
@@ -584,6 +827,121 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 			true === apply_filters( 'wpai_is_codex_connector_configured', false ),
 			'AI plugin Codex status filter should report the configured, healthy local runtime as configured.'
 		);
+		$codex_provider_assert(
+			method_exists( ConnectorsIntegration::class, 'maybe_override_ai_image_generation_support' ),
+			'Codex should provide an AI plugin image-generation support override for its non-API-key connector.'
+		);
+		wp_register_script( 'ai_image_generation', '', [], null );
+		wp_enqueue_script( 'ai_image_generation' );
+		ConnectorsIntegration::maybe_override_ai_image_generation_support();
+		$codex_provider_image_generation_inline_scripts = wp_scripts()->get_data( 'ai_image_generation', 'after' );
+		$codex_provider_image_generation_inline_scripts = is_array( $codex_provider_image_generation_inline_scripts )
+			? implode( "\n", $codex_provider_image_generation_inline_scripts )
+			: (string) $codex_provider_image_generation_inline_scripts;
+		$codex_provider_assert(
+			false !== strpos( $codex_provider_image_generation_inline_scripts, 'hasImageGenerationSupport = true' ),
+			'Codex should override the AI plugin image-generation page flag when the current user has codex-image.'
+		);
+		$codex_provider_recover_user_id = 0;
+		$codex_provider_recover_login   = 'codexrecover' . strtolower( wp_generate_password( 10, false, false ) );
+		$codex_provider_recover_user    = wp_insert_user(
+			[
+				'user_login' => $codex_provider_recover_login,
+				'user_pass'  => wp_generate_password( 20, true, true ),
+				'user_email' => $codex_provider_recover_login . '@example.com',
+				'role'       => 'subscriber',
+			]
+		);
+		$codex_provider_assert(
+			! is_wp_error( $codex_provider_recover_user ),
+			is_wp_error( $codex_provider_recover_user ) ? $codex_provider_recover_user->get_error_message() : 'Could not create a temporary recovery verification user.'
+		);
+		$codex_provider_recover_user_id       = (int) $codex_provider_recover_user;
+		$codex_provider_recover_connection_id = 'conn_local_' . $codex_provider_recover_user_id;
+		ConnectionSnapshotRepository::delete( $codex_provider_recover_connection_id );
+		ConnectionRepository::delete_for_user( $codex_provider_recover_user_id );
+		wp_set_current_user( $codex_provider_recover_user_id );
+		wp_dequeue_script( 'ai_image_generation' );
+		wp_deregister_script( 'ai_image_generation' );
+		wp_register_script( 'ai_image_generation', '', [], null );
+		wp_enqueue_script( 'ai_image_generation' );
+
+		$codex_provider_recover_base_url          = Settings::get_base_url();
+		$codex_provider_recover_snapshot_requests = 0;
+		$codex_provider_with_mock_runtime(
+			static function ( $preempt, array $args, string $url ) use ( $codex_provider_recover_base_url, $codex_provider_http_json_response, $codex_provider_recover_user_id, $codex_provider_temporary_model_a, &$codex_provider_recover_snapshot_requests ) {
+				if ( 0 !== strpos( $url, $codex_provider_recover_base_url ) ) {
+					return $preempt;
+				}
+
+				if ( '/v1/account/snapshot' !== (string) wp_parse_url( $url, PHP_URL_PATH ) ) {
+					return $preempt;
+				}
+
+				$query = [];
+				parse_str( (string) wp_parse_url( $url, PHP_URL_QUERY ), $query );
+
+				if ( $codex_provider_recover_user_id !== (int) ( $query['wpUserId'] ?? 0 ) ) {
+					return $preempt;
+				}
+
+				++$codex_provider_recover_snapshot_requests;
+
+				return $codex_provider_http_json_response(
+					200,
+					[
+						'account'      => [
+							'authMode' => 'chatgpt',
+							'email'    => 'codex-recover@example.com',
+							'planType' => 'verification',
+						],
+						'authStored'   => true,
+						'capabilities' => [
+							'imageGeneration' => true,
+							'namespaceTools'  => true,
+							'webSearch'       => false,
+						],
+						'defaultModel' => $codex_provider_temporary_model_a,
+						'models'       => [
+							[
+								'id'    => $codex_provider_temporary_model_a,
+								'model' => $codex_provider_temporary_model_a,
+							],
+						],
+						'rateLimits'   => [],
+					]
+				);
+			},
+			static function () use ( $codex_provider_assert, $codex_provider_recover_user_id, $codex_provider_recover_connection_id, &$codex_provider_recover_snapshot_requests ) {
+				ConnectorsIntegration::maybe_override_ai_image_generation_support();
+				$codex_provider_recovered_catalog = ModelCatalogState::get_effective_catalog( $codex_provider_recover_user_id );
+				$codex_provider_recovered_scripts = wp_scripts()->get_data( 'ai_image_generation', 'after' );
+				$codex_provider_recovered_scripts = is_array( $codex_provider_recovered_scripts )
+					? implode( "\n", $codex_provider_recovered_scripts )
+					: (string) $codex_provider_recovered_scripts;
+
+				$codex_provider_assert(
+					1 === $codex_provider_recover_snapshot_requests,
+					'Codex image support override should refresh a missing user snapshot from stored sidecar auth.'
+				);
+				$codex_provider_assert(
+					is_array( ConnectionSnapshotRepository::get( $codex_provider_recover_connection_id ) ),
+					'Codex image support override should persist the recovered sidecar snapshot.'
+				);
+				$codex_provider_assert(
+					in_array( ModelCatalogState::IMAGE_MODEL_ID, $codex_provider_recovered_catalog['image_model_ids'] ?? [], true ),
+					'Recovered sidecar snapshots should expose codex-image to the current request.'
+				);
+				$codex_provider_assert(
+					false !== strpos( $codex_provider_recovered_scripts, 'hasImageGenerationSupport = true' ),
+					'Recovered sidecar snapshots should unblock the AI plugin image-generation UI flag.'
+				);
+			}
+		);
+		ConnectionSnapshotRepository::delete( $codex_provider_recover_connection_id );
+		ConnectionRepository::delete_for_user( $codex_provider_recover_user_id );
+		wp_delete_user( $codex_provider_recover_user_id );
+		wp_set_current_user( $codex_provider_temporary_user_id );
 		HealthMonitor::record_failure( 'Verification runtime unavailable.' );
 		$codex_provider_assert(
 			false === apply_filters( 'wpai_is_codex_connector_configured', false ),
@@ -833,9 +1191,80 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 		$codex_provider_assert( ! array_key_exists( 'siteConfigured', $codex_provider_status ), 'Legacy siteConfigured alias should not be returned.' );
 
 		$codex_provider_base_url = Settings::get_base_url();
-		$codex_provider_generation_requests = [];
+		$codex_provider_text_image_model_requests = [];
 		$codex_provider_with_mock_runtime(
-			static function ( $preempt, array $args, string $url ) use ( $codex_provider_base_url, $codex_provider_http_json_response, &$codex_provider_generation_requests ) {
+			static function ( $preempt, array $args, string $url ) use ( $codex_provider_base_url, $codex_provider_http_json_response, &$codex_provider_text_image_model_requests ) {
+				if ( 0 !== strpos( $url, $codex_provider_base_url ) ) {
+					return $preempt;
+				}
+
+				if ( '/v1/responses/text' !== (string) wp_parse_url( $url, PHP_URL_PATH ) ) {
+					return $preempt;
+				}
+
+				$codex_provider_text_image_model_requests[] = [
+					'url'  => $url,
+					'args' => $args,
+				];
+
+				return $codex_provider_http_json_response(
+					200,
+					[
+						'requestId'    => 'codex-verify-text-image-model',
+						'outputText'   => 'This request should have been rejected before runtime.',
+						'finishReason' => 'stop',
+						'usage'        => [],
+						'account'      => [],
+						'rateLimits'   => [],
+					]
+				);
+			},
+			static function () use ( $codex_provider_assert, $codex_provider_image_model, &$codex_provider_text_image_model_requests ) {
+				$codex_provider_text_image_model_threw = false;
+
+				try {
+					$model = new \AIProviderForCodex\Models\CodexTextGenerationModel(
+						new \WordPress\AiClient\Providers\Models\DTO\ModelMetadata(
+							$codex_provider_image_model,
+							'Codex Image Routed as Text',
+							[
+								CapabilityEnum::textGeneration(),
+								CapabilityEnum::chatHistory(),
+							],
+							[]
+						),
+						new \WordPress\AiClient\Providers\DTO\ProviderMetadata(
+							'codex',
+							'Codex',
+							\WordPress\AiClient\Providers\Enums\ProviderTypeEnum::cloud()
+						)
+					);
+					$model->generateTextResult(
+						[
+							new UserMessage(
+								[
+									new MessagePart( 'This text path must not accept the image-only model.' ),
+								]
+							),
+						]
+					);
+				} catch ( \Throwable $codex_provider_text_image_model_error ) {
+					$codex_provider_text_image_model_threw = false !== strpos( $codex_provider_text_image_model_error->getMessage(), 'not available' );
+				}
+
+				$codex_provider_assert(
+					true === $codex_provider_text_image_model_threw,
+					'Codex text generation should reject codex-image even when the combined catalog contains it.'
+				);
+				$codex_provider_assert(
+					0 === count( $codex_provider_text_image_model_requests ),
+					'Codex text generation should fail image-only model requests before contacting the runtime.'
+				);
+			}
+		);
+		$codex_provider_generation_requests = [];
+			$codex_provider_with_mock_runtime(
+				static function ( $preempt, array $args, string $url ) use ( $codex_provider_base_url, $codex_provider_http_json_response, &$codex_provider_generation_requests ) {
 				if ( 0 !== strpos( $url, $codex_provider_base_url ) ) {
 					return $preempt;
 				}
@@ -902,10 +1331,166 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 					is_array( $request_body ) && $codex_provider_temporary_user_id === (int) ( $request_body['wpUserId'] ?? 0 ),
 					'Codex text generation should send the current WordPress user ID to the runtime.'
 				);
-			}
-		);
 
-		// Codex generations are mirrored into the AI plugin Request Log via the bridge sink.
+				$vision_image_base64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=';
+				$model->generateTextResult(
+					[
+						new UserMessage(
+							[
+								new MessagePart( 'Describe this verification image.' ),
+								new MessagePart( new File( $vision_image_base64, 'image/png' ) ),
+							]
+						),
+					]
+				);
+				$codex_provider_assert(
+					2 === count( $codex_provider_generation_requests ),
+					'Codex vision text generation should make one additional local runtime request.'
+				);
+				$vision_request_args = $codex_provider_generation_requests[1]['args'] ?? [];
+				$vision_request_body = json_decode( (string) ( $vision_request_args['body'] ?? '' ), true );
+				$codex_provider_assert(
+					is_array( $vision_request_body )
+					&& 'USER: Describe this verification image.' === (string) ( $vision_request_body['input'] ?? '' )
+					&& isset( $vision_request_body['inputImages'][0]['url'] )
+					&& 'data:image/png;base64,' . $vision_image_base64 === (string) $vision_request_body['inputImages'][0]['url'],
+					'Codex vision text generation should send image file parts to the sidecar as inputImages.'
+				);
+				}
+			);
+			$codex_provider_image_requests = [];
+			$codex_provider_image_base64   = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=';
+			$codex_provider_wrapped_image_base64 = substr( $codex_provider_image_base64, 0, 32 ) . "\n" . substr( $codex_provider_image_base64, 32 );
+			$codex_provider_with_mock_runtime(
+				static function ( $preempt, array $args, string $url ) use ( $codex_provider_base_url, $codex_provider_http_json_response, $codex_provider_wrapped_image_base64, &$codex_provider_image_requests ) {
+					if ( 0 !== strpos( $url, $codex_provider_base_url ) ) {
+						return $preempt;
+					}
+
+					$path = (string) wp_parse_url( $url, PHP_URL_PATH );
+
+					if ( '/v1/responses/image' !== $path ) {
+						return $preempt;
+					}
+
+					$codex_provider_image_requests[] = [
+						'url'  => $url,
+						'args' => $args,
+					];
+
+					return $codex_provider_http_json_response(
+						200,
+						[
+							'requestId'     => 'codex-verify-image',
+								'model'         => 'codex-image',
+								'runtimeModel'  => null,
+								'mimeType'      => 'image/png',
+								'imageBase64'   => $codex_provider_wrapped_image_base64,
+								'revisedPrompt' => 'A small blue circle on a white background.',
+								'finishReason'  => 'stop',
+								'usage'         => [
+								'inputTokens'           => 0,
+								'outputTokens'          => 0,
+								'reasoningOutputTokens' => 0,
+							],
+							'account'       => [
+								'email' => 'verify@example.com',
+							],
+							'rateLimits'    => [],
+							'artifacts'     => [
+								'savedPath' => '/home/dev/.codex/generated_images/session/call.png',
+							],
+						]
+					);
+				},
+				static function () use ( $codex_provider_assert, &$codex_provider_image_requests, $codex_provider_image_model, $codex_provider_temporary_user_id ) {
+					$model  = AiClient::defaultRegistry()->getProviderModel( 'codex', $codex_provider_image_model );
+					$result = $model->generateImageResult(
+						[
+							new UserMessage(
+								[
+									new MessagePart( 'Draw a small blue circle.' ),
+								]
+							),
+						]
+					);
+
+					$codex_provider_assert( $result->toImageFile()->isImage(), 'Codex image generation should return an image file.' );
+					$codex_provider_assert(
+						'A small blue circle on a white background.' === (string) ( $result->getAdditionalData()['revisedPrompt'] ?? '' ),
+							'Codex image result should expose the revised prompt in additional data.'
+						);
+					$codex_provider_assert(
+						1 === count( $codex_provider_image_requests ),
+						'Codex image generation should make exactly one local runtime request.'
+					);
+
+					$request_args = $codex_provider_image_requests[0]['args'] ?? [];
+					$request_body = json_decode( (string) ( $request_args['body'] ?? '' ), true );
+
+					$codex_provider_assert(
+						is_array( $request_body ) && $codex_provider_temporary_user_id === (int) ( $request_body['wpUserId'] ?? 0 ),
+						'Codex image generation should send the current WordPress user ID to the runtime.'
+					);
+					$codex_provider_assert(
+						is_array( $request_body ) && 'Draw a small blue circle.' === (string) ( $request_body['prompt'] ?? '' ),
+						'Codex image generation should send the clean image prompt to the sidecar.'
+					);
+					$codex_provider_assert(
+						is_array( $request_body ) && ! array_key_exists( 'model', $request_body ),
+						'Codex image generation must not pass codex-image as a runtime model override.'
+					);
+				}
+			);
+			$codex_provider_reference_image_requests = [];
+			$codex_provider_with_mock_runtime(
+				static function ( $preempt, array $args, string $url ) use ( $codex_provider_base_url, &$codex_provider_reference_image_requests ) {
+					if ( 0 !== strpos( $url, $codex_provider_base_url ) ) {
+						return $preempt;
+					}
+
+					if ( '/v1/responses/image' !== (string) wp_parse_url( $url, PHP_URL_PATH ) ) {
+						return $preempt;
+					}
+
+					$codex_provider_reference_image_requests[] = [
+						'url'  => $url,
+						'args' => $args,
+					];
+
+					return $preempt;
+				},
+				static function () use ( $codex_provider_assert, &$codex_provider_reference_image_requests, $codex_provider_image_base64, $codex_provider_image_model ) {
+					$codex_provider_reference_image_threw = false;
+
+					try {
+						$model = AiClient::defaultRegistry()->getProviderModel( 'codex', $codex_provider_image_model );
+						$model->generateImageResult(
+							[
+								new UserMessage(
+									[
+										new MessagePart( 'Use this reference image.' ),
+										new MessagePart( new File( $codex_provider_image_base64, 'image/png' ) ),
+									]
+								),
+							]
+						);
+					} catch ( \Throwable $codex_provider_reference_image_error ) {
+						$codex_provider_reference_image_threw = false !== strpos( $codex_provider_reference_image_error->getMessage(), 'Reference images are not supported yet' );
+					}
+
+					$codex_provider_assert(
+						true === $codex_provider_reference_image_threw,
+						'Codex image generation should reject reference image inputs until the sidecar supports them.'
+					);
+					$codex_provider_assert(
+						0 === count( $codex_provider_reference_image_requests ),
+						'Unsupported reference image prompts should fail before contacting the local runtime.'
+					);
+				}
+			);
+
+			// Codex generations are mirrored into the AI plugin Request Log via the bridge sink.
 		$codex_provider_log_entries = [];
 		$codex_provider_log_sink    = static function ( array $entry ) use ( &$codex_provider_log_entries ): void {
 			$codex_provider_log_entries[] = $entry;
@@ -996,6 +1581,89 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 			}
 		);
 		$codex_provider_with_mock_runtime(
+			static function ( $preempt, array $args, string $url ) use ( $codex_provider_base_url, $codex_provider_http_json_response, $codex_provider_image_base64 ) {
+				if ( 0 !== strpos( $url, $codex_provider_base_url ) ) {
+					return $preempt;
+				}
+
+				if ( '/v1/responses/image' !== (string) wp_parse_url( $url, PHP_URL_PATH ) ) {
+					return $preempt;
+				}
+
+				return $codex_provider_http_json_response(
+					200,
+					[
+						'requestId'     => 'codex-verify-image-log',
+						'mimeType'      => 'image/png',
+						'imageBase64'   => $codex_provider_image_base64,
+						'revisedPrompt' => 'A logged green square on a white background.',
+						'finishReason'  => 'stop',
+						'usage'         => [
+							'inputTokens'  => 3,
+							'outputTokens' => 4,
+						],
+						'account'       => [],
+						'rateLimits'    => [],
+						'artifacts'     => [
+							'savedPath' => '/home/dev/.codex/generated_images/session/hidden.png',
+						],
+					]
+				);
+			},
+			static function () use ( $codex_provider_assert, $codex_provider_image_base64, $codex_provider_image_model, $codex_provider_temporary_user_id, &$codex_provider_log_entries ) {
+				$codex_provider_log_entries = [];
+				$model                      = AiClient::defaultRegistry()->getProviderModel( 'codex', $codex_provider_image_model );
+				$model->generateImageResult(
+					[
+						new UserMessage(
+							[
+								new MessagePart( 'Log this image request.' ),
+							]
+						),
+					]
+				);
+
+				$codex_provider_assert(
+					1 === count( $codex_provider_log_entries ),
+					'A successful Codex image generation should emit exactly one request-log entry.'
+				);
+
+				$codex_provider_log_entry = $codex_provider_log_entries[0] ?? [];
+				$codex_provider_log_json  = (string) wp_json_encode( $codex_provider_log_entry );
+
+				$codex_provider_assert(
+					'image' === ( $codex_provider_log_entry['type'] ?? null ),
+					'Codex image request-log entries should use type=image.'
+				);
+				$codex_provider_assert(
+					'codex:responses/image' === ( $codex_provider_log_entry['operation'] ?? null ),
+					'Codex image request-log entries should use the image runtime operation.'
+				);
+				$codex_provider_assert(
+					$codex_provider_image_model === ( $codex_provider_log_entry['model'] ?? null ),
+					'Codex image request-log entries should record codex-image as the provider model.'
+				);
+				$codex_provider_assert(
+					3 === ( $codex_provider_log_entry['tokens_input'] ?? null ) && 4 === ( $codex_provider_log_entry['tokens_output'] ?? null ),
+					'Codex image request-log entries should preserve runtime token usage when present.'
+				);
+				$codex_provider_assert(
+					$codex_provider_temporary_user_id === ( $codex_provider_log_entry['user_id'] ?? null ),
+					'Codex image request-log entries should record the WordPress user id.'
+				);
+				$codex_provider_assert(
+					false !== strpos( (string) ( $codex_provider_log_entry['context']['output_preview'] ?? '' ), 'Generated image/png image' ),
+					'Codex image request-log entries should summarize the generated image without storing image data.'
+				);
+				$codex_provider_assert(
+					false === strpos( $codex_provider_log_json, $codex_provider_image_base64 )
+					&& false === strpos( $codex_provider_log_json, 'savedPath' )
+					&& false === strpos( $codex_provider_log_json, '.codex/generated_images' ),
+					'Codex image request-log entries must not store generated image base64 or local artifact paths.'
+				);
+			}
+		);
+		$codex_provider_with_mock_runtime(
 			static function ( $preempt, array $args, string $url ) use ( $codex_provider_base_url, $codex_provider_http_json_response ) {
 				if ( 0 !== strpos( $url, $codex_provider_base_url ) ) {
 					return $preempt;
@@ -1057,7 +1725,235 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 				);
 			}
 		);
+		$codex_provider_with_mock_runtime(
+			static function ( $preempt, array $args, string $url ) use ( $codex_provider_base_url, $codex_provider_http_json_response ) {
+				if ( 0 !== strpos( $url, $codex_provider_base_url ) ) {
+					return $preempt;
+				}
+
+				if ( '/v1/responses/image' !== (string) wp_parse_url( $url, PHP_URL_PATH ) ) {
+					return $preempt;
+				}
+
+				return $codex_provider_http_json_response(
+					500,
+					[
+						'error' => [
+							'message' => 'image sidecar exploded',
+						],
+					]
+				);
+			},
+			static function () use ( $codex_provider_assert, $codex_provider_image_model, &$codex_provider_log_entries ) {
+				$codex_provider_log_entries           = [];
+				$codex_provider_image_generation_threw = false;
+
+				try {
+					$model = AiClient::defaultRegistry()->getProviderModel( 'codex', $codex_provider_image_model );
+					$model->generateImageResult(
+						[
+							new UserMessage(
+								[
+									new MessagePart( 'This image generation will fail.' ),
+								]
+							),
+						]
+					);
+				} catch ( \Throwable $codex_provider_image_generation_error ) {
+					$codex_provider_image_generation_threw = true;
+				}
+
+				$codex_provider_assert(
+					true === $codex_provider_image_generation_threw,
+					'A failed Codex image generation should still raise to the caller.'
+				);
+				$codex_provider_assert(
+					1 === count( $codex_provider_log_entries ),
+					'A failed Codex image generation should emit exactly one request-log entry.'
+				);
+
+				$codex_provider_log_entry = $codex_provider_log_entries[0] ?? [];
+				$codex_provider_assert(
+					'image' === ( $codex_provider_log_entry['type'] ?? null ),
+					'A failed Codex image generation log should use type=image.'
+				);
+				$codex_provider_assert(
+					'codex:responses/image' === ( $codex_provider_log_entry['operation'] ?? null ),
+					'A failed Codex image generation log should use the image runtime operation.'
+				);
+				$codex_provider_assert(
+					'error' === ( $codex_provider_log_entry['status'] ?? null ),
+					'A failed Codex image generation should be logged with status=error.'
+				);
+				$codex_provider_assert(
+					'' !== (string) ( $codex_provider_log_entry['error_message'] ?? '' ),
+					'A failed Codex image generation log should include an error message.'
+				);
+			}
+		);
+		$codex_provider_with_mock_runtime(
+			static function ( $preempt, array $args, string $url ) use ( $codex_provider_base_url, $codex_provider_http_json_response, $codex_provider_image_base64 ) {
+				if ( 0 !== strpos( $url, $codex_provider_base_url ) ) {
+					return $preempt;
+				}
+
+				if ( '/v1/responses/image' !== (string) wp_parse_url( $url, PHP_URL_PATH ) ) {
+					return $preempt;
+				}
+
+				return $codex_provider_http_json_response(
+					200,
+					[
+						'requestId'    => 'codex-verify-image-map-error',
+						'mimeType'     => 'image/jpeg',
+						'imageBase64'  => $codex_provider_image_base64,
+						'finishReason' => 'stop',
+						'usage'        => [],
+						'account'      => [],
+						'rateLimits'   => [],
+					]
+				);
+			},
+			static function () use ( $codex_provider_assert, $codex_provider_image_model, &$codex_provider_log_entries ) {
+				$codex_provider_log_entries          = [];
+				$codex_provider_image_mapping_threw = false;
+
+				try {
+					$model = AiClient::defaultRegistry()->getProviderModel( 'codex', $codex_provider_image_model );
+					$model->generateImageResult(
+						[
+							new UserMessage(
+								[
+									new MessagePart( 'This image response has an unsupported MIME type.' ),
+								]
+							),
+						]
+					);
+				} catch ( \Throwable $codex_provider_image_mapping_error ) {
+					$codex_provider_image_mapping_threw = false !== strpos( $codex_provider_image_mapping_error->getMessage(), 'unsupported image MIME type' );
+				}
+
+				$codex_provider_assert(
+					true === $codex_provider_image_mapping_threw,
+					'Codex image mapper errors should still raise to the caller.'
+				);
+				$codex_provider_assert(
+					1 === count( $codex_provider_log_entries ),
+					'Codex image mapper errors should emit exactly one request-log entry.'
+				);
+
+				$codex_provider_log_entry = $codex_provider_log_entries[0] ?? [];
+				$codex_provider_assert(
+					'error' === ( $codex_provider_log_entry['status'] ?? null ),
+					'Codex image mapper errors should be logged with status=error.'
+				);
+				$codex_provider_assert(
+					'image' === ( $codex_provider_log_entry['type'] ?? null ),
+					'Codex image mapper error logs should use type=image.'
+				);
+				$codex_provider_assert(
+					false !== strpos( (string) ( $codex_provider_log_entry['error_message'] ?? '' ), 'unsupported image MIME type' ),
+					'Codex image mapper error logs should include the mapper error.'
+				);
+			}
+		);
 		remove_all_filters( 'codex_provider_request_log_sink' );
+		$codex_provider_with_mock_runtime(
+			static function ( $preempt, array $args, string $url ) use ( $codex_provider_base_url, $codex_provider_http_json_response ) {
+				if ( 0 !== strpos( $url, $codex_provider_base_url ) ) {
+					return $preempt;
+				}
+
+				if ( '/v1/responses/image' !== (string) wp_parse_url( $url, PHP_URL_PATH ) ) {
+					return $preempt;
+				}
+
+				return $codex_provider_http_json_response(
+					409,
+					[
+						'error' => [
+							'code'    => 'auth_required',
+							'message' => 'No stored ChatGPT or Codex auth is available for this WordPress user.',
+						],
+					]
+				);
+			},
+			static function () use ( $codex_provider_assert, $codex_provider_image_model, $codex_provider_temporary_connection_id, $codex_provider_temporary_user_id ) {
+				$codex_provider_image_auth_threw = false;
+
+				try {
+					$model = AiClient::defaultRegistry()->getProviderModel( 'codex', $codex_provider_image_model );
+					$model->generateImageResult(
+						[
+							new UserMessage(
+								[
+									new MessagePart( 'This image generation should require reconnect.' ),
+								]
+							),
+						]
+					);
+				} catch ( \Throwable $codex_provider_image_auth_error ) {
+					$codex_provider_image_auth_threw = false !== strpos( $codex_provider_image_auth_error->getMessage(), 'no longer has a stored ChatGPT or Codex login' );
+				}
+
+				$codex_provider_assert(
+					true === $codex_provider_image_auth_threw,
+					'Codex image auth loss should surface the reconnect guidance.'
+				);
+				$codex_provider_assert(
+					null === ConnectionRepository::get_for_user( $codex_provider_temporary_user_id ),
+					'Codex image auth loss should delete the local connection row.'
+				);
+				$codex_provider_assert(
+					null === ConnectionSnapshotRepository::get( $codex_provider_temporary_connection_id ),
+					'Codex image auth loss should delete the local snapshot row.'
+				);
+				$codex_provider_assert(
+					'' === ModelCatalogState::get_user_preferred_model( $codex_provider_temporary_user_id ),
+					'Codex image auth loss should clear the preferred model.'
+				);
+			}
+		);
+		ConnectionRepository::upsert(
+			$codex_provider_temporary_user_id,
+			[
+				'connectionId' => $codex_provider_temporary_connection_id,
+				'status'       => 'linked',
+				'account'      => [
+					'email'    => $codex_provider_user_email,
+					'planType' => 'verification',
+					'authMode' => 'chatgpt',
+				],
+			]
+		);
+		ConnectionSnapshotRepository::upsert(
+			$codex_provider_temporary_connection_id,
+			[
+				'models'       => [
+					[
+						'id'    => $codex_provider_temporary_model_a,
+						'label' => 'Codex Verify Alpha',
+					],
+					[
+						'id'    => $codex_provider_temporary_model_b,
+						'label' => 'Codex Verify Beta',
+					],
+				],
+				'defaultModel' => $codex_provider_temporary_model_a,
+				'defaults'     => [
+					'reasoningEffort' => 'medium',
+				],
+				'checkedAt'    => gmdate( 'c' ),
+				'capabilities' => [
+					'imageGeneration' => true,
+					'namespaceTools'  => true,
+					'webSearch'       => false,
+				],
+			]
+		);
+		ModelCatalogState::update_user_preferred_model( $codex_provider_temporary_user_id, $codex_provider_temporary_model_a );
+		$codex_provider_reset_ai_client_registry();
+		\AIProviderForCodex\register_provider();
 		$codex_provider_with_mock_runtime(
 			static function ( $preempt, array $args, string $url ) use ( $codex_provider_base_url ) {
 				if ( 0 !== strpos( $url, $codex_provider_base_url ) ) {

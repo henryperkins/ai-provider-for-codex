@@ -16,7 +16,6 @@ use AIProviderForCodex\Provider\ModelCatalogState;
 use AIProviderForCodex\Runtime\Client;
 use AIProviderForCodex\Runtime\ResponseMapper;
 use AIProviderForCodex\Runtime\RuntimeRequestException;
-use RuntimeException;
 use WordPress\AiClient\Messages\DTO\Message;
 use WordPress\AiClient\Providers\ApiBasedImplementation\AbstractApiBasedModel;
 use WordPress\AiClient\Providers\Models\TextGeneration\Contracts\TextGenerationModelInterface;
@@ -30,6 +29,8 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Sends text-generation requests to the local Codex runtime.
  */
 final class CodexTextGenerationModel extends AbstractApiBasedModel implements TextGenerationModelInterface {
+
+	use LocalRuntimeModelTrait;
 
 	private const REASONING_EFFORTS = [ 'none', 'minimal', 'low', 'medium', 'high', 'xhigh' ];
 
@@ -55,7 +56,7 @@ final class CodexTextGenerationModel extends AbstractApiBasedModel implements Te
 		$catalog  = ModelCatalogState::get_effective_catalog( $wp_user_id );
 		$model_id = $this->metadata()->getId();
 
-		if ( [] !== $catalog['model_ids'] && ! in_array( $model_id, $catalog['model_ids'], true ) ) {
+		if ( [] !== $catalog['text_model_ids'] && ! in_array( $model_id, $catalog['text_model_ids'], true ) ) {
 			throw self::runtime_exception(
 				sprintf(
 					/* translators: 1: requested model ID, 2: comma-separated available models */
@@ -72,6 +73,7 @@ final class CodexTextGenerationModel extends AbstractApiBasedModel implements Te
 		$client     = new Client();
 		$config     = $this->getConfig();
 		$input_text = $this->flatten_prompt( $prompt );
+		$input_images = $this->extract_image_inputs( $prompt );
 		$started_at = hrtime( true );
 
 		try {
@@ -82,6 +84,7 @@ final class CodexTextGenerationModel extends AbstractApiBasedModel implements Te
 						'wpUserId'          => $wp_user_id,
 						'requestId'         => wp_generate_uuid4(),
 						'input'             => $input_text,
+						'inputImages'       => $input_images,
 						'systemInstruction' => $config->getSystemInstruction(),
 						'model'             => $model_id,
 						'modelPreferences'  => [ $model_id ],
@@ -176,6 +179,46 @@ final class CodexTextGenerationModel extends AbstractApiBasedModel implements Te
 	}
 
 	/**
+	 * Extracts image file parts for the sidecar text input contract.
+	 *
+	 * @param array<int,Message> $prompt Prompt messages.
+	 * @return list<array{url:string}>
+	 */
+	private function extract_image_inputs( array $prompt ): array {
+		$images = [];
+
+		foreach ( $prompt as $message ) {
+			foreach ( $message->getParts() as $part ) {
+				$file = $part->getFile();
+
+				if ( null === $file ) {
+					continue;
+				}
+
+				if ( ! $file->isImage() ) {
+					throw self::runtime_exception(
+						sprintf(
+							/* translators: %s: MIME type. */
+							esc_html__( 'Codex text generation only supports image file inputs, not "%s".', 'scriptorium-ai-provider-for-codex' ),
+							esc_html( $file->getMimeType() )
+						)
+					);
+				}
+
+				$url = $file->isRemote() ? $file->getUrl() : $file->getDataUri();
+
+				if ( ! is_string( $url ) || '' === $url ) {
+					throw self::runtime_exception( esc_html__( 'Codex text generation could not read the image input.', 'scriptorium-ai-provider-for-codex' ) );
+				}
+
+				$images[] = [ 'url' => $url ];
+			}
+		}
+
+		return $images;
+	}
+
+	/**
 	 * Maps JSON output settings to the runtime contract.
 	 *
 	 * @return array<string,mixed>|null
@@ -263,24 +306,4 @@ final class CodexTextGenerationModel extends AbstractApiBasedModel implements Te
 		return in_array( $value, self::REASONING_EFFORTS, true ) ? $value : null;
 	}
 
-	/**
-	 * Returns elapsed whole milliseconds since an hrtime( true ) marker.
-	 *
-	 * @param float|int $started_at Start marker captured from hrtime( true ).
-	 * @return int
-	 */
-	private static function elapsed_ms( $started_at ): int {
-		return (int) round( ( hrtime( true ) - $started_at ) / 1e6 );
-	}
-
-	/**
-	 * Creates a runtime exception without tripping output sniffs.
-	 *
-	 * @param string $message Plain-text exception message.
-	 * @return RuntimeException
-	 */
-	private static function runtime_exception( string $message ): RuntimeException {
-		// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception messages are escaped at the render boundary.
-		return new RuntimeException( $message );
-	}
 }

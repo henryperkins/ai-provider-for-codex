@@ -2,7 +2,7 @@
 
 Local runtime service for `scriptorium-ai-provider-for-codex`.
 
-It wraps `codex app-server`, stores per-user ChatGPT/Codex auth state on disk, and exposes a localhost-only HTTP API for the WordPress plugin.
+It wraps `codex app-server`, stores per-user ChatGPT/Codex auth state on disk, and exposes a localhost-only HTTP API for the WordPress plugin. Text-to-image generation is available through this sidecar only when the connected user's Codex runtime reports image-generation capability.
 
 ## Requirements
 
@@ -80,4 +80,5 @@ If `/etc/codex-wp-sidecar.env` is readable by PHP, the plugin can load both valu
 - `GET /v1/login/status`
 - `GET /v1/account/snapshot`
 - `POST /v1/responses/text`
+- `POST /v1/responses/image`
 - `POST /v1/session/clear`

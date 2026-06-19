@@ -23,7 +23,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 final class Installer {
 
 	private const SCHEMA_VERSION_OPTION = 'codex_provider_schema_version';
-	private const SCHEMA_VERSION        = '5';
+	private const SCHEMA_VERSION        = '6';
 	private const LEGACY_DEFAULT_MODEL  = 'codex_runtime_default_model';
 
 	/**
@@ -97,6 +97,7 @@ final class Installer {
 				default_model varchar(191) NOT NULL DEFAULT '',
 				reasoning_effort varchar(50) NOT NULL DEFAULT '',
 				rate_limits_json longtext NULL,
+				capabilities_json longtext NOT NULL,
 				readiness_status varchar(50) NOT NULL DEFAULT 'unknown',
 				checked_at datetime NOT NULL,
 				created_at datetime NOT NULL,

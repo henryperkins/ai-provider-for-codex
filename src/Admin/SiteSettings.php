@@ -295,6 +295,7 @@ final class SiteSettings {
 		$health_ind      = StatusLabels::status_indicator( (string) $runtime_status['status'] );
 		$base_url_locked = ! empty( $runtime_config['base_url_managed'] );
 		$bearer_locked   = ! empty( $runtime_config['bearer_token_managed'] );
+		$logo_url        = plugins_url( 'src/Provider/logo.svg', \AIProviderForCodex\PLUGIN_FILE );
 		?>
 		<div class="wrap codex-provider-admin-page">
 			<div class="codex-provider-shell">
@@ -310,7 +311,7 @@ final class SiteSettings {
 					<section class="codex-provider-card codex-provider-card--runtime">
 						<div class="codex-provider-card__header">
 							<div class="codex-provider-card__identity">
-								<span class="codex-provider-card__icon" aria-hidden="true">C</span>
+								<img class="codex-provider-card__logo" src="<?php echo esc_url( $logo_url ); ?>" alt="" width="40" height="40" aria-hidden="true" />
 								<div>
 									<h2 class="codex-provider-card__title"><?php esc_html_e( 'Runtime', 'scriptorium-ai-provider-for-codex' ); ?></h2>
 									<p class="codex-provider-card__description"><?php esc_html_e( 'Local sidecar status and diagnostics.', 'scriptorium-ai-provider-for-codex' ); ?></p>
@@ -390,7 +391,7 @@ final class SiteSettings {
 						<section class="codex-provider-card codex-provider-card--settings">
 							<div class="codex-provider-card__header">
 								<div class="codex-provider-card__identity">
-									<span class="codex-provider-card__icon" aria-hidden="true">R</span>
+									<img class="codex-provider-card__logo" src="<?php echo esc_url( $logo_url ); ?>" alt="" width="40" height="40" aria-hidden="true" />
 									<div>
 										<h2 class="codex-provider-card__title"><?php esc_html_e( 'Runtime settings', 'scriptorium-ai-provider-for-codex' ); ?></h2>
 										<p class="codex-provider-card__description"><?php esc_html_e( 'Shared sidecar endpoint and fallback model catalog.', 'scriptorium-ai-provider-for-codex' ); ?></p>
@@ -433,7 +434,7 @@ final class SiteSettings {
 					<section class="codex-provider-card codex-provider-card--setup">
 						<div class="codex-provider-card__header">
 							<div class="codex-provider-card__identity">
-								<span class="codex-provider-card__icon" aria-hidden="true">S</span>
+								<img class="codex-provider-card__logo" src="<?php echo esc_url( $logo_url ); ?>" alt="" width="40" height="40" aria-hidden="true" />
 								<div>
 									<h2 class="codex-provider-card__title"><?php esc_html_e( 'Setup', 'scriptorium-ai-provider-for-codex' ); ?></h2>
 									<p class="codex-provider-card__description"><?php esc_html_e( 'Install the local sidecar and link each user account.', 'scriptorium-ai-provider-for-codex' ); ?></p>
@@ -441,7 +442,17 @@ final class SiteSettings {
 							</div>
 						</div>
 						<div class="codex-provider-card__body">
-							<?php self::render_setup_guide(); ?>
+							<p class="codex-provider-guidance"><?php esc_html_e( 'Run the bundled local sidecar on this WordPress host, then verify Codex in Connectors and link each user account.', 'scriptorium-ai-provider-for-codex' ); ?></p>
+							<div class="codex-provider-actions">
+								<a class="button button-secondary" href="<?php echo esc_url( admin_url( 'options-connectors.php' ) ); ?>"><?php esc_html_e( 'Open Connectors', 'scriptorium-ai-provider-for-codex' ); ?></a>
+								<a class="button button-secondary" href="<?php echo esc_url( UserConnectionPage::page_url() ); ?>"><?php esc_html_e( 'Open user connection', 'scriptorium-ai-provider-for-codex' ); ?></a>
+							</div>
+							<details class="codex-provider-details codex-provider-details--setup">
+								<summary><?php esc_html_e( 'Setup walkthrough', 'scriptorium-ai-provider-for-codex' ); ?></summary>
+								<div class="codex-provider-details__content">
+									<?php self::render_setup_guide(); ?>
+								</div>
+							</details>
 							<details class="codex-provider-details">
 								<summary><?php esc_html_e( 'systemd unit (/etc/systemd/system/codex-wp-sidecar.service)', 'scriptorium-ai-provider-for-codex' ); ?></summary>
 								<textarea class="large-text code" rows="12" readonly><?php echo esc_textarea( SetupSnippets::systemd_unit() ); ?></textarea>

@@ -10,8 +10,10 @@ declare( strict_types=1 );
 namespace AIProviderForCodex\Provider;
 
 use AIProviderForCodex\Admin\UserConnectionPage;
+use AIProviderForCodex\Models\CodexImageGenerationModel;
 use AIProviderForCodex\Models\CodexTextGenerationModel;
 use AIProviderForCodex\Runtime\Settings;
+use RuntimeException;
 use WordPress\AiClient\AiClient;
 use WordPress\AiClient\Providers\ApiBasedImplementation\AbstractApiProvider;
 use WordPress\AiClient\Providers\Contracts\ModelMetadataDirectoryInterface;
@@ -20,6 +22,7 @@ use WordPress\AiClient\Providers\DTO\ProviderMetadata;
 use WordPress\AiClient\Providers\Enums\ProviderTypeEnum;
 use WordPress\AiClient\Providers\Models\Contracts\ModelInterface;
 use WordPress\AiClient\Providers\Models\DTO\ModelMetadata;
+use WordPress\AiClient\Providers\Models\Enums\CapabilityEnum;
 
 /**
  * Codex provider scaffold.
@@ -43,7 +46,35 @@ final class CodexProvider extends AbstractApiProvider {
 	 * @return ModelInterface
 	 */
 	protected static function createModel( ModelMetadata $model_metadata, ProviderMetadata $provider_metadata ): ModelInterface {
+		$supports_text  = self::metadata_supports( $model_metadata, CapabilityEnum::textGeneration() );
+		$supports_image = self::metadata_supports( $model_metadata, CapabilityEnum::imageGeneration() );
+
+		if ( $supports_text && $supports_image ) {
+			throw new RuntimeException( 'Codex model metadata cannot mix text and image generation capabilities.' );
+		}
+
+		if ( $supports_image ) {
+			return new CodexImageGenerationModel( $model_metadata, $provider_metadata );
+		}
+
 		return new CodexTextGenerationModel( $model_metadata, $provider_metadata );
+	}
+
+	/**
+	 * Whether model metadata includes a capability.
+	 *
+	 * @param ModelMetadata  $model_metadata Model metadata.
+	 * @param CapabilityEnum $capability Capability to check.
+	 * @return bool
+	 */
+	private static function metadata_supports( ModelMetadata $model_metadata, CapabilityEnum $capability ): bool {
+		foreach ( $model_metadata->getSupportedCapabilities() as $supported_capability ) {
+			if ( $supported_capability->equals( $capability ) ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**

@@ -16,13 +16,15 @@ use AIProviderForCodex\Runtime\Settings;
 /**
  * Resolves the model list and selected model for the current user.
  *
-	 * Two sources, no cascade:
-	 *  1. User's local runtime snapshot (if the user has a linked account with models).
-	 *  2. Settings fallback (admin-configured allowed-models list).
+ * Two sources, no cascade:
+ *  1. User's local runtime snapshot (if the user has a linked account with models).
+ *  2. Settings fallback (admin-configured allowed-models list).
  *
- * Selected model: user's explicit choice (user meta) → first available.
+ * Selected model: user's explicit choice (user meta) -> first available.
  */
 final class ModelCatalogState {
+
+	public const IMAGE_MODEL_ID = 'codex-image';
 
 	private const USER_META_PREFERRED_MODEL = 'codex_provider_preferred_model';
 
@@ -33,9 +35,12 @@ final class ModelCatalogState {
 	 * @return array{
 	 *     source:string,
 	 *     selected_model:string,
+	 *     selected_text_model:string,
 	 *     checked_at:?string,
-	 *     models:list<array{id:string,label:string}>,
-	 *     model_ids:list<string>
+	 *     models:list<array{id:string,label:string,kind:string}>,
+	 *     model_ids:list<string>,
+	 *     text_model_ids:list<string>,
+	 *     image_model_ids:list<string>
 	 * }
 	 */
 	public static function get_effective_catalog( ?int $wp_user_id = null ): array {
@@ -59,9 +64,12 @@ final class ModelCatalogState {
 	 * @return array{
 	 *     source:string,
 	 *     selected_model:string,
+	 *     selected_text_model:string,
 	 *     checked_at:?string,
-	 *     models:list<array{id:string,label:string}>,
-	 *     model_ids:list<string>
+	 *     models:list<array{id:string,label:string,kind:string}>,
+	 *     model_ids:list<string>,
+	 *     text_model_ids:list<string>,
+	 *     image_model_ids:list<string>
 	 * }
 	 */
 	public static function get_user_snapshot_catalog( int $wp_user_id ): array {
@@ -83,23 +91,20 @@ final class ModelCatalogState {
 			return self::empty_catalog( 'user_snapshot' );
 		}
 
-		$model_ids = array_map(
-			static function ( array $model ): string {
-				return $model['id'];
-			},
-			$models
+		if ( self::supports_image_generation( $snapshot['capabilities'] ?? [] ) ) {
+			$models[] = [
+				'id'    => self::IMAGE_MODEL_ID,
+				'label' => __( 'Codex Image', 'scriptorium-ai-provider-for-codex' ),
+				'kind'  => 'image',
+			];
+		}
+
+		return self::catalog_payload(
+			'user_snapshot',
+			! empty( $snapshot['checked_at'] ) ? (string) $snapshot['checked_at'] : null,
+			$models,
+			$wp_user_id
 		);
-
-		$selected = self::resolve_selected_model( $model_ids, $wp_user_id );
-		$models   = self::prioritize_selected_model( $models, $selected );
-
-		return [
-			'source'         => 'user_snapshot',
-			'selected_model' => $selected,
-			'checked_at'     => ! empty( $snapshot['checked_at'] ) ? (string) $snapshot['checked_at'] : null,
-			'models'         => $models,
-			'model_ids'      => $model_ids,
-		];
 	}
 
 	/**
@@ -131,6 +136,30 @@ final class ModelCatalogState {
 					},
 					$models
 				)
+			)
+		);
+	}
+
+	/**
+	 * Returns catalog model entries for a model kind.
+	 *
+	 * @param array<string,mixed> $catalog Catalog payload.
+	 * @param string              $kind Model kind.
+	 * @return list<array{id:string,label:string,kind:string}>
+	 */
+	public static function models_for_kind( array $catalog, string $kind ): array {
+		$models = $catalog['models'] ?? [];
+
+		if ( ! is_array( $models ) ) {
+			return [];
+		}
+
+		return array_values(
+			array_filter(
+				$models,
+				static function ( $model ) use ( $kind ): bool {
+					return is_array( $model ) && $kind === (string) ( $model['kind'] ?? 'text' );
+				}
 			)
 		);
 	}
@@ -208,9 +237,12 @@ final class ModelCatalogState {
 	 * @return array{
 	 *     source:string,
 	 *     selected_model:string,
+	 *     selected_text_model:string,
 	 *     checked_at:?string,
-	 *     models:list<array{id:string,label:string}>,
-	 *     model_ids:list<string>
+	 *     models:list<array{id:string,label:string,kind:string}>,
+	 *     model_ids:list<string>,
+	 *     text_model_ids:list<string>,
+	 *     image_model_ids:list<string>
 	 * }
 	 */
 	private static function get_settings_catalog( ?int $wp_user_id = null ): array {
@@ -219,35 +251,20 @@ final class ModelCatalogState {
 				return [
 					'id'    => $model_id,
 					'label' => self::label_for_model_id( $model_id ),
+					'kind'  => 'text',
 				];
 			},
 			Settings::get_allowed_models()
 		);
 
-		$model_ids = array_map(
-			static function ( array $model ): string {
-				return $model['id'];
-			},
-			$models
-		);
-
-		$selected = self::resolve_selected_model( $model_ids, $wp_user_id );
-		$models   = self::prioritize_selected_model( $models, $selected );
-
-		return [
-			'source'         => 'settings_fallback',
-			'selected_model' => $selected,
-			'checked_at'     => null,
-			'models'         => $models,
-			'model_ids'      => $model_ids,
-		];
+		return self::catalog_payload( 'settings_fallback', null, $models, $wp_user_id );
 	}
 
 	/**
 	 * Normalizes raw model payload data into catalog entries.
 	 *
 	 * @param mixed $models Raw model list.
-	 * @return list<array{id:string,label:string}>
+	 * @return list<array{id:string,label:string,kind:string}>
 	 */
 	private static function normalize_models( $models ): array {
 		if ( ! is_array( $models ) ) {
@@ -266,6 +283,7 @@ final class ModelCatalogState {
 			$normalized[ $model_id ] = [
 				'id'    => $model_id,
 				'label' => self::extract_model_label( $model, $model_id ),
+				'kind'  => 'text',
 			];
 		}
 
@@ -337,9 +355,9 @@ final class ModelCatalogState {
 	/**
 	 * Reorders model entries so the selected model comes first.
 	 *
-	 * @param list<array{id:string,label:string}> $models Model entries.
+	 * @param list<array{id:string,label:string,kind:string}> $models Model entries.
 	 * @param string                              $selected Selected model ID.
-	 * @return list<array{id:string,label:string}>
+	 * @return list<array{id:string,label:string,kind:string}>
 	 */
 	private static function prioritize_selected_model( array $models, string $selected ): array {
 		if ( '' === $selected || [] === $models ) {
@@ -375,18 +393,79 @@ final class ModelCatalogState {
 	 * @return array{
 	 *     source:string,
 	 *     selected_model:string,
+	 *     selected_text_model:string,
 	 *     checked_at:?string,
-	 *     models:list<array{id:string,label:string}>,
-	 *     model_ids:list<string>
+	 *     models:list<array{id:string,label:string,kind:string}>,
+	 *     model_ids:list<string>,
+	 *     text_model_ids:list<string>,
+	 *     image_model_ids:list<string>
 	 * }
 	 */
 	private static function empty_catalog( string $source ): array {
 		return [
-			'source'         => $source,
-			'selected_model' => '',
-			'checked_at'     => null,
-			'models'         => [],
-			'model_ids'      => [],
+			'source'              => $source,
+			'selected_model'      => '',
+			'selected_text_model' => '',
+			'checked_at'          => null,
+			'models'              => [],
+			'model_ids'           => [],
+			'text_model_ids'      => [],
+			'image_model_ids'     => [],
 		];
+	}
+
+	/**
+	 * Builds the shared catalog payload shape.
+	 *
+	 * @param string                                      $source Source identifier.
+	 * @param string|null                                 $checked_at Snapshot checked time.
+	 * @param list<array{id:string,label:string,kind:string}> $models Model entries.
+	 * @param int|null                                    $wp_user_id Optional user ID.
+	 * @return array<string,mixed>
+	 */
+	private static function catalog_payload( string $source, ?string $checked_at, array $models, ?int $wp_user_id = null ): array {
+		$text_models     = self::models_for_kind( [ 'models' => $models ], 'text' );
+		$image_models    = self::models_for_kind( [ 'models' => $models ], 'image' );
+		$text_model_ids  = self::model_ids_from_models( $text_models );
+		$image_model_ids = self::model_ids_from_models( $image_models );
+		$model_ids       = self::model_ids_from_models( $models );
+		$selected        = self::resolve_selected_model( $text_model_ids, $wp_user_id );
+		$models          = self::prioritize_selected_model( $models, $selected );
+
+		return [
+			'source'              => $source,
+			'selected_model'      => $selected,
+			'selected_text_model' => $selected,
+			'checked_at'          => $checked_at,
+			'models'              => $models,
+			'model_ids'           => $model_ids,
+			'text_model_ids'      => $text_model_ids,
+			'image_model_ids'     => $image_model_ids,
+		];
+	}
+
+	/**
+	 * Extracts IDs from catalog model entries.
+	 *
+	 * @param list<array{id:string,label:string,kind:string}> $models Model entries.
+	 * @return list<string>
+	 */
+	private static function model_ids_from_models( array $models ): array {
+		return array_map(
+			static function ( array $model ): string {
+				return $model['id'];
+			},
+			$models
+		);
+	}
+
+	/**
+	 * Whether a runtime snapshot advertises image generation.
+	 *
+	 * @param mixed $capabilities Capability snapshot.
+	 * @return bool
+	 */
+	private static function supports_image_generation( $capabilities ): bool {
+		return is_array( $capabilities ) && true === ( $capabilities['imageGeneration'] ?? false );
 	}
 }

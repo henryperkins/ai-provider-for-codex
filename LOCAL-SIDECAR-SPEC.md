@@ -57,7 +57,7 @@ This design does not try to:
 - Phase 1 functional cutover is complete.
 - Phase 2 terminology cleanup is complete.
 - Active plugin code is runtime-only.
-- Schema version `4` removes the obsolete callback-state table and the unused legacy connection metadata column.
+- Schema version `6` stores account capabilities in connection snapshots so image generation can fail closed when unsupported.
 
 ## Core Design Decisions
 
@@ -71,6 +71,7 @@ The sidecar is the supported runtime boundary for:
 - device-code login orchestration
 - account snapshot reads
 - text generation requests
+- capability-gated text-to-image generation requests
 
 ### 2. Device Code Login
 
@@ -291,6 +292,11 @@ Response:
     "type": "chatgpt"
   },
   "authStored": true,
+  "capabilities": {
+    "imageGeneration": true,
+    "namespaceTools": true,
+    "webSearch": false
+  },
   "defaultModel": "gpt-5-codex",
   "models": [
     {
@@ -310,6 +316,7 @@ Notes:
 
 - `planType` may be `null` or an empty string.
 - WordPress treats this snapshot as the source of truth for displayed billing-plan information and clears stale local values when a fresh snapshot omits them.
+- WordPress treats `capabilities.imageGeneration === true` as the only signal that the synthetic `codex-image` model can be advertised for that user.
 - If this route returns `409 auth_required`, WordPress clears the local connection state and prompts the user to reconnect.
 
 ### `POST /v1/responses/text`
@@ -344,7 +351,7 @@ Response:
   "usage": {
     "inputTokens": 12,
     "outputTokens": 18,
-    "reasoningTokens": 0
+    "reasoningOutputTokens": 0
   },
   "account": {
     "email": "jane@example.com",
@@ -355,6 +362,60 @@ Response:
   "rateLimits": {}
 }
 ```
+
+### `POST /v1/responses/image`
+
+Purpose:
+
+- run text-to-image generation for one connected user
+
+Request:
+
+```json
+{
+  "wpUserId": 123,
+  "prompt": "A watercolor header image of a quiet writing desk.",
+  "systemInstruction": "Use soft natural light.",
+  "requestId": "req_img_123"
+}
+```
+
+Response:
+
+```json
+{
+  "requestId": "req_img_123",
+  "model": "codex-image",
+  "runtimeModel": null,
+  "mimeType": "image/png",
+  "imageBase64": "iVBORw0KGgo...",
+  "revisedPrompt": "A watercolor header image of a quiet writing desk in soft natural light.",
+  "finishReason": "stop",
+  "usage": {
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "reasoningOutputTokens": 0
+  },
+  "account": {
+    "email": "jane@example.com",
+    "planType": "plus",
+    "authMode": "chatgpt",
+    "type": "chatgpt"
+  },
+  "rateLimits": {},
+  "artifacts": {
+    "savedPath": "/var/lib/codex-wp/users/123/generated_images/session/call.png"
+  },
+  "imageCount": 1
+}
+```
+
+Notes:
+
+- The request intentionally does not include `codex-image` as a Codex runtime model override. `codex-image` is the WordPress AI Client model ID.
+- The sidecar calls `modelProvider/capabilities/read` before starting the turn and returns `409 image_generation_unavailable` if image generation is false or unavailable.
+- The returned `imageBase64` is the result passed back to WordPress. `artifacts.savedPath` is diagnostic local-runtime metadata, not a public URL.
+- Token usage defaults to zeroes when Codex does not emit usable token data for an image turn.
 
 ### `POST /v1/session/clear`
 
@@ -401,6 +462,8 @@ Suggested error codes:
 - `runtime_unavailable`
 - `runtime_error`
 - `invalid_model`
+- `image_generation_unavailable`
+- `image_generation_failed`
 - `request_timeout`
 
 ## WordPress Plugin Specification
@@ -749,6 +812,7 @@ The implementation is complete when all of the following are true:
 - a logged-in WordPress user can connect a ChatGPT or Codex account entirely from wp-admin using device code
 - per-user Codex auth is stored only in the sidecar storage directory
 - the provider can generate text without direct API billing
+- the provider can generate images only when the connected user's Codex runtime reports image-generation capability
 - the Connectors and settings experience feels like a standard provider plugin
 - browser calls stay pointed at WordPress REST, not the sidecar directly
 

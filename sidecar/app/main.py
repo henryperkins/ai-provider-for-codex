@@ -465,6 +465,14 @@ class RuntimeState:
             account = session.request("account/read", {"refresh": True}, timeout=REQUEST_TIMEOUT)
             rate_limits = session.request("account/rateLimits/read", timeout=REQUEST_TIMEOUT)
             models = session.request("model/list", {"includeHidden": False}, timeout=REQUEST_TIMEOUT)
+            try:
+                capabilities = session.request(
+                    "modelProvider/capabilities/read",
+                    {},
+                    timeout=REQUEST_TIMEOUT,
+                )
+            except JsonRpcError:
+                capabilities = {}
 
         account_payload = normalize_account_payload(account)
         if not account_payload["authMode"]:
@@ -477,6 +485,7 @@ class RuntimeState:
         return {
             "account": account_payload,
             "authStored": auth_file_path(codex_home).is_file(),
+            "capabilities": normalize_capabilities_payload(capabilities),
             "defaultModel": select_default_model(models),
             "models": normalize_models_payload(models),
             "rateLimits": normalize_rate_limits_payload(rate_limits),
@@ -491,7 +500,10 @@ class RuntimeState:
                 HTTPStatus.CONFLICT,
             )
 
-        input_text = require_string(payload.get("input"), "input")
+        input_text = optional_string(payload.get("input"))
+        input_images = normalize_text_input_images(payload.get("inputImages"))
+        if not input_text and not input_images:
+            raise RuntimeError("input is required.")
         request_id = optional_string(payload.get("requestId")) or str(uuid.uuid4())
         model = optional_string(payload.get("model"))
         reasoning_effort = optional_string(payload.get("reasoningEffort"))
@@ -507,10 +519,14 @@ class RuntimeState:
 
             thread_started = session.request("thread/start", thread_params, timeout=REQUEST_TIMEOUT)
             thread_id = require_nested_string(thread_started, "thread", "id")
+            turn_input: list[dict[str, Any]] = []
+            if input_text:
+                turn_input.append({"type": "text", "text": input_text})
+            turn_input.extend(input_images)
 
             turn_payload: dict[str, Any] = {
                 "threadId": thread_id,
-                "input": [{"type": "text", "text": input_text}],
+                "input": turn_input,
             }
             if model:
                 turn_payload["model"] = model
@@ -594,6 +610,124 @@ class RuntimeState:
             "usage": extract_turn_token_usage(token_usage),
         }
 
+    def generate_image(self, wp_user_id: int, payload: dict[str, Any]) -> dict[str, Any]:
+        codex_home = user_codex_home(wp_user_id)
+        if not auth_file_path(codex_home).is_file():
+            raise HttpError(
+                "auth_required",
+                "No stored ChatGPT or Codex auth is available for this WordPress user.",
+                HTTPStatus.CONFLICT,
+            )
+
+        prompt = require_string(payload.get("prompt"), "prompt")
+        request_id = optional_string(payload.get("requestId")) or str(uuid.uuid4())
+        system_instruction = optional_string(payload.get("systemInstruction"))
+
+        with app_server_session(codex_home) as session:
+            try:
+                capabilities_payload = session.request(
+                    "modelProvider/capabilities/read",
+                    {},
+                    timeout=REQUEST_TIMEOUT,
+                )
+            except JsonRpcError:
+                capabilities_payload = {}
+
+            capabilities = normalize_capabilities_payload(capabilities_payload)
+            if not capabilities["imageGeneration"]:
+                raise HttpError(
+                    "image_generation_unavailable",
+                    "The active Codex runtime account does not report image generation support.",
+                    HTTPStatus.CONFLICT,
+                )
+
+            thread_params: dict[str, Any] = {"ephemeral": True}
+            if system_instruction:
+                thread_params["developerInstructions"] = system_instruction
+
+            thread_started = session.request("thread/start", thread_params, timeout=REQUEST_TIMEOUT)
+            thread_id = require_nested_string(thread_started, "thread", "id")
+            image_prompt = build_image_generation_prompt(prompt)
+            started = session.request(
+                "turn/start",
+                {
+                    "threadId": thread_id,
+                    "input": [{"type": "text", "text": image_prompt}],
+                },
+                timeout=REQUEST_TIMEOUT,
+            )
+            turn_id = require_nested_string(started, "turn", "id")
+            token_usage: dict[str, Any] | None = None
+            image_item: dict[str, Any] | None = None
+            image_count = 0
+
+            while True:
+                notification = session.wait_for_notification(
+                    lambda message: notification_matches_turn(message, turn_id)
+                    or notification_is_image_item(message),
+                    timeout=TURN_TIMEOUT,
+                )
+                method = notification.get("method")
+                params = notification.get("params")
+
+                if "thread/tokenUsage/updated" == method and isinstance(params, dict):
+                    usage_update = params.get("tokenUsage")
+                    if isinstance(usage_update, dict):
+                        token_usage = usage_update
+                    continue
+
+                if "item/completed" == method:
+                    extracted = extract_image_item(notification)
+                    if extracted is not None:
+                        image_count += 1
+                        if image_item is None:
+                            image_item = extracted
+                    continue
+
+                if "turn/completed" != method or not isinstance(params, dict):
+                    continue
+
+                turn = params.get("turn")
+                if isinstance(turn, dict) and turn.get("error"):
+                    raise RuntimeError(str(turn["error"]))
+                break
+
+            if image_item is None:
+                fallback_items = self._read_final_image_items(session, thread_id, turn_id)
+                if fallback_items:
+                    image_item = fallback_items[0]
+                    image_count = max(image_count, len(fallback_items))
+
+            if image_item is None:
+                raise HttpError(
+                    "image_generation_failed",
+                    "Codex completed the image turn without returning image data.",
+                    HTTPStatus.BAD_GATEWAY,
+                )
+
+            rate_limits = session.request("account/rateLimits/read", timeout=REQUEST_TIMEOUT)
+            account = session.request("account/read", {"refresh": False}, timeout=REQUEST_TIMEOUT)
+
+        response = {
+            "account": normalize_account_payload(account),
+            "artifacts": image_item.get("artifacts", {}),
+            "authStored": auth_file_path(codex_home).is_file(),
+            "finishReason": "stop",
+            "imageBase64": image_item["imageBase64"],
+            "imageCount": image_count or 1,
+            "mimeType": image_item["mimeType"],
+            "model": "codex-image",
+            "rateLimits": normalize_rate_limits_payload(rate_limits),
+            "requestId": request_id,
+            "runtimeModel": image_item.get("runtimeModel"),
+            "usage": extract_turn_token_usage(token_usage),
+        }
+
+        if image_item.get("revisedPrompt"):
+            response["revisedPrompt"] = image_item["revisedPrompt"]
+
+        return response
+
     def clear_session(self, wp_user_id: int) -> None:
         clear_auth_json(user_codex_home(wp_user_id))
 
@@ -632,6 +766,45 @@ class RuntimeState:
                 if isinstance(item_text, str) and item_text.strip():
                     return item_text.strip()
         return ""
+
+    def _read_final_image_items(
+        self,
+        session: JsonRpcSession,
+        thread_id: str,
+        turn_id: str,
+    ) -> list[dict[str, Any]]:
+        response = session.request(
+            "thread/read",
+            {"threadId": thread_id},
+            timeout=REQUEST_TIMEOUT,
+        )
+        if not isinstance(response, dict):
+            return []
+
+        thread = response.get("thread")
+        if not isinstance(thread, dict):
+            return []
+
+        turns = thread.get("turns")
+        if not isinstance(turns, list):
+            return []
+
+        for turn in turns:
+            if not isinstance(turn, dict) or turn.get("id") != turn_id:
+                continue
+
+            items = turn.get("items")
+            if not isinstance(items, list):
+                return []
+
+            image_items = []
+            for item in items:
+                normalized = normalize_image_item(item)
+                if normalized is not None:
+                    image_items.append(normalized)
+            return image_items
+
+        return []
 
     def _watch_login_completion(self, auth_session_id: str) -> None:
         session_record: dict[str, Any] | None = None
@@ -723,6 +896,69 @@ def notification_matches_turn(message: dict[str, Any], turn_id: str) -> bool:
     return "turn/completed" == method
 
 
+def notification_is_image_item(message: dict[str, Any]) -> bool:
+    if "item/completed" != message.get("method"):
+        return False
+
+    params = message.get("params")
+    if not isinstance(params, dict):
+        return False
+
+    item = params.get("item")
+    return isinstance(item, dict) and item.get("type") in {"imageGeneration", "image_generation_call"}
+
+
+def extract_image_item(message: dict[str, Any]) -> dict[str, Any] | None:
+    if "item/completed" != message.get("method"):
+        return None
+
+    params = message.get("params")
+    if not isinstance(params, dict):
+        return None
+
+    return normalize_image_item(params.get("item"))
+
+
+def normalize_image_item(item: Any) -> dict[str, Any] | None:
+    if not isinstance(item, dict):
+        return None
+
+    if item.get("type") not in {"imageGeneration", "image_generation_call"}:
+        return None
+
+    image_base64 = optional_string(item.get("result"))
+    if not image_base64:
+        return None
+
+    normalized = {
+        "imageBase64": image_base64,
+        "mimeType": "image/png",
+    }
+
+    revised_prompt = optional_string(item.get("revisedPrompt"))
+    if revised_prompt:
+        normalized["revisedPrompt"] = revised_prompt
+
+    saved_path = optional_string(item.get("savedPath"))
+    if saved_path:
+        normalized["artifacts"] = {"savedPath": saved_path}
+
+    runtime_model = optional_string(item.get("runtimeModel")) or optional_string(item.get("model"))
+    if runtime_model:
+        normalized["runtimeModel"] = runtime_model
+
+    return normalized
+
+
+def build_image_generation_prompt(prompt: str) -> str:
+    return (
+        "Generate an image using the image_generation tool. "
+        "Do not reply with text-only commentary. "
+        "Use this exact image prompt:\n\n"
+        f"{prompt}"
+    )
+
+
 def extract_turn_token_usage(token_usage: Any) -> dict[str, int]:
     """Maps a Codex ``thread/tokenUsage/updated`` payload to the sidecar usage
     contract.
@@ -761,6 +997,31 @@ def require_string(value: Any, field_name: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise RuntimeError(f"{field_name} is required.")
     return value.strip()
+
+
+def normalize_text_input_images(value: Any) -> list[dict[str, Any]]:
+    if value is None:
+        return []
+
+    if not isinstance(value, list):
+        raise RuntimeError("inputImages must be a list.")
+
+    images: list[dict[str, Any]] = []
+    for index, image in enumerate(value):
+        if not isinstance(image, dict):
+            raise RuntimeError(f"inputImages[{index}] must be an object.")
+
+        url = optional_string(image.get("url"))
+        if not url:
+            raise RuntimeError(f"inputImages[{index}].url is required.")
+
+        item: dict[str, Any] = {"type": "image", "url": url}
+        detail = optional_string(image.get("detail"))
+        if detail:
+            item["detail"] = detail
+        images.append(item)
+
+    return images
 
 
 def require_user_id(value: Any, field_name: str) -> int:
@@ -832,6 +1093,14 @@ def normalize_models_payload(payload: Any) -> list[dict[str, Any]]:
     return data if isinstance(data, list) else []
 
 
+def normalize_capabilities_payload(payload: Any) -> dict[str, bool]:
+    return {
+        "imageGeneration": bool(payload.get("imageGeneration")) if isinstance(payload, dict) else False,
+        "namespaceTools": bool(payload.get("namespaceTools")) if isinstance(payload, dict) else False,
+        "webSearch": bool(payload.get("webSearch")) if isinstance(payload, dict) else False,
+    }
+
+
 def select_default_model(payload: Any) -> str | None:
     models = normalize_models_payload(payload)
     for model in models:
@@ -896,6 +1165,12 @@ class RuntimeHandler(BaseHTTPRequestHandler):
                 payload = self._read_json_body()
                 wp_user_id = require_user_id(payload.get("wpUserId"), "wpUserId")
                 self._json_response(STATE.generate_text(wp_user_id, payload))
+                return
+
+            if "POST" == self.command and "/v1/responses/image" == parsed.path:
+                payload = self._read_json_body()
+                wp_user_id = require_user_id(payload.get("wpUserId"), "wpUserId")
+                self._json_response(STATE.generate_image(wp_user_id, payload))
                 return
 
             if "POST" == self.command and "/v1/session/clear" == parsed.path:
