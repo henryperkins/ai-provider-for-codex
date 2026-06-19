@@ -55,6 +55,15 @@ final class Client {
 	}
 
 	/**
+	 * Runs the sidecar's read-only diagnostics without touching the health cache.
+	 *
+	 * @return array<string,mixed>
+	 */
+	public function diagnostics(): array {
+		return $this->request( 'GET', '/v1/diagnostics', [], [], false );
+	}
+
+	/**
 	 * Sends a runtime request.
 	 *
 	 * @param string              $method HTTP method.
@@ -63,7 +72,7 @@ final class Client {
 	 * @param array<string,mixed> $query Query args.
 	 * @return array<string,mixed>
 	 */
-	public function request( string $method, string $path, array $body = [], array $query = [] ): array {
+	public function request( string $method, string $path, array $body = [], array $query = [], bool $record_health = true ): array {
 		$method   = strtoupper( $method );
 		$path     = '/' . ltrim( $path, '/' );
 		$base_url = Settings::get_base_url();
@@ -113,10 +122,12 @@ final class Client {
 
 		if ( is_wp_error( $response ) ) {
 			$message = self::normalize_transport_error_message( $response, $url, $timeout );
-			if ( self::is_connector_approval_error( $response ) ) {
-				HealthMonitor::record_connector_unapproved( $message );
-			} else {
-				HealthMonitor::record_failure( $message );
+			if ( $record_health ) {
+				if ( self::is_connector_approval_error( $response ) ) {
+					HealthMonitor::record_connector_unapproved( $message );
+				} else {
+					HealthMonitor::record_failure( $message );
+				}
 			}
 			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Transport message is escaped when rendered.
 			throw new RuntimeException( $message );
@@ -125,7 +136,8 @@ final class Client {
 		return $this->process_response(
 			(int) wp_remote_retrieve_response_code( $response ),
 			(string) wp_remote_retrieve_body( $response ),
-			(string) wp_remote_retrieve_response_message( $response )
+			(string) wp_remote_retrieve_response_message( $response ),
+			$record_health
 		);
 	}
 
@@ -137,14 +149,16 @@ final class Client {
 	 * @param string $fallback_status_message Reason phrase to fall back to when the runtime returns no error message.
 	 * @return array<string,mixed>
 	 */
-	private function process_response( int $status_code, string $raw_body, string $fallback_status_message ): array {
+	private function process_response( int $status_code, string $raw_body, string $fallback_status_message, bool $record_health = true ): array {
 		$payload = [];
 
 		if ( '' !== $raw_body ) {
 			$payload = json_decode( $raw_body, true );
 
 			if ( JSON_ERROR_NONE !== json_last_error() ) {
-				HealthMonitor::record_failure( __( 'The local Codex runtime returned invalid JSON.', 'scriptorium-ai-provider-for-codex' ) );
+				if ( $record_health ) {
+					HealthMonitor::record_failure( __( 'The local Codex runtime returned invalid JSON.', 'scriptorium-ai-provider-for-codex' ) );
+				}
 				throw self::runtime_exception( esc_html__( 'The local Codex runtime returned invalid JSON.', 'scriptorium-ai-provider-for-codex' ) );
 			}
 		}
@@ -158,7 +172,7 @@ final class Client {
 				$runtime_error_code
 			);
 
-			if ( $status_code >= 500 || in_array( $status_code, [ 401, 403 ], true ) ) {
+			if ( $record_health && ( $status_code >= 500 || in_array( $status_code, [ 401, 403 ], true ) ) ) {
 				HealthMonitor::record_failure( (string) $message );
 			}
 
@@ -173,7 +187,9 @@ final class Client {
 			// phpcs:enable WordPress.Security.EscapeOutput.ExceptionNotEscaped
 		}
 
-		HealthMonitor::record_success();
+		if ( $record_health ) {
+			HealthMonitor::record_success();
+		}
 
 		return is_array( $payload ) ? $payload : [];
 	}

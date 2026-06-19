@@ -109,6 +109,11 @@ fi
 node --input-type=module --check < "$ROOT_DIR/assets/connection-flow.js" >/dev/null
 node --input-type=module --check < "$ROOT_DIR/assets/connectors.js" >/dev/null
 node --input-type=module --check < "$ROOT_DIR/assets/user-connection.js" >/dev/null
+node --input-type=module --check < "$ROOT_DIR/assets/diagnostics.js" >/dev/null
 node --test "$ROOT_DIR/assets/connection-flow.test.mjs"
 node --test "$ROOT_DIR/assets/user-connection.test.mjs"
+node --test "$ROOT_DIR/assets/diagnostics.test.mjs"
+python3 "$ROOT_DIR/sidecar/scripts/test-token-usage.py"
+python3 "$ROOT_DIR/sidecar/scripts/test-diagnostics.py"
+python3 "$ROOT_DIR/sidecar/scripts/test-image-generation.py"
 wp --path="$WP_PATH" eval-file "$ROOT_DIR/scripts/verify.php"

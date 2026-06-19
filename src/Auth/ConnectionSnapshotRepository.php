@@ -51,8 +51,9 @@ final class ConnectionSnapshotRepository {
 			return null;
 		}
 
-		$row['models']      = self::decode_json_column( $row['models_json'] ?? '' );
-		$row['rate_limits'] = self::decode_json_column( $row['rate_limits_json'] ?? '' );
+		$row['models']       = self::decode_json_column( $row['models_json'] ?? '' );
+		$row['rate_limits']  = self::decode_json_column( $row['rate_limits_json'] ?? '' );
+		$row['capabilities'] = self::decode_json_column( $row['capabilities_json'] ?? '' );
 
 		return $row;
 	}
@@ -102,9 +103,10 @@ final class ConnectionSnapshotRepository {
 				}
 			}
 
-			$row['models']      = self::decode_json_column( $row['models_json'] ?? '' );
-			$row['rate_limits'] = self::decode_json_column( $row['rate_limits_json'] ?? '' );
-			$snapshots[]        = $row;
+			$row['models']       = self::decode_json_column( $row['models_json'] ?? '' );
+			$row['rate_limits']  = self::decode_json_column( $row['rate_limits_json'] ?? '' );
+			$row['capabilities'] = self::decode_json_column( $row['capabilities_json'] ?? '' );
+			$snapshots[]         = $row;
 		}
 
 		return $snapshots;
@@ -131,6 +133,7 @@ final class ConnectionSnapshotRepository {
 			'default_model'     => sanitize_text_field( (string) ( $payload['defaults']['model'] ?? $payload['defaultModel'] ?? $existing['default_model'] ?? '' ) ),
 			'reasoning_effort'  => sanitize_text_field( (string) ( $payload['defaults']['reasoningEffort'] ?? $existing['reasoning_effort'] ?? '' ) ),
 			'rate_limits_json'  => wp_json_encode( $payload['rateLimits'] ?? $existing['rate_limits'] ?? [] ),
+			'capabilities_json' => wp_json_encode( $payload['capabilities'] ?? $existing['capabilities'] ?? [] ),
 			'readiness_status'  => sanitize_text_field( $readiness_status ),
 			'checked_at'        => self::to_mysql_datetime( $payload['checkedAt'] ?? $now ) ?? $now,
 			'created_at'        => $existing['created_at'] ?? $now,
@@ -138,6 +141,7 @@ final class ConnectionSnapshotRepository {
 		];
 
 		$formats = [
+			'%s',
 			'%s',
 			'%s',
 			'%s',

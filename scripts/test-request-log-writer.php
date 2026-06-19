@@ -68,6 +68,34 @@ $codex_assert( ( $entry['context']['output_preview'] ?? null ) === 'hi there', '
 $codex_assert( ( $entry['context']['request_id'] ?? null ) === 'req-123', 'success: request_id nested in context' );
 $codex_assert( ! array_key_exists( 'error_message', $entry ), 'success: omits error_message' );
 
+// --- build_entry(): image success shape -----------------------------------
+$image_base64 = str_repeat( 'a', 120 );
+$image        = $writer::build_entry(
+	array(
+		'type'           => 'image',
+		'operation'      => 'codex:responses/image',
+		'model'          => 'codex-image',
+		'status'         => 'success',
+		'duration_ms'    => 2345,
+		'request_id'     => 'img-123',
+		'input_preview'  => 'USER: Draw a blue circle.',
+		'output_preview' => 'Generated image/png image. Revised prompt: A small blue circle.',
+		'image_base64'   => $image_base64,
+		'artifacts'      => array(
+			'savedPath' => '/home/dev/.codex/generated_images/session/call.png',
+		),
+		'user_id'        => 7,
+	)
+);
+
+$codex_assert( ( $image['type'] ?? null ) === 'image', 'image: type is image' );
+$codex_assert( ( $image['operation'] ?? null ) === 'codex:responses/image', 'image: operation' );
+$codex_assert( ( $image['model'] ?? null ) === 'codex-image', 'image: model' );
+$codex_assert( ( $image['context']['output_preview'] ?? null ) === 'Generated image/png image. Revised prompt: A small blue circle.', 'image: output preview is safe text' );
+$image_json = (string) json_encode( $image );
+$codex_assert( false === strpos( $image_json, $image_base64 ), 'image: entry omits base64 payload' );
+$codex_assert( false === strpos( $image_json, 'generated_images/session/call.png' ), 'image: entry omits local generated path' );
+
 // --- build_entry(): error shape -----------------------------------------
 $err = $writer::build_entry(
 	array(

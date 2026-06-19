@@ -61,6 +61,8 @@ final class RequestLogWriter {
 	 *
 	 * @param array{
 	 *     status: string,
+	 *     type?: string,
+	 *     operation?: string,
 	 *     model?: string,
 	 *     duration_ms?: int,
 	 *     tokens_input?: int,
@@ -74,7 +76,9 @@ final class RequestLogWriter {
 	 * @return array<string,mixed> Payload accepted by AI_Request_Log_Manager::log().
 	 */
 	public static function build_entry( array $args ): array {
-		$status = $args['status'];
+		$status    = $args['status'];
+		$type      = isset( $args['type'] ) && '' !== (string) $args['type'] ? (string) $args['type'] : self::TYPE;
+		$operation = isset( $args['operation'] ) && '' !== (string) $args['operation'] ? (string) $args['operation'] : self::OPERATION;
 
 		$context = array( 'surface' => 'wordpress-ai-client' );
 
@@ -91,8 +95,8 @@ final class RequestLogWriter {
 		}
 
 		$entry = array(
-			'type'      => self::TYPE,
-			'operation' => self::OPERATION,
+			'type'      => $type,
+			'operation' => $operation,
 			'provider'  => self::PROVIDER,
 			'status'    => $status,
 			'context'   => $context,

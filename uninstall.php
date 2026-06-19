@@ -17,6 +17,7 @@ foreach ( [
 	'codex_runtime_base_url',
 	'codex_runtime_bearer_token',
 	'codex_runtime_allowed_models',
+	'codex_runtime_suggested_bearer_token',
 	'codex_provider_schema_version',
 	'codex_provider_connector_self_approval_seeded',
 ] as $codex_provider_option_name ) {
@@ -28,6 +29,7 @@ delete_option( 'codex_runtime_default_model' );
 
 delete_transient( 'codex_provider_runtime_health' );
 delete_transient( 'codex_provider_site_catalog_refresh_attempt' );
+delete_transient( 'codex_provider_last_diagnostics' );
 
 delete_metadata( 'user', 0, 'codex_provider_dismiss_link_notice', true );
 delete_metadata( 'user', 0, 'codex_provider_pending_auth_session', true );

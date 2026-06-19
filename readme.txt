@@ -12,9 +12,9 @@ Local-runtime Codex provider for the WordPress AI Client.
 
 == Description ==
 
-Scriptorium AI Provider for Codex adds a `codex` provider to the WordPress AI Client and sends text-generation requests through a localhost runtime that runs on the same host as WordPress.
+Scriptorium AI Provider for Codex adds a `codex` provider to the WordPress AI Client and sends text-generation and capability-gated text-to-image requests through a localhost runtime that runs on the same host as WordPress.
 
-Text generation only; vision and image generation are routed to other providers.
+Image generation is exposed as a separate `codex-image` model only after a connected user's local Codex runtime reports image-generation support. Reference-image editing, masks, variations, and other vision workflows remain out of scope.
 
 This plugin is intended for self-managed environments that can run a local service. It is not intended for shared hosting or managed hosts that cannot run background processes.
 
@@ -28,6 +28,7 @@ Features:
 * lets each WordPress user connect their own Codex or ChatGPT account with a device-code flow
 * stores per-user connection metadata and cached runtime snapshots in WordPress
 * discovers available models from each user's local runtime snapshot, with site fallback models before a user connects
+* exposes `codex-image` for text-to-image generation when the user's Codex runtime advertises image-generation capability
 * exposes local status and connect, disconnect, and refresh flows for the admin UI
 
 Runtime requirements:
@@ -88,11 +89,13 @@ This plugin is intended for self-managed environments where you control the serv
 
 This plugin requires a local sidecar runtime that wraps `codex app-server`. That local runtime connects to OpenAI's Codex and ChatGPT services after an administrator configures the runtime and a user starts the connection flow.
 
-When a user connects an account or sends a request through the provider, data sent off the WordPress host can include:
+When a user connects an account or sends a request through the provider, data exchanged with OpenAI's Codex and ChatGPT services can include:
 
 * prompt text and system instructions submitted through the WordPress AI Client
+* image prompts submitted through the WordPress AI Client when `codex-image` is selected
 * the selected model ID and optional response-format schema
-* account, model-catalog, and rate-limit metadata returned by the Codex runtime
+* generated image data returned by Codex for requested image results
+* account, capability, model-catalog, and rate-limit metadata returned by the Codex runtime
 * authentication data needed to complete the user-initiated device-code login flow
 
 OpenAI Terms of Use: https://openai.com/policies/terms-of-use/
@@ -105,14 +108,16 @@ This plugin stores the following data in WordPress:
 
 * the local runtime URL
 * the shared bearer token, unless it is managed externally
+* a locally generated suggested bearer token, shown only as setup guidance and never transmitted; removed on uninstall
 * per-user connection metadata such as connection ID, account email, plan type, auth mode, and session expiry
-* cached model and rate-limit snapshots
+* cached model, capability, and rate-limit snapshots
 * pending device-code session metadata
 * each user's preferred model selection
 
 This plugin stores the following data outside WordPress in the local sidecar storage directory, typically under `/var/lib/codex-wp/users/<wp_user_id>/`:
 
 * per-user Codex auth files such as `auth.json`
+* Codex-managed generated image artifacts, when the runtime writes them for image-generation turns
 * other Codex-managed local runtime files created by the `codex` CLI for that user
 
 The sidecar is designed for localhost-only communication between WordPress and the runtime. It uses a shared bearer token for authentication and does not send data to external services until an administrator configures the runtime and a user initiates account connection or request execution.
@@ -124,6 +129,7 @@ Support is limited to documented, self-managed environments that can run the loc
 == Changelog ==
 
 = 0.1.5 =
+* Add snapshot-gated text-to-image generation through the local Codex runtime when the connected account reports image-generation capability.
 * Rename the plugin to Scriptorium AI Provider for Codex and the main plugin file to scriptorium-ai-provider-for-codex.php.
 * Carry the connector approval across the plugin rename (preserving any prior admin revocation) for sites using the WordPress AI Connector Approval experiment.
 * Deliver admin screen styles through wp_add_inline_style() and the connection-page config through script module data instead of inline style/script tags.

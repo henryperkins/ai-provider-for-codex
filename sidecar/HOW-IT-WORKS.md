@@ -22,6 +22,7 @@ The implementation lives in [sidecar/app/main.py](./app/main.py). The plugin-sid
 - [src/Runtime/Client.php](../src/Runtime/Client.php)
 - [src/Auth/ConnectionService.php](../src/Auth/ConnectionService.php)
 - [src/Models/CodexTextGenerationModel.php](../src/Models/CodexTextGenerationModel.php)
+- [src/Models/CodexImageGenerationModel.php](../src/Models/CodexImageGenerationModel.php)
 - [src/Runtime/Settings.php](../src/Runtime/Settings.php)
 
 ## What The Sidecar Process Is
@@ -127,6 +128,7 @@ The sidecar uses JSON-RPC synchronously for direct requests like:
 - `account/read`
 - `account/rateLimits/read`
 - `model/list`
+- `modelProvider/capabilities/read`
 - `thread/start`
 - `turn/start`
 - `thread/read`
@@ -135,6 +137,7 @@ It uses notification waiting for long-running async events like:
 
 - login completion
 - streaming text generation deltas
+- completed image generation items
 - turn completion
 
 ### Process lifetime
@@ -150,7 +153,7 @@ For device-code login, the sidecar keeps the subprocess alive in memory until th
 
 ## HTTP API
 
-The sidecar exposes five routes plus the `ping` alias.
+The sidecar exposes six routes plus the `ping` alias.
 
 ### `GET /healthz`
 
@@ -262,12 +265,14 @@ Behavior:
    - `account/read` with `{ "refresh": true }`
    - `account/rateLimits/read`
    - `model/list` with `{ "includeHidden": false }`
+   - `modelProvider/capabilities/read`
 5. Normalizes the returned payload into a stable HTTP response.
 
 Returned data includes:
 
 - normalized account data
 - whether auth is stored
+- normalized capability booleans for image generation, namespace tools, and web search
 - a selected default model
 - the visible model list
 - rate limits
@@ -275,6 +280,7 @@ Returned data includes:
 Important implementation detail:
 
 - `planType` is optional and may be blank.
+- If `modelProvider/capabilities/read` is unavailable, capability booleans fail closed to `false`.
 - WordPress clears stale stored account fields when a fresh snapshot omits them.
 - If this route returns `409 auth_required`, WordPress clears the local connection and prompts the user to reconnect.
 
@@ -316,6 +322,33 @@ thread/start { "ephemeral": true, ... }
 8. Reads account and rate-limit data again after generation.
 9. Returns a normalized text response.
 
+### `POST /v1/responses/image`
+
+Request body from the plugin includes:
+
+- `wpUserId`
+- `requestId`
+- `prompt`
+- `systemInstruction`
+
+The plugin does not send the synthetic WordPress model ID as a Codex runtime model override. `codex-image` is only the WordPress AI Client model identifier.
+
+Behavior:
+
+1. Rejects with `409 auth_required` if `auth.json` is missing.
+2. Starts a short-lived `codex app-server` session for that user.
+3. Calls `modelProvider/capabilities/read` and rejects with `409 image_generation_unavailable` unless `imageGeneration` is true.
+4. Creates an ephemeral thread without a `model` override.
+5. Starts a turn with one text input part containing the image prompt.
+6. Waits for notifications associated with the turn.
+7. Captures `item/completed` notifications whose `params.item.type` is `imageGeneration`.
+8. Treats a non-empty `params.item.result` as deliverable image data even if the item status string is still `generating`.
+9. If no image item was captured before `turn/completed`, falls back to plain `thread/read` without `includeTurns` and searches the returned turn items.
+10. Reads account and rate-limit data again after generation.
+11. Returns a normalized image response with `imageBase64`, `mimeType`, optional `revisedPrompt`, optional local `artifacts.savedPath`, and token usage when Codex emits it.
+
+Returned `artifacts.savedPath` is local diagnostic metadata from Codex. It is not a public URL and the PHP request-log bridge does not store it.
+
 ### How JSON schema output is passed through
 
 If the plugin sends:
@@ -341,18 +374,19 @@ If the final text looks like JSON, the sidecar also attempts `json.loads()` and 
 
 ### Usage accounting
 
-The current implementation always returns token usage as zeroes:
+The sidecar listens for `thread/tokenUsage/updated` and returns the per-turn `last` bucket when present:
 
 ```json
 {
   "usage": {
-    "inputTokens": 0,
-    "outputTokens": 0
+    "inputTokens": 12,
+    "outputTokens": 18,
+    "reasoningOutputTokens": 0
   }
 }
 ```
 
-So the sidecar currently forwards content, account info, and rate limits, but it does not compute or expose actual token counts.
+If Codex does not emit usable token data, the sidecar returns zeroes for the same keys. Token accounting never blocks text or image delivery.
 
 ### `POST /v1/session/clear`
 

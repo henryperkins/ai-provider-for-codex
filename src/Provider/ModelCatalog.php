@@ -10,6 +10,7 @@ declare( strict_types=1 );
 namespace AIProviderForCodex\Provider;
 
 use WordPress\AiClient\Common\Exception\InvalidArgumentException;
+use WordPress\AiClient\Files\Enums\FileTypeEnum;
 use WordPress\AiClient\Providers\Contracts\ModelMetadataDirectoryInterface;
 use WordPress\AiClient\Providers\Models\DTO\ModelMetadata;
 use WordPress\AiClient\Providers\Models\DTO\SupportedOption;
@@ -73,10 +74,28 @@ final class ModelCatalog implements ModelMetadataDirectoryInterface {
 	/**
 	 * Builds a metadata object for a model.
 	 *
-	 * @param array{id:string,label:string} $model Model entry.
+	 * @param array{id:string,label:string,kind?:string} $model Model entry.
 	 * @return ModelMetadata
 	 */
 	private function create_metadata( array $model ): ModelMetadata {
+		if ( 'image' === (string) ( $model['kind'] ?? 'text' ) ) {
+			return new ModelMetadata(
+				$model['id'],
+				$model['label'],
+				[
+					CapabilityEnum::imageGeneration(),
+					CapabilityEnum::chatHistory(),
+				],
+				[
+					new SupportedOption( OptionEnum::inputModalities(), [ [ ModalityEnum::text() ] ] ),
+					new SupportedOption( OptionEnum::outputModalities(), [ [ ModalityEnum::image() ] ] ),
+					new SupportedOption( OptionEnum::outputFileType(), [ FileTypeEnum::inline() ] ),
+					new SupportedOption( OptionEnum::systemInstruction() ),
+					new SupportedOption( OptionEnum::customOptions() ),
+				]
+			);
+		}
+
 		return new ModelMetadata(
 			$model['id'],
 			$model['label'],
@@ -85,7 +104,13 @@ final class ModelCatalog implements ModelMetadataDirectoryInterface {
 				CapabilityEnum::chatHistory(),
 			],
 			[
-				new SupportedOption( OptionEnum::inputModalities(), [ [ ModalityEnum::text() ] ] ),
+				new SupportedOption(
+					OptionEnum::inputModalities(),
+					[
+						[ ModalityEnum::text() ],
+						[ ModalityEnum::text(), ModalityEnum::image() ],
+					]
+				),
 				new SupportedOption( OptionEnum::outputModalities(), [ [ ModalityEnum::text() ] ] ),
 				new SupportedOption( OptionEnum::systemInstruction() ),
 				new SupportedOption( OptionEnum::outputMimeType(), [ 'text/plain', 'application/json' ] ),
@@ -112,7 +137,7 @@ final class ModelCatalog implements ModelMetadataDirectoryInterface {
 	 * Returns the model entry for a given ID.
 	 *
 	 * @param string $model_id Model ID.
-	 * @return array{id:string,label:string}|null
+	 * @return array{id:string,label:string,kind?:string}|null
 	 */
 	private function get_model_entry( string $model_id ): ?array {
 		foreach ( $this->get_catalog()['models'] as $model ) {

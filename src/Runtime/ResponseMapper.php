@@ -12,6 +12,7 @@ namespace AIProviderForCodex\Runtime;
 use AIProviderForCodex\Auth\ConnectionRepository;
 use AIProviderForCodex\Auth\ConnectionSnapshotRepository;
 use RuntimeException;
+use WordPress\AiClient\Files\DTO\File;
 use WordPress\AiClient\Messages\DTO\MessagePart;
 use WordPress\AiClient\Messages\DTO\ModelMessage;
 use WordPress\AiClient\Providers\DTO\ProviderMetadata;
@@ -84,6 +85,71 @@ final class ResponseMapper {
 				'account'    => $payload['account'] ?? [],
 				'rateLimits' => $payload['rateLimits'] ?? [],
 			]
+		);
+	}
+
+	/**
+	 * Creates a GenerativeAiResult from a runtime image response.
+	 *
+	 * @param array<string,mixed> $payload Runtime payload.
+	 * @param ProviderMetadata    $provider_metadata Provider metadata.
+	 * @param ModelMetadata       $model_metadata Model metadata.
+	 * @return GenerativeAiResult
+	 */
+	public static function to_image_generative_ai_result(
+		array $payload,
+		ProviderMetadata $provider_metadata,
+		ModelMetadata $model_metadata
+	): GenerativeAiResult {
+		$image_base64 = isset( $payload['imageBase64'] ) ? (string) $payload['imageBase64'] : '';
+		$image_base64 = (string) preg_replace( '/\s+/', '', $image_base64 );
+
+		if ( '' === $image_base64 ) {
+			throw self::runtime_exception( esc_html__( 'The local Codex runtime response did not include image data.', 'scriptorium-ai-provider-for-codex' ) );
+		}
+
+		$mime_type = isset( $payload['mimeType'] ) && '' !== (string) $payload['mimeType'] ? (string) $payload['mimeType'] : 'image/png';
+
+		if ( 'image/png' !== $mime_type ) {
+			throw self::runtime_exception( esc_html__( 'The local Codex runtime returned an unsupported image MIME type.', 'scriptorium-ai-provider-for-codex' ) );
+		}
+
+		$usage_input      = (int) ( $payload['usage']['inputTokens'] ?? 0 );
+		$usage_completion = (int) ( $payload['usage']['outputTokens'] ?? 0 );
+		$total_tokens     = $usage_input + $usage_completion;
+		$additional_data  = [
+			'account'    => $payload['account'] ?? [],
+			'rateLimits' => $payload['rateLimits'] ?? [],
+		];
+
+		if ( isset( $payload['revisedPrompt'] ) && '' !== (string) $payload['revisedPrompt'] ) {
+			$additional_data['revisedPrompt'] = (string) $payload['revisedPrompt'];
+		}
+
+		if ( isset( $payload['artifacts'] ) && is_array( $payload['artifacts'] ) ) {
+			$additional_data['artifacts'] = $payload['artifacts'];
+		}
+
+		if ( isset( $payload['runtimeModel'] ) && '' !== (string) $payload['runtimeModel'] ) {
+			$additional_data['runtimeModel'] = (string) $payload['runtimeModel'];
+		}
+
+		return new GenerativeAiResult(
+			(string) ( $payload['requestId'] ?? wp_generate_uuid4() ),
+			[
+				new Candidate(
+					new ModelMessage(
+						[
+							new MessagePart( new File( $image_base64, $mime_type ) ),
+						]
+					),
+					self::finish_reason( $payload['finishReason'] ?? 'stop' )
+				),
+			],
+			new TokenUsage( $usage_input, $usage_completion, $total_tokens ),
+			$provider_metadata,
+			$model_metadata,
+			$additional_data
 		);
 	}
 

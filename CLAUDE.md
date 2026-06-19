@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A WordPress plugin (`scriptorium-ai-provider-for-codex`) that registers a `codex` provider with the **WordPress AI Client** (WP 7.0+, `wordpress/php-ai-client` SDK 1.0+). Once registered, the `codex` provider becomes available to every consumer of `wp_ai_client_prompt()` and appears as a card under **Settings → Connectors**.
 
-The defining constraint: **the PHP plugin never talks to OpenAI/Codex directly.** It talks only to a **localhost sidecar** over loopback HTTP. The sidecar (Python, `sidecar/app/main.py`) wraps the `codex` CLI's `app-server` over JSON-RPC, performs device-code login, and keeps each WordPress user's auth isolated in its own `CODEX_HOME`. Auth and billing are ChatGPT-managed; WordPress stores only connection metadata and cached snapshots — never tokens. Text generation only (vision/image route to other providers).
+The defining constraint: **the PHP plugin never talks to OpenAI/Codex directly.** It talks only to a **localhost sidecar** over loopback HTTP. The sidecar (Python, `sidecar/app/main.py`) wraps the `codex` CLI's `app-server` over JSON-RPC, performs device-code login, and keeps each WordPress user's auth isolated in its own `CODEX_HOME`. Auth and billing are ChatGPT-managed; WordPress stores only connection metadata and cached snapshots, never tokens. Text generation is always model-catalog backed; text-to-image generation is exposed through `codex-image` only when the connected user's snapshot reports `imageGeneration: true`.
 
 `LOCAL-SIDECAR-SPEC.md` is the implementation spec for this architecture.
 
@@ -23,8 +23,9 @@ Sidecar endpoints (the full contract; see `sidecar/app/main.py` `RuntimeHandler.
 - `GET /healthz`, `GET /ping` — health (no auth)
 - `POST /v1/login/start` → device-code (`verificationUrl`, `userCode`)
 - `GET  /v1/login/status` → `pending|completed|error|missing`
-- `GET  /v1/account/snapshot` → account + `model/list` + rate limits (requires stored `auth.json`)
+- `GET  /v1/account/snapshot` → account + capabilities + `model/list` + rate limits (requires stored `auth.json`)
 - `POST /v1/responses/text` → text generation (ephemeral thread → turn → streamed deltas)
+- `POST /v1/responses/image` → image generation (capability probe → ephemeral thread → imageGeneration item result)
 - `POST /v1/session/clear` → deletes the user's `auth.json`
 
 Per-user auth lives at `${CODEX_WP_STORAGE_ROOT}/users/<wp_user_id>/auth.json` (default `/var/lib/codex-wp`). The sidecar enforces loopback-only clients and `hmac`-compares the bearer token.
@@ -34,11 +35,12 @@ Per-user auth lives at `${CODEX_WP_STORAGE_ROOT}/users/<wp_user_id>/auth.json` (
 Boot: `scriptorium-ai-provider-for-codex.php` runs version/SDK gates (`check_php_version`/`check_wp_version`/`check_ai_client`) then `Plugin::init()` wires all hooks. `register_provider()` registers `CodexProvider` on `init` (priority 5), gated by `wp_supports_ai()`.
 
 - **`Provider/`** — AI Client integration. `CodexProvider` (extends `AbstractApiProvider`; wires model factory, metadata, availability, catalog; metadata is version-gated against SDK 1.2.0/1.3.0 for description/logo). `CodexProviderAvailability::isConfigured()` = has runtime config **and** `HealthMonitor` not `unreachable`. `ModelCatalog`/`ModelCatalogState`, `SupportChecks`.
-- **`Models/CodexTextGenerationModel`** — the generation path. Flattens prompt messages, POSTs `/v1/responses/text`, maps reasoning effort + JSON-schema output, and calls `ConnectionService::invalidate_local_connection()` on an `auth_required` runtime error. Mirrors each attempt (success **and** failure) into the AI plugin's Request Log via `RequestLogWriter`.
+- **`Models/CodexTextGenerationModel`** — the text generation path. Flattens prompt messages, POSTs `/v1/responses/text`, maps reasoning effort + JSON-schema output, and calls `ConnectionService::invalidate_local_connection()` on an `auth_required` runtime error. Mirrors each attempt (success **and** failure) into the AI plugin's Request Log via `RequestLogWriter`.
+- **`Models/CodexImageGenerationModel`** — the image generation path. Accepts text prompt parts only, rejects reference image/file parts for v1, checks the current snapshot for `codex-image`, POSTs `/v1/responses/image`, maps base64 PNG data into an AI Client image `File`, and logs image requests with `type=image` and `operation=codex:responses/image` without base64 or local artifact paths.
 - **`Logging/RequestLogWriter`** — best-effort bridge that records codex generations into the WordPress AI plugin's **AI Request Logging** experiment. Codex reaches its sidecar over its own loopback `Runtime\Client`, bypassing the SDK HTTP transporter the experiment decorates — so without this, codex calls are invisible to the Request Log (OpenAI/Anthropic, which use the transporter, are logged). Writes from the model's own call site instead. Gated on the experiment being enabled (`is_logging_enabled()` mirrors `wpai_features_enabled` + `wpai_feature_ai-request-logging_enabled`, fail-closed); writes never throw into generation; the sink is overridable via the `codex_provider_request_log_sink` filter. Unit-tested by `scripts/test-request-log-writer.php`; the success/error paths are asserted in `scripts/verify.php`.
 - **`Runtime/`** — the HTTP boundary. `Client` (WordPress HTTP API, Bearer auth, **20s control-plane timeout / 360s for any `/v1/responses/` path**, extensive transport+runtime error normalization including Connector-Approval blocks). `Settings` (option names + the config precedence chain below). `HealthMonitor` (transient-cached health, probes `/healthz`; `unknown` counts as available). `ResponseMapper`, `RuntimeRequestException` (carries status/code/payload; `is_auth_required()`).
 - **`Auth/`** — connection lifecycle. `ConnectionService` (start/poll/refresh/disconnect; reuses a still-valid stored `auth.json` before starting a new device-code login; recovers sidecar "missing session" after a restart). `ConnectionRepository`, `ConnectionSnapshotRepository`, `PendingConnectionRepository`, `ConnectionRefreshScheduler` (hourly cron `codex_provider_refresh_connection_snapshots`).
-- **`Database/Installer`** — creates two custom tables (`{prefix}codex_provider_connections`, `{prefix}codex_provider_connection_snapshots`). `maybe_upgrade()` re-runs `activate()` when `codex_provider_schema_version` (currently `'5'`) drifts, and cleans up legacy schema/options.
+- **`Database/Installer`** — creates two custom tables (`{prefix}codex_provider_connections`, `{prefix}codex_provider_connection_snapshots`). `maybe_upgrade()` re-runs `activate()` when `codex_provider_schema_version` (currently `'6'`) drifts, and cleans up legacy schema/options. Snapshots include `capabilities_json`, used to gate `codex-image`.
 - **`Admin/`** — `SiteSettings` (**Settings → Codex Provider**: runtime URL, bearer, fallback models). `UserConnectionPage` (**Users → Codex Provider**: per-user device-code connect UI; this is the provider's `credentialsUrl`). `ConnectorsIntegration` (the **Settings → Connectors** card + the `wpai_*` credential-bridge filters + script-module data + admin notices). `ConnectorApprovalIntegration` (optional experiment, see below).
 - **`REST/`** — namespace `codex-provider/v1`: `ConnectController` (`/connect/start|status|disconnect|refresh`) and `StatusController` (`/status`). Permission callback = logged in + `read`.
 
@@ -47,7 +49,7 @@ Runtime uses a **hand-rolled autoloader** (`src/autoload.php`), not Composer's. 
 ## Invariants worth preserving (and that tests enforce)
 
 - **Status reads are passive.** `SupportChecks` / the `/status` route / the Connectors card use stored state + a cheap `/healthz` probe only. They must **not** trigger live `account/snapshot` or generation calls — only explicit connect/refresh/generate do. `scripts/verify.php` asserts this.
-- **Effective model catalog is two sources, no cascade** (`ModelCatalogState`): the user's runtime snapshot if they're linked and it has models, otherwise the admin **fallback** list (`codex_runtime_allowed_models`, defaults `gpt-5-codex`, `gpt-5.3-codex`). Selected model = user meta `codex_provider_preferred_model` → first available.
+- **Effective model catalog is two sources, no cascade** (`ModelCatalogState`): the user's runtime snapshot if they're linked and it has models, otherwise the admin **fallback** list (`codex_runtime_allowed_models`, defaults `gpt-5-codex`, `gpt-5.3-codex`). Snapshot `models` remain text models; `codex-image` is appended only when `capabilities.imageGeneration === true`. Selected text model = user meta `codex_provider_preferred_model` → first text model, and text preferences must never emit `codex-image`.
 - **Bearer token must match raw** between WordPress and the sidecar's `CODEX_WP_BEARER_TOKEN`. `Settings::normalize_bearer_token_value()` strips a pasted `Bearer ` prefix and surrounding quotes but preserves opaque contents — keep that behavior.
 
 ## Runtime config precedence (`Runtime\Settings`)
@@ -95,6 +97,13 @@ bash scripts/package-release.sh
 ```
 
 Sidecar (separate process, same host): Python 3.11+ and the `codex` CLI; configure via env (`sidecar/config.example.env`) and run `sidecar/app/main.py`. Systemd template: `sidecar/systemd/codex-wp-sidecar.service`.
+
+Sidecar unit tests:
+```bash
+python3 sidecar/scripts/test-diagnostics.py
+python3 sidecar/scripts/test-token-usage.py
+python3 sidecar/scripts/test-image-generation.py
+```
 
 ## Releasing — version sync gotcha
 
