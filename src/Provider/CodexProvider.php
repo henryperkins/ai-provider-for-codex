@@ -2,17 +2,17 @@
 /**
  * WordPress AI Client provider registration.
  *
- * @package AIProviderForCodex
+ * @package HtperkinsAIProviderForCodex
  */
 
 declare( strict_types=1 );
 
-namespace AIProviderForCodex\Provider;
+namespace Htperkins\AIProviderForCodex\Provider;
 
-use AIProviderForCodex\Admin\UserConnectionPage;
-use AIProviderForCodex\Models\CodexImageGenerationModel;
-use AIProviderForCodex\Models\CodexTextGenerationModel;
-use AIProviderForCodex\Runtime\Settings;
+use Htperkins\AIProviderForCodex\Admin\SiteSettings;
+use Htperkins\AIProviderForCodex\Models\CodexImageGenerationModel;
+use Htperkins\AIProviderForCodex\Models\CodexTextGenerationModel;
+use Htperkins\AIProviderForCodex\Runtime\Settings;
 use RuntimeException;
 use WordPress\AiClient\AiClient;
 use WordPress\AiClient\Providers\ApiBasedImplementation\AbstractApiProvider;
@@ -86,16 +86,16 @@ final class CodexProvider extends AbstractApiProvider {
 		$ai_client_version = (string) constant( AiClient::class . '::VERSION' );
 
 		$provider_metadata_args = [
-			'codex',
-			'Codex',
-			ProviderTypeEnum::cloud(),
-			UserConnectionPage::page_url(),
-			null,
-		];
+				'codex',
+				'Codex',
+				ProviderTypeEnum::cloud(),
+				SiteSettings::page_url(),
+				null,
+			];
 
 		// Provider description support was added in php-ai-client 1.2.0.
 		if ( version_compare( $ai_client_version, '1.2.0', '>=' ) ) {
-			$provider_metadata_args[] = __( 'AI text generation through a localhost Codex sidecar. Configure the shared runtime, then each user connects their own Codex or ChatGPT account.', 'scriptorium-ai-provider-for-codex' );
+			$provider_metadata_args[] = __( 'AI text and image generation through a localhost Codex app-server using site-level Codex auth.', 'ai-provider-for-codex' );
 		}
 
 		// Provider logoPath support was added in php-ai-client 1.3.0.
@@ -103,7 +103,7 @@ final class CodexProvider extends AbstractApiProvider {
 		// (_wp_connectors_resolve_ai_provider_logo_url) accepts it even when the plugin
 		// is loaded via a symlink — PHP's __DIR__ always returns the realpath.
 		if ( version_compare( $ai_client_version, '1.3.0', '>=' ) ) {
-			$provider_dir = WP_PLUGIN_DIR . '/' . dirname( plugin_basename( \AIProviderForCodex\PLUGIN_FILE ) );
+			$provider_dir = WP_PLUGIN_DIR . '/' . dirname( plugin_basename( \Htperkins\AIProviderForCodex\PLUGIN_FILE ) );
 			$provider_metadata_args[] = $provider_dir . '/src/Provider/logo.svg';
 		}
 

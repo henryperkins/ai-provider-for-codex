@@ -14,7 +14,7 @@ WordPress AI Client provider plugin for Codex text models and capability-gated C
 
 ## Included
 
-- `scriptorium-ai-provider-for-codex.php` bootstrap with WordPress and AI Client checks
+- `ai-provider-for-codex.php` bootstrap with WordPress and AI Client checks
 - provider registration for `codex`
 - Connectors integration for runtime status and user connection actions
 - site settings for runtime base URL, bearer token, and fallback models
@@ -22,7 +22,7 @@ WordPress AI Client provider plugin for Codex text models and capability-gated C
 - snapshot-backed text model catalogs and a synthetic `codex-image` model when Codex reports image support
 - per-user device-code connect, refresh, and disconnect flows
 - REST endpoints for connect, status, refresh, disconnect, and readiness checks
-- local sidecar app under `sidecar/`
+- local sidecar source under `sidecar/` for development and separate runtime packaging
 - repeatable verification scripts in `scripts/verify.php` and `scripts/verify.sh`
 
 ## Current Status
@@ -36,7 +36,7 @@ WordPress AI Client provider plugin for Codex text models and capability-gated C
 
 1. Install and activate the plugin in WordPress.
 2. On the same host as WordPress, install Python 3.11+ and the `codex` CLI.
-3. Create a localhost systemd service from `sidecar/systemd/codex-wp-sidecar.service` and write `/etc/codex-wp-sidecar.env` with the runtime settings.
+3. Install the local sidecar runtime separately, then create a localhost systemd service using the generated snippet in `Settings > Codex Provider` and write `/etc/codex-wp-sidecar.env` with the runtime settings.
 4. Open `Settings > Codex Provider` and confirm the runtime URL and bearer token were auto-detected from `/etc/codex-wp-sidecar.env`, or enter them manually.
 5. Open `Settings > Connectors` and confirm Codex reports a healthy local runtime.
 6. Each user then opens `Users > Codex Provider`, clicks `Connect Codex account`, and completes the device-code login.
@@ -44,11 +44,11 @@ WordPress AI Client provider plugin for Codex text models and capability-gated C
 ## Verification
 
 - `WP_PATH=/path/to/site ./scripts/verify.sh`
-- `wp --path=/path/to/site eval-file wp-content/plugins/scriptorium-ai-provider-for-codex/scripts/verify.php`
+- `wp --path=/path/to/site eval-file wp-content/plugins/ai-provider-for-codex/scripts/verify.php`
 - `python3 sidecar/scripts/test-image-generation.py`
 
 ## Automated Sidecar Setup
 
-- `sidecar/systemd/codex-wp-sidecar.service` provides a systemd template for running the sidecar.
+- `Settings > Codex Provider` renders a systemd unit snippet for an externally installed `codex-wp-sidecar` command.
 - The plugin can auto-detect the runtime URL and bearer token from `/etc/codex-wp-sidecar.env` when PHP can read that file.
 - The runtime status probe now checks `GET /healthz`, so Connectors can report `Runtime unreachable` before a user hits the connect action.

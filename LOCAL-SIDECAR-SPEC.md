@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document defines the runtime-native architecture for `scriptorium-ai-provider-for-codex`.
+This document defines the runtime-native architecture for `ai-provider-for-codex`.
 
 Goals:
 
@@ -559,23 +559,23 @@ Browser JavaScript must only call WordPress REST endpoints.
 
 The browser must not talk directly to the sidecar.
 
-### `POST /wp-json/codex-provider/v1/connect/start`
+### `POST /wp-json/htperkins-aipfc/v1/connect/start`
 
 Starts the device-code flow for the current user.
 
-### `GET /wp-json/codex-provider/v1/connect/status`
+### `GET /wp-json/htperkins-aipfc/v1/connect/status`
 
 Returns pending or connected state for the current user.
 
-### `POST /wp-json/codex-provider/v1/connect/disconnect`
+### `POST /wp-json/htperkins-aipfc/v1/connect/disconnect`
 
 Disconnects the current user and clears local runtime state.
 
-### `POST /wp-json/codex-provider/v1/connect/refresh`
+### `POST /wp-json/htperkins-aipfc/v1/connect/refresh`
 
 Refreshes the current user's snapshot from the local runtime.
 
-### `GET /wp-json/codex-provider/v1/status`
+### `GET /wp-json/htperkins-aipfc/v1/status`
 
 Response shape:
 
@@ -638,7 +638,7 @@ Used for:
 
 The old short-lived callback-state table is not part of the runtime design.
 
-- `codex_provider_auth_states`
+- `htperkins_aipfc_auth_states`
 
 ## Runtime Status Model
 
@@ -673,9 +673,9 @@ Responsibilities:
 
 Current option names:
 
-- `codex_runtime_base_url`
-- `codex_runtime_bearer_token`
-- `codex_runtime_allowed_models`
+- `htperkins_aipfc_runtime_base_url`
+- `htperkins_aipfc_runtime_bearer_token`
+- `htperkins_aipfc_runtime_allowed_models`
 
 ### `Runtime\Client`
 
@@ -739,7 +739,7 @@ Responsibilities:
 ### Start Connect
 
 1. User clicks `Connect` from Connectors or the user page.
-2. Browser calls `POST /wp-json/codex-provider/v1/connect/start`.
+2. Browser calls `POST /wp-json/htperkins-aipfc/v1/connect/start`.
 3. WordPress calls sidecar `POST /v1/login/start`.
 4. WordPress stores pending state in user meta.
 5. WordPress returns the device-code payload to the browser.
@@ -747,7 +747,7 @@ Responsibilities:
 
 ### Poll Connect Status
 
-1. Browser calls `GET /wp-json/codex-provider/v1/connect/status`.
+1. Browser calls `GET /wp-json/htperkins-aipfc/v1/connect/status`.
 2. WordPress calls sidecar `GET /v1/login/status`.
 3. If still pending, WordPress returns pending state.
 4. If completed, WordPress calls sidecar `GET /v1/account/snapshot`.

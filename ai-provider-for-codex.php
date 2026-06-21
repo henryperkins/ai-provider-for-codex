@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Scriptorium AI Provider for Codex
  * Plugin URI:        https://github.com/henryperkins/ai-provider-for-codex
- * Description:       Codex provider for the WordPress AI Client using a local runtime sidecar.
+ * Description:       Codex provider for the WordPress AI Client using a local Codex app-server runtime.
  * Requires at least: 7.0
  * Requires PHP:      7.4
  * Version:           0.1.5
@@ -10,19 +10,19 @@
  * Author URI:        https://profiles.wordpress.org/htperkins/
  * License:           GPL-2.0-or-later
  * License URI:       https://spdx.org/licenses/GPL-2.0-or-later.html
- * Text Domain:       scriptorium-ai-provider-for-codex
+ * Text Domain:       ai-provider-for-codex
  *
- * @package AIProviderForCodex
+ * @package HtperkinsAIProviderForCodex
  */
 
 declare( strict_types=1 );
 
-namespace AIProviderForCodex;
+namespace Htperkins\AIProviderForCodex;
 
-use AIProviderForCodex\Auth\ConnectionRefreshScheduler;
-use AIProviderForCodex\Admin\ConnectorApprovalIntegration;
-use AIProviderForCodex\Database\Installer;
-use AIProviderForCodex\Provider\CodexProvider;
+use Htperkins\AIProviderForCodex\Auth\ConnectionRefreshScheduler;
+use Htperkins\AIProviderForCodex\Admin\ConnectorApprovalIntegration;
+use Htperkins\AIProviderForCodex\Database\Installer;
+use Htperkins\AIProviderForCodex\Provider\CodexProvider;
 use WordPress\AiClient\AiClient;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -30,7 +30,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 const VERSION = '0.1.5';
-const SLUG = 'scriptorium-ai-provider-for-codex';
+const SLUG = 'ai-provider-for-codex';
 const PLUGIN_URI = 'https://github.com/henryperkins/ai-provider-for-codex';
 const MIN_WP_VERSION = '7.0';
 const MIN_PHP_VERSION = '7.4';
@@ -72,7 +72,7 @@ function check_php_version(): bool {
 			requirement_notice(
 				sprintf(
 					/* translators: 1: required PHP version, 2: current PHP version */
-					__( 'Scriptorium AI Provider for Codex requires PHP %1$s or newer. Current PHP version: %2$s.', 'scriptorium-ai-provider-for-codex' ),
+					__( 'Scriptorium AI Provider for Codex requires PHP %1$s or newer. Current PHP version: %2$s.', 'ai-provider-for-codex' ),
 					MIN_PHP_VERSION,
 					PHP_VERSION
 				)
@@ -101,7 +101,7 @@ function check_wp_version(): bool {
 			requirement_notice(
 				sprintf(
 					/* translators: 1: required WordPress version, 2: current WordPress version */
-					__( 'Scriptorium AI Provider for Codex requires WordPress %1$s or newer. Current WordPress version: %2$s.', 'scriptorium-ai-provider-for-codex' ),
+					__( 'Scriptorium AI Provider for Codex requires WordPress %1$s or newer. Current WordPress version: %2$s.', 'ai-provider-for-codex' ),
 					MIN_WP_VERSION,
 					(string) $wp_version
 				)
@@ -129,13 +129,13 @@ function check_ai_client(): bool {
 	add_action(
 		'admin_notices',
 		static function () {
-			$current_client_version = class_exists( AiClient::class ) ? (string) constant( AiClient::class . '::VERSION' ) : __( 'not available', 'scriptorium-ai-provider-for-codex' );
-			$current_plugin_version = defined( 'WPAI_VERSION' ) ? (string) constant( 'WPAI_VERSION' ) : __( 'not detected', 'scriptorium-ai-provider-for-codex' );
+			$current_client_version = class_exists( AiClient::class ) ? (string) constant( AiClient::class . '::VERSION' ) : __( 'not available', 'ai-provider-for-codex' );
+			$current_plugin_version = defined( 'WPAI_VERSION' ) ? (string) constant( 'WPAI_VERSION' ) : __( 'not detected', 'ai-provider-for-codex' );
 
 			requirement_notice(
 				sprintf(
 					/* translators: 1: current AI Client version or availability status, 2: current WordPress AI plugin version or detection status. */
-					__( 'Scriptorium AI Provider for Codex requires AI Client 1.0 or newer. If the WordPress AI plugin is installed, it must also be version 1.0 or newer. Current AI Client version: %1$s. Current WordPress AI plugin version: %2$s.', 'scriptorium-ai-provider-for-codex' ),
+					__( 'Scriptorium AI Provider for Codex requires AI Client 1.0 or newer. If the WordPress AI plugin is installed, it must also be version 1.0 or newer. Current AI Client version: %1$s. Current WordPress AI plugin version: %2$s.', 'ai-provider-for-codex' ),
 					$current_client_version,
 					$current_plugin_version
 				)

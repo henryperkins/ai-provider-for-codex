@@ -3,9 +3,9 @@ import { test } from 'node:test';
 
 import { createCodexConnectionFlow } from './connection-flow.js';
 
-const START_URL = 'https://example.test/wp-json/codex-provider/v1/connect/start';
-const CONNECT_STATUS_URL = 'https://example.test/wp-json/codex-provider/v1/connect/status';
-const PROVIDER_STATUS_URL = 'https://example.test/wp-json/codex-provider/v1/status';
+const START_URL = 'https://example.test/wp-json/htperkins-aipfc/v1/connect/start';
+const CONNECT_STATUS_URL = 'https://example.test/wp-json/htperkins-aipfc/v1/connect/status';
+const PROVIDER_STATUS_URL = 'https://example.test/wp-json/htperkins-aipfc/v1/status';
 
 function jsonResponse( body, ok = true, status = 200 ) {
 	return {

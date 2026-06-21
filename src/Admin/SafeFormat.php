@@ -2,12 +2,12 @@
 /**
  * Safe formatting for translated admin strings.
  *
- * @package AIProviderForCodex
+ * @package HtperkinsAIProviderForCodex
  */
 
 declare( strict_types=1 );
 
-namespace AIProviderForCodex\Admin;
+namespace Htperkins\AIProviderForCodex\Admin;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;

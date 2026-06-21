@@ -53,9 +53,9 @@ import { test } from 'node:test';
 
 import { createCodexConnectionFlow } from './connection-flow.js';
 
-const START_URL = 'https://example.test/wp-json/codex-provider/v1/connect/start';
-const CONNECT_STATUS_URL = 'https://example.test/wp-json/codex-provider/v1/connect/status';
-const PROVIDER_STATUS_URL = 'https://example.test/wp-json/codex-provider/v1/status';
+const START_URL = 'https://example.test/wp-json/htperkins-aipfc/v1/connect/start';
+const CONNECT_STATUS_URL = 'https://example.test/wp-json/htperkins-aipfc/v1/connect/status';
+const PROVIDER_STATUS_URL = 'https://example.test/wp-json/htperkins-aipfc/v1/status';
 
 function jsonResponse( body, ok = true, status = 200 ) {
 	return {
@@ -879,14 +879,14 @@ In `src/Admin/ConnectorsIntegration.php`, update `connector_config()` so it retu
 ```php
 return [
 	'connectorId'            => self::CONNECTOR_ID,
-	'statusUrl'              => rest_url( 'codex-provider/v1/status' ),
-	'statusPath'             => '/codex-provider/v1/status',
-	'providerStatusUrl'      => rest_url( 'codex-provider/v1/status' ),
-	'providerStatusPath'     => '/codex-provider/v1/status',
-	'startConnectUrl'        => rest_url( 'codex-provider/v1/connect/start' ),
-	'startConnectPath'       => '/codex-provider/v1/connect/start',
-	'connectStatusUrl'       => rest_url( 'codex-provider/v1/connect/status' ),
-	'connectStatusPath'      => '/codex-provider/v1/connect/status',
+	'statusUrl'              => rest_url( 'htperkins-aipfc/v1/status' ),
+	'statusPath'             => '/htperkins-aipfc/v1/status',
+	'providerStatusUrl'      => rest_url( 'htperkins-aipfc/v1/status' ),
+	'providerStatusPath'     => '/htperkins-aipfc/v1/status',
+	'startConnectUrl'        => rest_url( 'htperkins-aipfc/v1/connect/start' ),
+	'startConnectPath'       => '/htperkins-aipfc/v1/connect/start',
+	'connectStatusUrl'       => rest_url( 'htperkins-aipfc/v1/connect/status' ),
+	'connectStatusPath'      => '/htperkins-aipfc/v1/connect/status',
 	'siteSettingsUrl'        => SiteSettings::page_url(),
 	'userConnectionUrl'      => UserConnectionPage::page_url(),
 	'restNonce'              => wp_create_nonce( 'wp_rest' ),
@@ -1429,7 +1429,7 @@ if ( configElement && root ) {
 In `src/Admin/UserConnectionPage.php`, add constants inside the class:
 
 ```php
-private const SCRIPT_MODULE_ID = 'ai-provider-for-codex/user-connection';
+private const SCRIPT_MODULE_ID = 'htperkins-ai-provider-for-codex/user-connection';
 ```
 
 In `register_page()`, after the help-tab hook registration, add:
@@ -1451,9 +1451,9 @@ Add this public method to the class:
 public static function enqueue_assets(): void {
 	wp_register_script_module(
 		self::SCRIPT_MODULE_ID,
-		plugins_url( 'assets/user-connection.js', \AIProviderForCodex\PLUGIN_FILE ),
+		plugins_url( 'assets/user-connection.js', \Htperkins\AIProviderForCodex\PLUGIN_FILE ),
 		[],
-		\AIProviderForCodex\VERSION
+		\Htperkins\AIProviderForCodex\VERSION
 	);
 	wp_enqueue_script_module( self::SCRIPT_MODULE_ID );
 }
@@ -1466,9 +1466,9 @@ In `render_page()`, after `$selected_model` is set, add:
 ```php
 	$connection_config = [
 		'pageUrl'           => self::page_url(),
-		'startUrl'          => rest_url( 'codex-provider/v1/connect/start' ),
-		'connectStatusUrl'  => rest_url( 'codex-provider/v1/connect/status' ),
-		'providerStatusUrl' => rest_url( 'codex-provider/v1/status' ),
+		'startUrl'          => rest_url( 'htperkins-aipfc/v1/connect/start' ),
+		'connectStatusUrl'  => rest_url( 'htperkins-aipfc/v1/connect/status' ),
+		'providerStatusUrl' => rest_url( 'htperkins-aipfc/v1/status' ),
 		'restNonce'         => wp_create_nonce( 'wp_rest' ),
 		'currentPending'    => $pending && ! empty( $pending['authSessionId'] )
 			? [
@@ -1664,8 +1664,8 @@ $_GET['page'] = 'options-connectors';
 $codex_provider_connector_data = ConnectorsIntegration::script_module_data( [] );
 unset( $_GET['page'] );
 
-$codex_provider_assert( '/codex-provider/v1/connect/status' === (string) ( $codex_provider_connector_data['connectStatusPath'] ?? '' ), 'Connector module data should expose the connect/status REST path.' );
-$codex_provider_assert( '/codex-provider/v1/status' === (string) ( $codex_provider_connector_data['providerStatusPath'] ?? '' ), 'Connector module data should expose the passive provider status REST path.' );
+$codex_provider_assert( '/htperkins-aipfc/v1/connect/status' === (string) ( $codex_provider_connector_data['connectStatusPath'] ?? '' ), 'Connector module data should expose the connect/status REST path.' );
+$codex_provider_assert( '/htperkins-aipfc/v1/status' === (string) ( $codex_provider_connector_data['providerStatusPath'] ?? '' ), 'Connector module data should expose the passive provider status REST path.' );
 $codex_provider_assert( ! empty( $codex_provider_connector_data['connectStatusUrl'] ), 'Connector module data should expose the connect/status REST URL.' );
 $codex_provider_assert( ! empty( $codex_provider_connector_data['providerStatusUrl'] ), 'Connector module data should expose the provider status REST URL.' );
 ```
@@ -1681,7 +1681,7 @@ After an existing `UserConnectionPage::render_page()` capture for pending state,
 	$codex_provider_assert( false !== strpos( $codex_provider_user_page_source, 'admin_print_scripts-{$hook}' ), 'User connection page should hook its script module enqueue to the concrete admin page hook.' );
 	UserConnectionPage::enqueue_assets();
 	$codex_provider_script_module_queue = function_exists( 'wp_script_modules' ) ? wp_script_modules()->get_queue() : [];
-	$codex_provider_assert( in_array( 'ai-provider-for-codex/user-connection', $codex_provider_script_module_queue, true ), 'User connection page should enqueue the enhanced connection-flow script module.' );
+	$codex_provider_assert( in_array( 'htperkins-ai-provider-for-codex/user-connection', $codex_provider_script_module_queue, true ), 'User connection page should enqueue the enhanced connection-flow script module.' );
 	$codex_provider_assert( false !== strpos( $codex_provider_connection_page_html, 'data-codex-connection-root' ), 'User connection page should render the enhanced connection root.' );
 	$codex_provider_assert( false !== strpos( $codex_provider_connection_page_html, 'data-codex-connection-console' ), 'User connection page should render an always-present enhanced connection console for first-time starts.' );
 	$codex_provider_assert( false !== strpos( $codex_provider_connection_page_html, 'data-codex-base-actions' ), 'User connection page should expose the base action container to hide during enhanced flows.' );

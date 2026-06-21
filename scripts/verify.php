@@ -3,25 +3,25 @@
  * Repeatable verification checks for the Codex provider plugin.
  *
  * Run with:
- * wp --path=/path/to/site eval-file wp-content/plugins/scriptorium-ai-provider-for-codex/scripts/verify.php
+ * wp --path=/path/to/site eval-file wp-content/plugins/ai-provider-for-codex/scripts/verify.php
  */
 
-use AIProviderForCodex\Auth\ConnectionRepository;
-use AIProviderForCodex\Auth\ConnectionRefreshScheduler;
-use AIProviderForCodex\Auth\ConnectionService;
-use AIProviderForCodex\Auth\ConnectionSnapshotRepository;
-use AIProviderForCodex\Auth\PendingConnectionRepository;
-use AIProviderForCodex\Admin\ConnectorApprovalIntegration;
-use AIProviderForCodex\Admin\ConnectorsIntegration;
-use AIProviderForCodex\Admin\SiteSettings;
-use AIProviderForCodex\Admin\UserConnectionPage;
-use AIProviderForCodex\Database\Installer;
-use AIProviderForCodex\Provider\CodexProvider;
-use AIProviderForCodex\Provider\ModelCatalogState;
-use AIProviderForCodex\Provider\SupportChecks;
-use AIProviderForCodex\REST\ConnectController;
-use AIProviderForCodex\Runtime\HealthMonitor;
-use AIProviderForCodex\Runtime\Settings;
+use Htperkins\AIProviderForCodex\Auth\ConnectionRepository;
+use Htperkins\AIProviderForCodex\Auth\ConnectionRefreshScheduler;
+use Htperkins\AIProviderForCodex\Auth\ConnectionService;
+use Htperkins\AIProviderForCodex\Auth\ConnectionSnapshotRepository;
+use Htperkins\AIProviderForCodex\Auth\PendingConnectionRepository;
+use Htperkins\AIProviderForCodex\Admin\ConnectorApprovalIntegration;
+use Htperkins\AIProviderForCodex\Admin\ConnectorsIntegration;
+use Htperkins\AIProviderForCodex\Admin\SiteSettings;
+use Htperkins\AIProviderForCodex\Admin\UserConnectionPage;
+use Htperkins\AIProviderForCodex\Database\Installer;
+use Htperkins\AIProviderForCodex\Provider\CodexProvider;
+use Htperkins\AIProviderForCodex\Provider\ModelCatalogState;
+use Htperkins\AIProviderForCodex\Provider\SupportChecks;
+use Htperkins\AIProviderForCodex\REST\ConnectController;
+use Htperkins\AIProviderForCodex\Runtime\HealthMonitor;
+use Htperkins\AIProviderForCodex\Runtime\Settings;
 use WordPress\AiClient\AiClient;
 use WordPress\AiClient\Files\DTO\File;
 use WordPress\AiClient\Files\Enums\FileTypeEnum;
@@ -37,6 +37,12 @@ use WordPress\AiClient\Providers\Models\Enums\OptionEnum;
 if ( ! defined( 'ABSPATH' ) ) {
 	throw new RuntimeException( 'Run this script with wp eval-file.' );
 }
+
+if ( ! defined( 'Htperkins\\AIProviderForCodex\\PLUGIN_FILE' ) ) {
+	require_once dirname( __DIR__ ) . '/ai-provider-for-codex.php';
+}
+
+\Htperkins\AIProviderForCodex\load();
 
 require_once ABSPATH . 'wp-admin/includes/user.php';
 
@@ -84,7 +90,7 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 		};
 
 		$codex_provider_assert(
-			is_wp_version_compatible( \AIProviderForCodex\MIN_WP_VERSION ),
+			is_wp_version_compatible( \Htperkins\AIProviderForCodex\MIN_WP_VERSION ),
 			'Scriptorium AI Provider for Codex verification requires WordPress 7.0 or newer.'
 		);
 		$codex_provider_assert(
@@ -108,7 +114,7 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 
 		try {
 			$codex_provider_reset_ai_client_registry();
-			\AIProviderForCodex\register_provider();
+			\Htperkins\AIProviderForCodex\register_provider();
 			$codex_provider_assert(
 				! AiClient::defaultRegistry()->hasProvider( CodexProvider::class ),
 				'Codex provider should not register when wp_supports_ai disables AI globally.'
@@ -118,44 +124,46 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 		}
 
 		$codex_provider_reset_ai_client_registry();
-		\AIProviderForCodex\register_provider();
+		\Htperkins\AIProviderForCodex\register_provider();
 		$codex_provider_assert(
 			AiClient::defaultRegistry()->hasProvider( CodexProvider::class ),
 			'Codex provider should register when AI is supported and the AI Client is available.'
 		);
 
-		$codex_provider_metadata = CodexProvider::metadata();
-		$codex_provider_assert(
-			UserConnectionPage::page_url() === $codex_provider_metadata->getCredentialsUrl(),
-			'Codex provider credentials URL should point to the per-user connection page.'
-		);
+			$codex_provider_metadata = CodexProvider::metadata();
+			$codex_provider_assert(
+				SiteSettings::page_url() === $codex_provider_metadata->getCredentialsUrl(),
+				'Codex provider credentials URL should point to the site-level settings page.'
+			);
 
 		$codex_provider_original_options             = [
 			Settings::OPTION_RUNTIME_BASE_URL              => get_option( Settings::OPTION_RUNTIME_BASE_URL, null ),
 			Settings::OPTION_RUNTIME_BEARER                => get_option( Settings::OPTION_RUNTIME_BEARER, null ),
 			Settings::OPTION_ALLOWED_MODELS                => get_option( Settings::OPTION_ALLOWED_MODELS, null ),
-			'codex_provider_connector_self_approval_seeded' => get_option( 'codex_provider_connector_self_approval_seeded', null ),
+			'htperkins_aipfc_connector_self_approval_seeded' => get_option( 'htperkins_aipfc_connector_self_approval_seeded', null ),
 			'wpai_features_enabled'                        => get_option( 'wpai_features_enabled', null ),
 			'wpai_feature_connector-approval_enabled'      => get_option( 'wpai_feature_connector-approval_enabled', null ),
 		];
-		$codex_provider_legacy_default_model_option = 'codex_runtime_default_model';
+		$codex_provider_legacy_default_model_option = 'htperkins_aipfc_legacy_default_model';
 		$codex_provider_temporary_user_id           = 0;
 		$codex_provider_original_user_id            = get_current_user_id();
 		$codex_provider_temporary_connection_id     = 'codex-verify-' . wp_generate_uuid4();
-		$codex_provider_model_token                 = strtolower( wp_generate_password( 8, false, false ) );
-		$codex_provider_temporary_model_a           = 'codex-verify-' . $codex_provider_model_token . '-alpha';
-			$codex_provider_temporary_model_b           = 'codex-verify-' . $codex_provider_model_token . '-beta';
-			$codex_provider_temporary_fallback_a        = 'codex-fallback-' . $codex_provider_model_token . '-alpha';
-			$codex_provider_temporary_fallback_b        = 'codex-fallback-' . $codex_provider_model_token . '-beta';
-			$codex_provider_image_model                 = 'codex-image';
-			$codex_provider_original_env_bearer         = getenv( 'CODEX_WP_BEARER_TOKEN' );
-		$codex_provider_original_env_bearer_exists  = false !== $codex_provider_original_env_bearer;
+		$htperkins_aipfc_model_token                 = strtolower( wp_generate_password( 8, false, false ) );
+		$codex_provider_temporary_model_a           = 'codex-verify-' . $htperkins_aipfc_model_token . '-alpha';
+			$codex_provider_temporary_model_b           = 'codex-verify-' . $htperkins_aipfc_model_token . '-beta';
+			$codex_provider_temporary_fallback_a        = 'codex-fallback-' . $htperkins_aipfc_model_token . '-alpha';
+			$codex_provider_temporary_fallback_b        = 'codex-fallback-' . $htperkins_aipfc_model_token . '-beta';
+				$codex_provider_image_model                 = 'codex-image';
+				$codex_provider_original_env_base_url       = getenv( 'CODEX_WP_RUNTIME_BASE_URL' );
+			$codex_provider_original_env_base_url_exists = false !== $codex_provider_original_env_base_url;
+				$codex_provider_original_env_bearer         = getenv( 'CODEX_WP_BEARER_TOKEN' );
+			$codex_provider_original_env_bearer_exists  = false !== $codex_provider_original_env_bearer;
 		/** @var \Throwable|null $codex_provider_failure */
 		$codex_provider_failure = null;
 
 	try {
 		update_option( $codex_provider_legacy_default_model_option, 'legacy-model' );
-		update_option( 'codex_provider_schema_version', '4' );
+		update_option( 'htperkins_aipfc_schema_version', '4' );
 		Installer::maybe_upgrade();
 
 		global $wpdb;
@@ -170,7 +178,7 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 		}
 
 			$codex_provider_assert(
-				'6' === (string) get_option( 'codex_provider_schema_version', '' ),
+				'6' === (string) get_option( 'htperkins_aipfc_schema_version', '' ),
 				'Schema version was not upgraded to 6.'
 			);
 		$codex_provider_assert(
@@ -217,7 +225,20 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 			Settings::OPTION_ALLOWED_MODELS,
 			Settings::sanitize_allowed_models( $codex_provider_temporary_fallback_a . "\n" . $codex_provider_temporary_fallback_b )
 		);
-		update_option( Settings::OPTION_RUNTIME_BASE_URL, 'http://127.0.0.1:4317' );
+			$codex_provider_assert(
+				'ws://127.0.0.1:4500' === Settings::normalize_base_url( 'ws://127.0.0.1:4500' ),
+				'Site-level Codex app-server endpoint should preserve a local ws:// URL.'
+			);
+			putenv( 'CODEX_WP_RUNTIME_BASE_URL=ws://127.0.0.1:4500' );
+			$_ENV['CODEX_WP_RUNTIME_BASE_URL'] = 'ws://127.0.0.1:4500';
+			update_option( Settings::OPTION_RUNTIME_BEARER, '' );
+			$codex_provider_assert(
+				Settings::has_required_configuration(),
+				'Site-level Codex app-server configuration should not require a sidecar bearer token.'
+			);
+			putenv( 'CODEX_WP_RUNTIME_BASE_URL' );
+			unset( $_ENV['CODEX_WP_RUNTIME_BASE_URL'] );
+			update_option( Settings::OPTION_RUNTIME_BASE_URL, 'http://127.0.0.1:4317' );
 		update_option( Settings::OPTION_RUNTIME_BEARER, 'verify-token' );
 		update_option( Settings::OPTION_RUNTIME_BASE_URL, null );
 		update_option( Settings::OPTION_RUNTIME_BEARER, null );
@@ -293,7 +314,7 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 		);
 		wp_set_current_user( $codex_provider_temporary_user_id );
 		$codex_provider_reset_ai_client_registry();
-		\AIProviderForCodex\register_provider();
+		\Htperkins\AIProviderForCodex\register_provider();
 		$codex_provider_direct_image_lookup_failed = false;
 		try {
 			AiClient::defaultRegistry()->getProviderModel( 'codex', $codex_provider_image_model );
@@ -331,7 +352,7 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 			]
 		);
 		$codex_provider_reset_ai_client_registry();
-		\AIProviderForCodex\register_provider();
+		\Htperkins\AIProviderForCodex\register_provider();
 
 		$codex_provider_snapshot = ConnectionSnapshotRepository::get( $codex_provider_temporary_connection_id );
 		$codex_provider_assert( is_array( $codex_provider_snapshot ), 'Snapshot upsert failed.' );
@@ -401,17 +422,17 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 				$codex_provider_temporary_model_a === (string) ( $codex_provider_catalog_with_image_preference['selected_text_model'] ?? '' ),
 				'codex-image must not become the selected text model.'
 			);
-			$codex_provider_preferred_text_models = ( new \AIProviderForCodex\Plugin() )->filter_preferred_text_models( [] );
+			$codex_provider_preferred_text_models = ( new \Htperkins\AIProviderForCodex\Plugin() )->filter_preferred_text_models( [] );
 			$codex_provider_assert(
 				[ [ 'codex', $codex_provider_temporary_model_a ] ] === $codex_provider_preferred_text_models,
 				'wpai_preferred_text_models must never emit codex-image.'
 			);
-			$codex_provider_preferred_image_models = ( new \AIProviderForCodex\Plugin() )->filter_preferred_image_models( [] );
+			$codex_provider_preferred_image_models = ( new \Htperkins\AIProviderForCodex\Plugin() )->filter_preferred_image_models( [] );
 			$codex_provider_assert(
 				[ [ 'codex', $codex_provider_image_model ] ] === $codex_provider_preferred_image_models,
 				'wpai_preferred_image_models should prefer codex-image when the current user has image generation support.'
 			);
-			$codex_provider_preferred_vision_models = ( new \AIProviderForCodex\Plugin() )->filter_preferred_vision_models( [] );
+			$codex_provider_preferred_vision_models = ( new \Htperkins\AIProviderForCodex\Plugin() )->filter_preferred_vision_models( [] );
 			$codex_provider_assert(
 				[ [ 'codex', $codex_provider_temporary_model_a ] ] === $codex_provider_preferred_vision_models,
 				'wpai_preferred_vision_models should prefer the selected Codex text model for vision workflows.'
@@ -430,7 +451,7 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 
 			$codex_provider_image_model_instance = AiClient::defaultRegistry()->getProviderModel( 'codex', $codex_provider_image_model );
 			$codex_provider_assert(
-				is_a( $codex_provider_image_model_instance, 'AIProviderForCodex\\Models\\CodexImageGenerationModel' ),
+				is_a( $codex_provider_image_model_instance, 'Htperkins\AIProviderForCodex\\Models\\CodexImageGenerationModel' ),
 				'codex-image should instantiate CodexImageGenerationModel.'
 			);
 			$codex_provider_image_metadata   = $codex_provider_image_model_instance->metadata();
@@ -486,7 +507,7 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 			);
 			$codex_provider_text_model_instance = AiClient::defaultRegistry()->getProviderModel( 'codex', $codex_provider_temporary_model_a );
 			$codex_provider_assert(
-				is_a( $codex_provider_text_model_instance, 'AIProviderForCodex\\Models\\CodexTextGenerationModel' ),
+				is_a( $codex_provider_text_model_instance, 'Htperkins\AIProviderForCodex\\Models\\CodexTextGenerationModel' ),
 				'Text model IDs should still instantiate CodexTextGenerationModel.'
 			);
 			$codex_provider_vision_requirements = new ModelRequirements(
@@ -591,10 +612,10 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 			false !== strpos( $codex_provider_site_settings_html, 'Quick setup' ),
 			'Site settings should render the quick setup guidance in the page body.'
 		);
-		$codex_provider_assert(
-			false !== strpos( $codex_provider_site_settings_html, 'Codex uses a local runtime service' ),
-			'Site settings should render the introductory setup guide text in the page body.'
-		);
+			$codex_provider_assert(
+				false !== strpos( $codex_provider_site_settings_html, 'Codex uses a local app-server service' ),
+				'Site settings should render the introductory setup guide text in the page body.'
+			);
 		$codex_provider_assert(
 			method_exists( SiteSettings::class, 'render_help_tab' ),
 			'Site settings help tab renderer should be available.'
@@ -615,23 +636,27 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 			'The setup guide should not recommend non-shipped helper scripts.'
 		);
 		$codex_provider_assert(
-			false !== strpos( $codex_provider_site_settings_html, 'sidecar/systemd/codex-wp-sidecar.service' ),
-			'The setup guide should recommend the shipped systemd service template.'
-		);
+			false === strpos( $codex_provider_site_settings_html, 'sidecar/systemd/codex-wp-sidecar.service' ),
+			'The setup guide should not recommend non-shipped systemd template files.'
+			);
+			$codex_provider_assert(
+				false !== strpos( $codex_provider_site_settings_html, 'EnvironmentFile=/etc/codex-app-server.env' ),
+				'The setup guide should render the generated app-server systemd service snippet.'
+			);
 		$codex_provider_assert(
 			false === strpos( $codex_provider_site_settings_html, $codex_provider_temporary_model_a ) && false === strpos( $codex_provider_site_settings_html, $codex_provider_temporary_model_b ),
 			'Site settings should not render current-user snapshot models.'
 		);
 		$codex_provider_site_settings_filter_applied  = false;
 		$codex_provider_site_settings_translate_filter = static function ( string $translation, string $text, string $domain ) use ( &$codex_provider_site_settings_filter_applied ): string {
-			if (
-				'scriptorium-ai-provider-for-codex' === $domain
-				&& str_contains( $text, 'Per-user account linking is on the' )
-			) {
-				$codex_provider_site_settings_filter_applied = true;
+				if (
+					'ai-provider-for-codex' === $domain
+					&& str_contains( $text, 'Site-level Codex runtime setup is managed on this page.' )
+				) {
+					$codex_provider_site_settings_filter_applied = true;
 
-				return '<a href="%1$s">Settings &gt; Connectors</a> is the main entry point. 100% guided. Per-user account linking is on the <a href="%2$s">user connection page</a>.';
-			}
+					return '<a href="%1$s">Settings &gt; Connectors</a> is the main entry point. 100% guided. Site-level Codex runtime setup is managed on this page.';
+				}
 
 			return $translation;
 		};
@@ -668,7 +693,7 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 
 				$codex_provider_assert( false === strpos( $codex_provider_connection_page_html, '<style' ), 'User connection page must not print inline style tags; styles are delivered through wp_add_inline_style().' );
 				$codex_provider_assert( false === strpos( $codex_provider_connection_page_html, '<script' ), 'User connection page must not print inline script tags; config flows through script module data.' );
-				$codex_provider_connection_module_data = apply_filters( 'script_module_data_scriptorium-ai-provider-for-codex/user-connection', [] );
+				$codex_provider_connection_module_data = apply_filters( 'script_module_data_htperkins-ai-provider-for-codex/user-connection', [] );
 				$codex_provider_assert( isset( $codex_provider_connection_module_data['startUrl'], $codex_provider_connection_module_data['restNonce'], $codex_provider_connection_module_data['text'] ), 'User connection page should expose its JSON config through script module data.' );
 				$codex_provider_assert( 'auth_verify' === (string) ( $codex_provider_connection_module_data['currentPending']['authSessionId'] ?? '' ), 'Script module data should carry the pending device-code session for the enhanced connection flow.' );
 			$codex_provider_user_page_source       = (string) file_get_contents( dirname( __DIR__ ) . '/src/Admin/UserConnectionPage.php' );
@@ -682,9 +707,9 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 				$codex_provider_assert( false !== strpos( $codex_provider_site_settings_source, 'AdminPageStyle::css()' ), 'Site settings should use the shared Connectors-like admin page CSS helper.' );
 				$codex_provider_assert( false !== strpos( $codex_provider_user_page_source, 'AdminPageStyle::css()' ), 'User connection page should use the shared Connectors-like admin page CSS helper.' );
 				$codex_provider_assert( false !== strpos( $codex_provider_admin_style_source, 'final class AdminPageStyle' ), 'Shared admin page style helper should be available.' );
-				$codex_provider_assert( false !== strpos( $codex_provider_admin_style_source, 'settings_page_scriptorium-ai-provider-for-codex' ), 'Shared admin CSS should scope white-surface rules to the settings page body class.' );
-				$codex_provider_assert( false !== strpos( $codex_provider_admin_style_source, 'users_page_scriptorium-ai-provider-for-codex' ), 'Shared admin CSS should scope white-surface rules to the users page body class.' );
-				$codex_provider_assert( false !== strpos( $codex_provider_admin_style_source, 'profile_page_scriptorium-ai-provider-for-codex' ), 'Shared admin CSS should include the profile page body class for lower-capability user routing.' );
+				$codex_provider_assert( false !== strpos( $codex_provider_admin_style_source, 'settings_page_ai-provider-for-codex' ), 'Shared admin CSS should scope white-surface rules to the settings page body class.' );
+				$codex_provider_assert( false !== strpos( $codex_provider_admin_style_source, 'users_page_ai-provider-for-codex' ), 'Shared admin CSS should scope white-surface rules to the users page body class.' );
+				$codex_provider_assert( false !== strpos( $codex_provider_admin_style_source, 'profile_page_ai-provider-for-codex' ), 'Shared admin CSS should include the profile page body class for lower-capability user routing.' );
 				$codex_provider_assert( false !== strpos( $codex_provider_admin_style_source, 'max-width: 680px' ), 'Shared admin CSS should use the measured Connectors content width.' );
 				$codex_provider_assert( false !== strpos( $codex_provider_admin_style_source, 'padding: 24px' ), 'Shared admin CSS should use the measured Connectors desktop shell padding.' );
 				$codex_provider_assert( false !== strpos( $codex_provider_admin_style_source, 'padding: 20px' ), 'Shared admin CSS should use the measured Connectors desktop card padding.' );
@@ -702,7 +727,7 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 				$codex_provider_assert( false !== strpos( $codex_provider_user_connection_source, 'getCodexConnectionPendingSupportText' ), 'User connection page should use the shared pending support-text helper so polling errors are visible.' );
 				UserConnectionPage::enqueue_assets();
 			$codex_provider_script_module_queue = function_exists( 'wp_script_modules' ) ? wp_script_modules()->get_queue() : [];
-			$codex_provider_assert( in_array( 'scriptorium-ai-provider-for-codex/user-connection', $codex_provider_script_module_queue, true ), 'User connection page should enqueue the enhanced connection-flow script module.' );
+			$codex_provider_assert( in_array( 'htperkins-ai-provider-for-codex/user-connection', $codex_provider_script_module_queue, true ), 'User connection page should enqueue the enhanced connection-flow script module.' );
 			$codex_provider_assert( false !== strpos( $codex_provider_connection_page_html, 'data-codex-connection-root' ), 'User connection page should render the enhanced connection root.' );
 			$codex_provider_assert(
 				false !== strpos( $codex_provider_connection_page_html, 'codex-provider-admin-page' ),
@@ -754,11 +779,11 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 				'User connection page should no longer render the old loose model section.'
 			);
 			$codex_provider_assert(
-				false !== strpos( $codex_provider_connection_page_html, 'id="codex_provider_model"' ),
+				false !== strpos( $codex_provider_connection_page_html, 'id="htperkins_aipfc_model"' ),
 				'User connection page should preserve the model selector.'
 			);
 			$codex_provider_assert(
-				false !== strpos( $codex_provider_connection_page_html, 'name="codex_provider_action" value="set-model"' ),
+				false !== strpos( $codex_provider_connection_page_html, 'name="htperkins_aipfc_action" value="set-model"' ),
 				'User connection page should preserve the set-model form action.'
 			);
 			$codex_provider_assert( false !== strpos( $codex_provider_connection_page_html, 'data-codex-connection-console' ), 'User connection page should render an always-present enhanced connection console for first-time starts.' );
@@ -779,10 +804,10 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 			$codex_provider_server = rest_get_server();
 		$codex_provider_routes = $codex_provider_server->get_routes();
 
-			$codex_provider_assert( isset( $codex_provider_routes['/codex-provider/v1/connect/start'] ), 'Connect start route is not registered.' );
-			$codex_provider_assert( isset( $codex_provider_routes['/codex-provider/v1/connect/status'] ), 'Connect status route is not registered.' );
-			$codex_provider_assert( isset( $codex_provider_routes['/codex-provider/v1/connect/refresh'] ), 'Connect refresh route is not registered.' );
-			$codex_provider_assert( isset( $codex_provider_routes['/codex-provider/v1/status'] ), 'Status route is not registered.' );
+			$codex_provider_assert( isset( $codex_provider_routes['/htperkins-aipfc/v1/connect/start'] ), 'Connect start route is not registered.' );
+			$codex_provider_assert( isset( $codex_provider_routes['/htperkins-aipfc/v1/connect/status'] ), 'Connect status route is not registered.' );
+			$codex_provider_assert( isset( $codex_provider_routes['/htperkins-aipfc/v1/connect/refresh'] ), 'Connect refresh route is not registered.' );
+			$codex_provider_assert( isset( $codex_provider_routes['/htperkins-aipfc/v1/status'] ), 'Status route is not registered.' );
 
 			$codex_provider_assert( class_exists( ConnectionRefreshScheduler::class ), 'Connection refresh scheduler class is not available.' );
 			$codex_provider_assert(
@@ -952,8 +977,8 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 		$codex_provider_connector_data = ConnectorsIntegration::script_module_data( [] );
 		unset( $_GET['page'] );
 
-		$codex_provider_assert( '/codex-provider/v1/connect/status' === (string) ( $codex_provider_connector_data['connectStatusPath'] ?? '' ), 'Connector module data should expose the connect/status REST path.' );
-		$codex_provider_assert( '/codex-provider/v1/status' === (string) ( $codex_provider_connector_data['providerStatusPath'] ?? '' ), 'Connector module data should expose the passive provider status REST path.' );
+		$codex_provider_assert( '/htperkins-aipfc/v1/connect/status' === (string) ( $codex_provider_connector_data['connectStatusPath'] ?? '' ), 'Connector module data should expose the connect/status REST path.' );
+		$codex_provider_assert( '/htperkins-aipfc/v1/status' === (string) ( $codex_provider_connector_data['providerStatusPath'] ?? '' ), 'Connector module data should expose the passive provider status REST path.' );
 		$codex_provider_assert( ! empty( $codex_provider_connector_data['connectStatusUrl'] ), 'Connector module data should expose the connect/status REST URL.' );
 		$codex_provider_assert( ! empty( $codex_provider_connector_data['providerStatusUrl'] ), 'Connector module data should expose the provider status REST URL.' );
 		$codex_provider_assert(
@@ -964,7 +989,7 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 		$codex_provider_connector_app_data = ConnectorsIntegration::script_module_data( [] );
 		unset( $_GET['page'] );
 
-		$codex_provider_assert( '/codex-provider/v1/connect/status' === (string) ( $codex_provider_connector_app_data['connectStatusPath'] ?? '' ), 'Connector module data should also load on the routed Connectors admin app.' );
+		$codex_provider_assert( '/htperkins-aipfc/v1/connect/status' === (string) ( $codex_provider_connector_app_data['connectStatusPath'] ?? '' ), 'Connector module data should also load on the routed Connectors admin app.' );
 		$codex_provider_assert(
 			ConnectorsIntegration::filter_ai_plugin_has_valid_credentials( true ) === true,
 			'AI plugin valid-credential check should preserve an existing true result.'
@@ -984,7 +1009,7 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 		ConnectorsIntegration::enqueue_connectors_boot_module();
 		$codex_provider_script_module_queue = function_exists( 'wp_script_modules' ) ? wp_script_modules()->get_queue() : [];
 		$codex_provider_assert(
-			in_array( 'scriptorium-ai-provider-for-codex/connectors', $codex_provider_script_module_queue, true ),
+			in_array( 'htperkins-ai-provider-for-codex/connectors', $codex_provider_script_module_queue, true ),
 			'Codex connector module should be queued when the routed Connectors app builds its boot dependency graph.'
 		);
 		$codex_provider_connectors_source = (string) file_get_contents( dirname( __DIR__ ) . '/assets/connectors.js' );
@@ -1003,29 +1028,29 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 			'Codex connector card should render Connector Approval guidance and link to Tools > Connector Approvals when approval blocks the runtime probe.'
 		);
 		$codex_provider_connectors_integration_source = (string) file_get_contents( dirname( __DIR__ ) . '/src/Admin/ConnectorsIntegration.php' );
-		$codex_provider_dismiss_notice_position       = strpos( $codex_provider_connectors_integration_source, 'public static function ajax_dismiss_notice' );
-		$codex_provider_dismiss_notice_segment        = false === $codex_provider_dismiss_notice_position ? '' : substr( $codex_provider_connectors_integration_source, $codex_provider_dismiss_notice_position, 700 );
-		$codex_provider_dismiss_notice_nonce_position = strpos( $codex_provider_dismiss_notice_segment, "check_ajax_referer( 'codex-provider-dismiss-notice', 'nonce' )" );
-		$codex_provider_dismiss_notice_cap_position   = strpos( $codex_provider_dismiss_notice_segment, "current_user_can( 'read' )" );
-		$codex_provider_dismiss_notice_meta_position  = strpos( $codex_provider_dismiss_notice_segment, 'update_user_meta' );
+		$htperkins_aipfc_dismiss_notice_position       = strpos( $codex_provider_connectors_integration_source, 'public static function ajax_dismiss_notice' );
+		$htperkins_aipfc_dismiss_notice_segment        = false === $htperkins_aipfc_dismiss_notice_position ? '' : substr( $codex_provider_connectors_integration_source, $htperkins_aipfc_dismiss_notice_position, 700 );
+		$htperkins_aipfc_dismiss_notice_nonce_position = strpos( $htperkins_aipfc_dismiss_notice_segment, "check_ajax_referer( 'codex-provider-dismiss-notice', 'nonce' )" );
+		$htperkins_aipfc_dismiss_notice_cap_position   = strpos( $htperkins_aipfc_dismiss_notice_segment, "current_user_can( 'read' )" );
+		$htperkins_aipfc_dismiss_notice_meta_position  = strpos( $htperkins_aipfc_dismiss_notice_segment, 'update_user_meta' );
 		$codex_provider_assert(
-			false !== $codex_provider_dismiss_notice_position,
+			false !== $htperkins_aipfc_dismiss_notice_position,
 			'Dismiss-notice AJAX handler should be present.'
 		);
 		$codex_provider_assert(
-			false !== $codex_provider_dismiss_notice_nonce_position
-			&& false !== $codex_provider_dismiss_notice_cap_position
-			&& false !== $codex_provider_dismiss_notice_meta_position
-			&& $codex_provider_dismiss_notice_nonce_position < $codex_provider_dismiss_notice_meta_position
-			&& $codex_provider_dismiss_notice_cap_position < $codex_provider_dismiss_notice_meta_position,
+			false !== $htperkins_aipfc_dismiss_notice_nonce_position
+			&& false !== $htperkins_aipfc_dismiss_notice_cap_position
+			&& false !== $htperkins_aipfc_dismiss_notice_meta_position
+			&& $htperkins_aipfc_dismiss_notice_nonce_position < $htperkins_aipfc_dismiss_notice_meta_position
+			&& $htperkins_aipfc_dismiss_notice_cap_position < $htperkins_aipfc_dismiss_notice_meta_position,
 			'Dismiss-notice AJAX handler should verify nonce and capability before updating user meta.'
 		);
 		if ( class_exists( '\\WordPress\\AI\\Connector_Approval\\Approvals_Store' ) ) {
 			$codex_provider_approval_store_class                  = '\\WordPress\\AI\\Connector_Approval\\Approvals_Store';
-			$codex_provider_approval_basename                     = plugin_basename( \AIProviderForCodex\PLUGIN_FILE );
+			$codex_provider_approval_basename                     = plugin_basename( \Htperkins\AIProviderForCodex\PLUGIN_FILE );
 			$codex_provider_approval_option                       = $codex_provider_approval_store_class::OPTION_APPROVALS;
 			$codex_provider_approval_pending_option               = $codex_provider_approval_store_class::OPTION_PENDING;
-			$codex_provider_approval_seed_option                  = 'codex_provider_connector_self_approval_seeded';
+			$codex_provider_approval_seed_option                  = 'htperkins_aipfc_connector_self_approval_seeded';
 			$codex_provider_had_approvals                         = false !== get_option( $codex_provider_approval_option, false );
 			$codex_provider_original_approvals                    = get_option( $codex_provider_approval_option, [] );
 			$codex_provider_had_pending_approvals                 = false !== get_option( $codex_provider_approval_pending_option, false );
@@ -1223,7 +1248,7 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 				$codex_provider_text_image_model_threw = false;
 
 				try {
-					$model = new \AIProviderForCodex\Models\CodexTextGenerationModel(
+					$model = new \Htperkins\AIProviderForCodex\Models\CodexTextGenerationModel(
 						new \WordPress\AiClient\Providers\Models\DTO\ModelMetadata(
 							$codex_provider_image_model,
 							'Codex Image Routed as Text',
@@ -1356,9 +1381,161 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 					&& 'data:image/png;base64,' . $vision_image_base64 === (string) $vision_request_body['inputImages'][0]['url'],
 					'Codex vision text generation should send image file parts to the sidecar as inputImages.'
 				);
+					}
+				);
+				$codex_provider_app_server_requests      = [];
+				$codex_provider_app_server_notifications = [
+					[
+						'method' => 'item/completed',
+						'params' => [
+							'turnId' => 'turn_site_level',
+							'item'   => [
+								'type' => 'agentMessage',
+								'text' => 'Site-level app-server generation works.',
+							],
+						],
+					],
+					[
+						'method' => 'turn/completed',
+						'params' => [
+							'turn' => [
+								'id' => 'turn_site_level',
+							],
+						],
+					],
+				];
+				$codex_provider_app_server_session_factory = static function () use ( &$codex_provider_app_server_requests, &$codex_provider_app_server_notifications ) {
+					return new class( $codex_provider_app_server_requests, $codex_provider_app_server_notifications ) {
+						private $requests;
+						private $notifications;
+
+						public function __construct( array &$requests, array &$notifications ) {
+							$this->requests      =& $requests;
+							$this->notifications =& $notifications;
+						}
+
+						public function request( string $method, array $params = [], int $timeout = 20 ) {
+							$this->requests[] = [
+								'method' => $method,
+								'params' => $params,
+							];
+
+							if ( 'thread/start' === $method ) {
+								return [ 'thread' => [ 'id' => 'thread_site_level' ] ];
+							}
+
+							if ( 'turn/start' === $method ) {
+								return [ 'turn' => [ 'id' => 'turn_site_level' ] ];
+							}
+
+							if ( 'account/read' === $method ) {
+								return [
+									'account' => [
+										'type'     => 'chatgpt',
+										'email'    => 'site-level@example.com',
+										'planType' => 'plus',
+									],
+								];
+							}
+
+							if ( 'account/rateLimits/read' === $method ) {
+								return [ 'rateLimits' => [] ];
+							}
+
+							return [];
+						}
+
+						public function wait_for_notification( callable $predicate, int $timeout = 300 ): array {
+							while ( [] !== $this->notifications ) {
+								$notification = array_shift( $this->notifications );
+								if ( is_array( $notification ) && $predicate( $notification ) ) {
+									return $notification;
+								}
+							}
+
+							throw new RuntimeException( 'No matching fake app-server notification.' );
+						}
+
+						public function close(): void {}
+					};
+				};
+				add_filter(
+					'htperkins_aipfc_app_server_session_factory',
+					static function () use ( $codex_provider_app_server_session_factory ) {
+						return $codex_provider_app_server_session_factory;
+					}
+				);
+				$codex_provider_previous_runtime_base_url = getenv( 'CODEX_WP_RUNTIME_BASE_URL' );
+				$codex_provider_had_runtime_base_url      = false !== $codex_provider_previous_runtime_base_url;
+				try {
+					putenv( 'CODEX_WP_RUNTIME_BASE_URL=ws://127.0.0.1:4500' );
+					$_ENV['CODEX_WP_RUNTIME_BASE_URL'] = 'ws://127.0.0.1:4500';
+					ConnectionRepository::delete_for_user( $codex_provider_temporary_user_id );
+					ConnectionSnapshotRepository::delete( $codex_provider_temporary_connection_id );
+					ModelCatalogState::delete_user_preferred_model( $codex_provider_temporary_user_id );
+					$codex_provider_reset_ai_client_registry();
+					\Htperkins\AIProviderForCodex\register_provider();
+					$model  = AiClient::defaultRegistry()->getProviderModel( 'codex', $codex_provider_temporary_fallback_a );
+					$result = $model->generateTextResult(
+						[
+							new UserMessage(
+								[
+									new MessagePart( 'Use site-level Codex auth.' ),
+								]
+							),
+						]
+					);
+
+					$codex_provider_assert(
+						'Site-level app-server generation works.' === $result->toText(),
+						'Site-level Codex app-server mode should generate without a per-user connection row.'
+					);
+					$codex_provider_assert(
+						in_array( 'turn/start', array_column( $codex_provider_app_server_requests, 'method' ), true ),
+						'Site-level Codex app-server mode should start a turn through app-server.'
+					);
+				} finally {
+					remove_all_filters( 'htperkins_aipfc_app_server_session_factory' );
+					if ( $codex_provider_had_runtime_base_url ) {
+						putenv( 'CODEX_WP_RUNTIME_BASE_URL=' . $codex_provider_previous_runtime_base_url );
+						$_ENV['CODEX_WP_RUNTIME_BASE_URL'] = $codex_provider_previous_runtime_base_url;
+					} else {
+						putenv( 'CODEX_WP_RUNTIME_BASE_URL' );
+						unset( $_ENV['CODEX_WP_RUNTIME_BASE_URL'] );
+					}
+					ConnectionRepository::upsert(
+						$codex_provider_temporary_user_id,
+						[
+							'connectionId' => $codex_provider_temporary_connection_id,
+							'status'       => 'linked',
+							'account'      => [
+								'email'    => $codex_provider_user_email,
+								'planType' => 'verification',
+								'authMode' => 'chatgpt',
+							],
+						]
+					);
+					ConnectionSnapshotRepository::upsert(
+						$codex_provider_temporary_connection_id,
+						[
+							'models'       => [
+								[
+									'id'    => $codex_provider_temporary_model_a,
+									'label' => 'Codex Verify Alpha',
+								],
+							],
+							'defaultModel' => $codex_provider_temporary_model_a,
+							'checkedAt'    => gmdate( 'c' ),
+							'capabilities' => [
+								'imageGeneration' => true,
+							],
+						]
+					);
+					ModelCatalogState::update_user_preferred_model( $codex_provider_temporary_user_id, $codex_provider_temporary_model_a );
+					$codex_provider_reset_ai_client_registry();
+					\Htperkins\AIProviderForCodex\register_provider();
 				}
-			);
-			$codex_provider_image_requests = [];
+				$codex_provider_image_requests = [];
 			$codex_provider_image_base64   = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=';
 			$codex_provider_wrapped_image_base64 = substr( $codex_provider_image_base64, 0, 32 ) . "\n" . substr( $codex_provider_image_base64, 32 );
 			$codex_provider_with_mock_runtime(
@@ -1496,7 +1673,7 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 			$codex_provider_log_entries[] = $entry;
 		};
 		add_filter(
-			'codex_provider_request_log_sink',
+			'htperkins_aipfc_request_log_sink',
 			static function () use ( $codex_provider_log_sink ) {
 				return $codex_provider_log_sink;
 			}
@@ -1857,7 +2034,7 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 				);
 			}
 		);
-		remove_all_filters( 'codex_provider_request_log_sink' );
+		remove_all_filters( 'htperkins_aipfc_request_log_sink' );
 		$codex_provider_with_mock_runtime(
 			static function ( $preempt, array $args, string $url ) use ( $codex_provider_base_url, $codex_provider_http_json_response ) {
 				if ( 0 !== strpos( $url, $codex_provider_base_url ) ) {
@@ -1892,14 +2069,14 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 							),
 						]
 					);
-				} catch ( \Throwable $codex_provider_image_auth_error ) {
-					$codex_provider_image_auth_threw = false !== strpos( $codex_provider_image_auth_error->getMessage(), 'no longer has a stored ChatGPT or Codex login' );
-				}
+					} catch ( \Throwable $codex_provider_image_auth_error ) {
+						$codex_provider_image_auth_threw = false !== strpos( $codex_provider_image_auth_error->getMessage(), 'Run codex login for the service user that starts app-server' );
+					}
 
-				$codex_provider_assert(
-					true === $codex_provider_image_auth_threw,
-					'Codex image auth loss should surface the reconnect guidance.'
-				);
+					$codex_provider_assert(
+						true === $codex_provider_image_auth_threw,
+						'Codex image auth loss should surface the app-server login guidance.'
+					);
 				$codex_provider_assert(
 					null === ConnectionRepository::get_for_user( $codex_provider_temporary_user_id ),
 					'Codex image auth loss should delete the local connection row.'
@@ -1953,7 +2130,7 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 		);
 		ModelCatalogState::update_user_preferred_model( $codex_provider_temporary_user_id, $codex_provider_temporary_model_a );
 		$codex_provider_reset_ai_client_registry();
-		\AIProviderForCodex\register_provider();
+		\Htperkins\AIProviderForCodex\register_provider();
 		$codex_provider_with_mock_runtime(
 			static function ( $preempt, array $args, string $url ) use ( $codex_provider_base_url ) {
 				if ( 0 !== strpos( $url, $codex_provider_base_url ) ) {
@@ -1962,7 +2139,7 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 
 				return new WP_Error(
 					'wpai_connector_not_approved',
-					'The "codex" AI connector has not been approved for use by "scriptorium-ai-provider-for-codex/scriptorium-ai-provider-for-codex.php".',
+					'The "codex" AI connector has not been approved for use by "ai-provider-for-codex/ai-provider-for-codex.php".',
 					[
 						'status'       => 403,
 						'connector_id' => 'codex',
@@ -1972,7 +2149,7 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 			static function () use ( $codex_provider_assert ) {
 				try {
 					try {
-						( new \AIProviderForCodex\Runtime\Client() )->get( '/healthz' );
+						( new \Htperkins\AIProviderForCodex\Runtime\Client() )->get( '/healthz' );
 						$codex_provider_assert( false, 'Connector Approval transport blocks should raise a runtime exception.' );
 					} catch ( RuntimeException $exception ) {
 						$codex_provider_assert(
@@ -2003,12 +2180,12 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 
 				return new WP_Error(
 					'wpai_connector_not_approved',
-					'The "codex" AI connector has not been approved for use by "scriptorium-ai-provider-for-codex/scriptorium-ai-provider-for-codex.php".',
+					'The "codex" AI connector has not been approved for use by "ai-provider-for-codex/ai-provider-for-codex.php".',
 					[
 						'status'       => 403,
 						'connector_id' => 'codex',
 						'caller'       => [
-							'basename' => 'scriptorium-ai-provider-for-codex/scriptorium-ai-provider-for-codex.php',
+							'basename' => 'ai-provider-for-codex/ai-provider-for-codex.php',
 						],
 					]
 				);
@@ -2191,7 +2368,7 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 				return $preempt;
 			},
 			static function () use ( $codex_provider_assert, &$codex_provider_status_snapshot_requests ) {
-				$codex_provider_request  = new WP_REST_Request( 'GET', '/codex-provider/v1/status' );
+				$codex_provider_request  = new WP_REST_Request( 'GET', '/htperkins-aipfc/v1/status' );
 				$codex_provider_response = rest_do_request( $codex_provider_request );
 				$codex_provider_data     = $codex_provider_response->get_data();
 
@@ -2338,7 +2515,7 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 
 				$codex_provider_translate_filter = static function ( string $translation, string $text, string $domain ): string {
 					if (
-						'scriptorium-ai-provider-for-codex' === $domain
+						'ai-provider-for-codex' === $domain
 						&& str_contains( $text, 'This page manages your personal account link.' )
 					) {
 						return 'This page manages your personal account link. 100% reliable. <a href="%1$s">Plugin settings</a> control the local runtime shared by all users. <a href="%2$s">Settings &gt; Connectors</a> shows overall provider status.';
@@ -2732,9 +2909,9 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 				try {
 					( new ConnectionService() )->refresh_snapshot( $codex_provider_temporary_user_id );
 					$codex_provider_assert( false, 'Explicit snapshot refresh should fail when runtime auth disappears.' );
-				} catch ( RuntimeException $exception ) {
-					$codex_provider_assert( false !== strpos( $exception->getMessage(), 'no longer has a stored ChatGPT or Codex login' ), 'Explicit snapshot refresh should surface the auth-required reconnect message.' );
-				}
+					} catch ( RuntimeException $exception ) {
+						$codex_provider_assert( false !== strpos( $exception->getMessage(), 'Run codex login for the service user that starts app-server' ), 'Explicit snapshot refresh should surface the auth-required app-server login message.' );
+					}
 
 					$codex_provider_assert( null === ConnectionRepository::get_for_user( $codex_provider_temporary_user_id ), 'Auth loss should delete the local connection row.' );
 					$codex_provider_assert( null === ConnectionSnapshotRepository::get( $codex_provider_temporary_connection_id ), 'Auth loss should delete the local snapshot row.' );
@@ -2860,7 +3037,7 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 				);
 
 			// --- Runtime diagnostics: Client::diagnostics() does not touch HealthMonitor. ---
-			delete_transient( 'codex_provider_runtime_health' );
+			delete_transient( 'htperkins_aipfc_runtime_health' );
 			HealthMonitor::record_failure( 'sentinel-before-diagnostics' );
 
 			$codex_provider_with_mock_runtime(
@@ -2881,7 +3058,7 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 					return $preempt;
 				},
 				static function () use ( $codex_provider_assert ) {
-					$client = new \AIProviderForCodex\Runtime\Client();
+					$client = new \Htperkins\AIProviderForCodex\Runtime\Client();
 					$result = $client->diagnostics();
 					$codex_provider_assert( true === ( $result['ok'] ?? null ), 'Client::diagnostics() should return the sidecar ok flag.' );
 					$codex_provider_assert( 'pass' === $result['checks'][0]['status'], 'Client::diagnostics() should return sidecar checks.' );
@@ -2902,7 +3079,7 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 			};
 
 			// 200 with a failing sidecar check => overall ok false, verdict recorded.
-			delete_transient( 'codex_provider_last_diagnostics' );
+			delete_transient( 'htperkins_aipfc_last_diagnostics' );
 			$codex_provider_with_mock_runtime(
 				static function ( $preempt, array $args, string $url ) use ( $codex_provider_http_json_response ) {
 					if ( false !== strpos( $url, '/v1/diagnostics' ) ) {
@@ -2919,14 +3096,14 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 					return $preempt;
 				},
 				static function () use ( $codex_provider_assert, $codex_provider_diagnostics_rows ) {
-					$response = \AIProviderForCodex\REST\DiagnosticsController::run();
+					$response = \Htperkins\AIProviderForCodex\REST\DiagnosticsController::run();
 					$body     = $response->get_data();
 					$rows     = $codex_provider_diagnostics_rows( $body );
 					$codex_provider_assert( false === $body['ok'], 'A 200 with a failing check must yield overall ok=false.' );
 					$codex_provider_assert( 'pass' === $rows['reachable']['status'], 'Reachable row should pass on HTTP 200.' );
 					$codex_provider_assert( 'pass' === $rows['bearer']['status'], 'Bearer row should pass on HTTP 200.' );
 					$codex_provider_assert( 'fail' === $rows['codex_cli']['status'], 'Failing sidecar check should surface as a fail row.' );
-					$verdict = get_transient( 'codex_provider_last_diagnostics' );
+					$verdict = get_transient( 'htperkins_aipfc_last_diagnostics' );
 					$codex_provider_assert( is_array( $verdict ) && false === $verdict['ok'], 'Verdict transient must record ok=false.' );
 				}
 			);
@@ -2940,27 +3117,27 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 					return $preempt;
 				},
 				static function () use ( $codex_provider_assert, $codex_provider_diagnostics_rows ) {
-					$rows = $codex_provider_diagnostics_rows( \AIProviderForCodex\REST\DiagnosticsController::run()->get_data() );
+					$rows = $codex_provider_diagnostics_rows( \Htperkins\AIProviderForCodex\REST\DiagnosticsController::run()->get_data() );
 					$codex_provider_assert( 'pass' === $rows['reachable']['status'], '401 still proves reachability.' );
 					$codex_provider_assert( 'fail' === $rows['bearer']['status'], '401 must mark the bearer row as failed.' );
 				}
 			);
 
-			// 500 => its own sidecar_error row (not bearer), reachable pass; the verdict still records an issue.
-			delete_transient( 'codex_provider_last_diagnostics' );
+			// 500 => its own runtime_error row (not bearer), reachable pass; the verdict still records an issue.
+			delete_transient( 'htperkins_aipfc_last_diagnostics' );
 			$codex_provider_with_mock_runtime(
 				static function ( $preempt, array $args, string $url ) use ( $codex_provider_http_json_response ) {
 					if ( false !== strpos( $url, '/v1/diagnostics' ) ) {
-						return $codex_provider_http_json_response( 500, [ 'error' => [ 'message' => 'sidecar exploded' ] ] );
+						return $codex_provider_http_json_response( 500, [ 'error' => [ 'message' => 'runtime exploded' ] ] );
 					}
 					return $preempt;
 				},
 				static function () use ( $codex_provider_assert, $codex_provider_diagnostics_rows ) {
-					$rows = $codex_provider_diagnostics_rows( \AIProviderForCodex\REST\DiagnosticsController::run()->get_data() );
+					$rows = $codex_provider_diagnostics_rows( \Htperkins\AIProviderForCodex\REST\DiagnosticsController::run()->get_data() );
 					$codex_provider_assert( 'pass' === $rows['reachable']['status'], 'A 500 still proves reachability.' );
-					$codex_provider_assert( 'warn' === ( $rows['sidecar_error']['status'] ?? '' ), 'A non-401 runtime error becomes its own sidecar_error row.' );
+					$codex_provider_assert( 'warn' === ( $rows['runtime_error']['status'] ?? '' ), 'A non-401 runtime error becomes its own runtime_error row.' );
 					$codex_provider_assert( ! isset( $rows['bearer'] ), 'A non-401 runtime error must not be attributed to the bearer token.' );
-					$verdict = get_transient( 'codex_provider_last_diagnostics' );
+					$verdict = get_transient( 'htperkins_aipfc_last_diagnostics' );
 					$codex_provider_assert(
 						is_array( $verdict ) && false === $verdict['ok'] && count( (array) $verdict['failed'] ) >= 1,
 						'A failed diagnostic (ok=false) must record at least one issue so the settings card never reports "0 issues".'
@@ -2977,7 +3154,7 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 					return $preempt;
 				},
 				static function () use ( $codex_provider_assert, $codex_provider_diagnostics_rows ) {
-					$rows = $codex_provider_diagnostics_rows( \AIProviderForCodex\REST\DiagnosticsController::run()->get_data() );
+					$rows = $codex_provider_diagnostics_rows( \Htperkins\AIProviderForCodex\REST\DiagnosticsController::run()->get_data() );
 					$codex_provider_assert( 'pass' === $rows['reachable']['status'], 'A 404 still proves reachability.' );
 					$codex_provider_assert( isset( $rows['endpoint'] ) && 'fail' === $rows['endpoint']['status'], 'A 404 must surface a dedicated endpoint failure row.' );
 					$codex_provider_assert( '' !== ( $rows['endpoint']['remediation'] ?? '' ), 'The endpoint failure row must include remediation.' );
@@ -2994,7 +3171,7 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 					return $preempt;
 				},
 				static function () use ( $codex_provider_assert, $codex_provider_diagnostics_rows ) {
-					$rows = $codex_provider_diagnostics_rows( \AIProviderForCodex\REST\DiagnosticsController::run()->get_data() );
+					$rows = $codex_provider_diagnostics_rows( \Htperkins\AIProviderForCodex\REST\DiagnosticsController::run()->get_data() );
 					$codex_provider_assert( 'fail' === $rows['reachable']['status'], 'A transport failure must mark reachability as failed.' );
 				}
 			);
@@ -3011,30 +3188,42 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 				'' === Settings::get_bearer_token(),
 				'Test setup: no bearer should be configured while exercising suggested-token generation.'
 			);
-			delete_option( 'codex_runtime_suggested_bearer_token' );
-			$codex_provider_unit = \AIProviderForCodex\Admin\SetupSnippets::systemd_unit();
+			delete_option( 'htperkins_aipfc_suggested_bearer_token' );
+			$codex_provider_unit = \Htperkins\AIProviderForCodex\Admin\SetupSnippets::systemd_unit();
 			$codex_provider_assert(
-				false === strpos( $codex_provider_unit, '/path/to/wp-content/plugins/scriptorium-ai-provider-for-codex' ),
+				false === strpos( $codex_provider_unit, '/path/to/wp-content/plugins/ai-provider-for-codex' ),
 				'The systemd snippet must replace the placeholder plugin path.'
 			);
 			$codex_provider_assert(
-				false !== strpos( $codex_provider_unit, untrailingslashit( \AIProviderForCodex\PLUGIN_DIR ) ),
-				'The systemd snippet must contain the real plugin directory.'
+				false !== strpos( $codex_provider_unit, 'EnvironmentFile=/etc/codex-app-server.env' ),
+				'The systemd snippet must read the app-server env file.'
+			);
+			$codex_provider_assert(
+				false !== strpos( $codex_provider_unit, 'ExecStart=/usr/local/bin/codex app-server --listen ${CODEX_WP_RUNTIME_BASE_URL}' ),
+				'The systemd snippet must start the externally installed Codex app-server.'
+			);
+			$codex_provider_assert(
+				false === strpos( $codex_provider_unit, 'codex-wp-sidecar' ),
+				'The systemd snippet must not reference the removed sidecar service.'
+			);
+			$codex_provider_assert(
+				false === strpos( $codex_provider_unit, untrailingslashit( \Htperkins\AIProviderForCodex\PLUGIN_DIR ) ),
+				'The app-server systemd snippet must not require files inside the plugin directory.'
 			);
 
-			$codex_provider_env = \AIProviderForCodex\Admin\SetupSnippets::env_file();
+			$codex_provider_env = \Htperkins\AIProviderForCodex\Admin\SetupSnippets::env_file();
 			$codex_provider_assert(
 				false !== strpos( $codex_provider_env, 'CODEX_WP_BEARER_TOKEN=' ),
 				'The env snippet must include the bearer token line.'
 			);
 
-			$codex_provider_token_a = \AIProviderForCodex\Admin\SetupSnippets::suggested_bearer_token();
-			$codex_provider_token_b = \AIProviderForCodex\Admin\SetupSnippets::suggested_bearer_token();
+			$codex_provider_token_a = \Htperkins\AIProviderForCodex\Admin\SetupSnippets::suggested_bearer_token();
+			$codex_provider_token_b = \Htperkins\AIProviderForCodex\Admin\SetupSnippets::suggested_bearer_token();
 			$codex_provider_assert( '' !== $codex_provider_token_a, 'A suggested token must be generated.' );
 			$codex_provider_assert( $codex_provider_token_a === $codex_provider_token_b, 'The suggested token must be stable across calls.' );
 			// A non-autoloaded option is absent from wp_load_alloptions() (which holds autoloaded options only).
 			$codex_provider_assert(
-				! array_key_exists( 'codex_runtime_suggested_bearer_token', wp_load_alloptions() ),
+				! array_key_exists( 'htperkins_aipfc_suggested_bearer_token', wp_load_alloptions() ),
 				'The suggested-token option must not autoload.'
 			);
 
@@ -3043,8 +3232,8 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 			// persisted value, not the token it just generated. The pre_option
 			// filter only fools this function's own cache check (one read); add_option
 			// detects the existing row via its own DB query and returns false.
-			delete_option( 'codex_runtime_suggested_bearer_token' );
-			add_option( 'codex_runtime_suggested_bearer_token', 'codex-raced-winner', '', false );
+			delete_option( 'htperkins_aipfc_suggested_bearer_token' );
+			add_option( 'htperkins_aipfc_suggested_bearer_token', 'codex-raced-winner', '', false );
 			$codex_provider_token_cache_miss_once = true;
 			$codex_provider_token_race_filter     = static function ( $pre ) use ( &$codex_provider_token_cache_miss_once ) {
 				if ( $codex_provider_token_cache_miss_once ) {
@@ -3053,14 +3242,14 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 				}
 				return $pre;
 			};
-			add_filter( 'pre_option_codex_runtime_suggested_bearer_token', $codex_provider_token_race_filter );
-			$codex_provider_raced_token = \AIProviderForCodex\Admin\SetupSnippets::suggested_bearer_token();
-			remove_filter( 'pre_option_codex_runtime_suggested_bearer_token', $codex_provider_token_race_filter );
+			add_filter( 'pre_option_htperkins_aipfc_suggested_bearer_token', $codex_provider_token_race_filter );
+			$codex_provider_raced_token = \Htperkins\AIProviderForCodex\Admin\SetupSnippets::suggested_bearer_token();
+			remove_filter( 'pre_option_htperkins_aipfc_suggested_bearer_token', $codex_provider_token_race_filter );
 			$codex_provider_assert(
 				'codex-raced-winner' === $codex_provider_raced_token,
 				'suggested_bearer_token() must return the persisted token when add_option loses a race, not its own un-stored token.'
 			);
-			delete_option( 'codex_runtime_suggested_bearer_token' );
+			delete_option( 'htperkins_aipfc_suggested_bearer_token' );
 
 			if ( null === $codex_provider_saved_bearer_option ) {
 				delete_option( Settings::OPTION_RUNTIME_BEARER );
@@ -3087,7 +3276,7 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 					$html = (string) ob_get_clean();
 					$codex_provider_assert( 0 === $codex_provider_http_calls, 'render_page() must not make runtime HTTP calls on load.' );
 					$codex_provider_assert( false !== strpos( $html, 'data-codex-diagnostics-run' ), 'The settings page must render the Check runtime button.' );
-					$codex_provider_assert( false !== strpos( $html, 'EnvironmentFile=/etc/codex-wp-sidecar.env' ), 'The settings page must render the systemd snippet.' );
+					$codex_provider_assert( false !== strpos( $html, 'EnvironmentFile=/etc/codex-app-server.env' ), 'The settings page must render the app-server systemd snippet.' );
 				}
 			);
 			} catch ( \Throwable $codex_provider_throwable ) {
@@ -3095,6 +3284,14 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 	} finally {
 		wp_set_current_user( $codex_provider_original_user_id );
 		ConnectionSnapshotRepository::delete( $codex_provider_temporary_connection_id );
+
+		if ( $codex_provider_original_env_base_url_exists ) {
+			putenv( 'CODEX_WP_RUNTIME_BASE_URL=' . $codex_provider_original_env_base_url );
+			$_ENV['CODEX_WP_RUNTIME_BASE_URL'] = $codex_provider_original_env_base_url;
+		} else {
+			putenv( 'CODEX_WP_RUNTIME_BASE_URL' );
+			unset( $_ENV['CODEX_WP_RUNTIME_BASE_URL'] );
+		}
 
 		if ( $codex_provider_original_env_bearer_exists ) {
 			putenv( 'CODEX_WP_BEARER_TOKEN=' . $codex_provider_original_env_bearer );

@@ -21,10 +21,7 @@ mapfile -t UNTRACKED_RELEASE_FILES < <(
 		assets \
 		languages \
 		src \
-		sidecar/app \
-		sidecar/config.example.env \
-		sidecar/systemd \
-		scriptorium-ai-provider-for-codex.php \
+		ai-provider-for-codex.php \
 		readme.txt \
 		uninstall.php
 )

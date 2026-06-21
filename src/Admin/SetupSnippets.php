@@ -2,14 +2,14 @@
 /**
  * Read-only setup snippet generator (systemd unit + env file).
  *
- * @package AIProviderForCodex
+ * @package HtperkinsAIProviderForCodex
  */
 
 declare( strict_types=1 );
 
-namespace AIProviderForCodex\Admin;
+namespace Htperkins\AIProviderForCodex\Admin;
 
-use AIProviderForCodex\Runtime\Settings;
+use Htperkins\AIProviderForCodex\Runtime\Settings;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -20,27 +20,45 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 final class SetupSnippets {
 
-	private const TOKEN_OPTION       = 'codex_runtime_suggested_bearer_token';
-	private const PLACEHOLDER_PATH   = '/path/to/wp-content/plugins/scriptorium-ai-provider-for-codex';
+	private const TOKEN_OPTION = 'htperkins_aipfc_suggested_bearer_token';
 
 	/**
-	 * Returns the bundled systemd unit with the real plugin path substituted.
+	 * Returns a systemd unit template for an externally installed Codex app-server.
 	 *
 	 * @return string
 	 */
 	public static function systemd_unit(): string {
-		$template_path = untrailingslashit( \AIProviderForCodex\PLUGIN_DIR ) . '/sidecar/systemd/codex-wp-sidecar.service';
-		$template      = is_readable( $template_path ) ? (string) file_get_contents( $template_path ) : '';
+		$runtime_config  = Settings::configuration_metadata();
+		$shared_env_file = (string) $runtime_config['shared_env_file'];
 
-		if ( '' === $template ) {
-			return '';
-		}
-
-		return str_replace( self::PLACEHOLDER_PATH, untrailingslashit( \AIProviderForCodex\PLUGIN_DIR ), $template );
+		return implode(
+			"\n",
+			[
+				'[Unit]',
+				'Description=Codex app-server for WordPress AI',
+				'After=network-online.target',
+				'Wants=network-online.target',
+				'',
+				'[Service]',
+				'Type=simple',
+				'User=www-data',
+				'Group=www-data',
+				'EnvironmentFile=' . $shared_env_file,
+				'ExecStart=/usr/local/bin/codex app-server --listen ${CODEX_WP_RUNTIME_BASE_URL}',
+				'Restart=on-failure',
+				'RestartSec=5',
+				'NoNewPrivileges=true',
+				'PrivateTmp=true',
+				'',
+				'[Install]',
+				'WantedBy=multi-user.target',
+				'',
+			]
+		);
 	}
 
 	/**
-	 * Returns an env-file snippet with detected values and a stable suggested token.
+	 * Returns an env-file snippet with detected values.
 	 *
 	 * @return string
 	 */
@@ -52,15 +70,10 @@ final class SetupSnippets {
 		}
 
 		$lines = [
-			'CODEX_BIN=/usr/local/bin/codex',
-			'CODEX_WP_STORAGE_ROOT=/var/lib/codex-wp',
-			'CODEX_WP_HOST=127.0.0.1',
-			'CODEX_WP_PORT=4317',
+			'CODEX_HOME=/var/lib/codex-app-server',
 			'CODEX_WP_RUNTIME_BASE_URL=' . $base_url,
-			'CODEX_WP_BEARER_TOKEN=' . self::suggested_bearer_token(),
-			'CODEX_RUNTIME_REQUEST_TIMEOUT=60',
-			'CODEX_RUNTIME_TURN_TIMEOUT=300',
-			'CODEX_RUNTIME_LOGIN_TIMEOUT=1800',
+			'# Optional: set CODEX_WP_BEARER_TOKEN only when app-server is started with WebSocket auth.',
+			'# CODEX_WP_BEARER_TOKEN=' . self::suggested_bearer_token(),
 		];
 
 		return implode( "\n", $lines ) . "\n";

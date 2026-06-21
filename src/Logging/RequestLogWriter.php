@@ -3,12 +3,12 @@
  * Best-effort bridge that records Codex generations into the WordPress AI
  * plugin's "AI Request Logging" experiment.
  *
- * @package AIProviderForCodex
+ * @package HtperkinsAIProviderForCodex
  */
 
 declare( strict_types=1 );
 
-namespace AIProviderForCodex\Logging;
+namespace Htperkins\AIProviderForCodex\Logging;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -18,7 +18,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Maps a Codex generation outcome to the AI plugin's request-log shape and
  * writes it through that plugin's log manager when the experiment is active.
  *
- * The codex provider reaches its sidecar over its own loopback HTTP client and
+ * The codex provider reaches its local runtime over its own loopback client and
  * therefore never passes through the SDK HTTP transporter that the experiment
  * decorates — so its requests are invisible to the Request Log. This bridge
  * re-adds codex calls (successes *and* failures) from the provider's own call
@@ -198,7 +198,7 @@ final class RequestLogWriter {
 		 *
 		 * @param callable|null $default Default sink (AI-plugin log manager), or null when unavailable.
 		 */
-		$sink = apply_filters( 'codex_provider_request_log_sink', $default );
+		$sink = apply_filters( 'htperkins_aipfc_request_log_sink', $default );
 
 		return is_callable( $sink ) ? $sink : null;
 	}

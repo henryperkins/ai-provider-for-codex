@@ -2,12 +2,12 @@
 /**
  * Model metadata directory.
  *
- * @package AIProviderForCodex
+ * @package HtperkinsAIProviderForCodex
  */
 
 declare( strict_types=1 );
 
-namespace AIProviderForCodex\Provider;
+namespace Htperkins\AIProviderForCodex\Provider;
 
 use WordPress\AiClient\Common\Exception\InvalidArgumentException;
 use WordPress\AiClient\Files\Enums\FileTypeEnum;

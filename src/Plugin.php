@@ -2,23 +2,23 @@
 /**
  * Main plugin wiring.
  *
- * @package AIProviderForCodex
+ * @package HtperkinsAIProviderForCodex
  */
 
 declare( strict_types=1 );
 
-namespace AIProviderForCodex;
+namespace Htperkins\AIProviderForCodex;
 
-use AIProviderForCodex\Auth\ConnectionRefreshScheduler;
-use AIProviderForCodex\Admin\ConnectorApprovalIntegration;
-use AIProviderForCodex\Admin\ConnectorsIntegration;
-use AIProviderForCodex\Admin\SiteSettings;
-use AIProviderForCodex\Admin\UserConnectionPage;
-use AIProviderForCodex\Database\Installer;
-use AIProviderForCodex\Provider\ModelCatalogState;
-use AIProviderForCodex\REST\ConnectController;
-use AIProviderForCodex\REST\DiagnosticsController;
-use AIProviderForCodex\REST\StatusController;
+use Htperkins\AIProviderForCodex\Auth\ConnectionRefreshScheduler;
+use Htperkins\AIProviderForCodex\Admin\ConnectorApprovalIntegration;
+use Htperkins\AIProviderForCodex\Admin\ConnectorsIntegration;
+use Htperkins\AIProviderForCodex\Admin\SiteSettings;
+use Htperkins\AIProviderForCodex\Admin\UserConnectionPage;
+use Htperkins\AIProviderForCodex\Database\Installer;
+use Htperkins\AIProviderForCodex\Provider\ModelCatalogState;
+use Htperkins\AIProviderForCodex\REST\ConnectController;
+use Htperkins\AIProviderForCodex\REST\DiagnosticsController;
+use Htperkins\AIProviderForCodex\REST\StatusController;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -47,9 +47,9 @@ final class Plugin {
 		add_action( 'admin_enqueue_scripts', [ ConnectorsIntegration::class, 'enqueue_connectors_assets' ] );
 		add_action( 'admin_enqueue_scripts', [ ConnectorsIntegration::class, 'maybe_override_ai_image_generation_support' ], 20 );
 		add_action( 'enqueue_block_editor_assets', [ ConnectorsIntegration::class, 'maybe_override_ai_image_generation_support' ], 20 );
-		add_filter( 'script_module_data_scriptorium-ai-provider-for-codex/connectors', [ ConnectorsIntegration::class, 'script_module_data' ] );
-		add_filter( 'script_module_data_scriptorium-ai-provider-for-codex/user-connection', [ UserConnectionPage::class, 'script_module_data' ] );
-		add_filter( 'script_module_data_scriptorium-ai-provider-for-codex/diagnostics', [ SiteSettings::class, 'script_module_data' ] );
+		add_filter( 'script_module_data_htperkins-ai-provider-for-codex/connectors', [ ConnectorsIntegration::class, 'script_module_data' ] );
+		add_filter( 'script_module_data_htperkins-ai-provider-for-codex/user-connection', [ UserConnectionPage::class, 'script_module_data' ] );
+		add_filter( 'script_module_data_htperkins-ai-provider-for-codex/diagnostics', [ SiteSettings::class, 'script_module_data' ] );
 		add_action( 'options-connectors_init', [ ConnectorsIntegration::class, 'enqueue_connectors_boot_module' ] );
 		add_action( 'options-connectors-wp-admin_init', [ ConnectorsIntegration::class, 'enqueue_connectors_boot_module' ] );
 		add_action( 'wp_connectors_init', [ ConnectorsIntegration::class, 'register_connector_metadata' ] );
@@ -71,7 +71,7 @@ final class Plugin {
 		add_action( 'admin_notices', [ ConnectorsIntegration::class, 'maybe_render_setup_notice' ] );
 		add_action( 'admin_notices', [ ConnectorsIntegration::class, 'maybe_render_unlinked_notice' ] );
 		add_action( 'admin_enqueue_scripts', [ ConnectorsIntegration::class, 'maybe_enqueue_dismiss_script' ] );
-		add_action( 'wp_ajax_codex_provider_dismiss_notice', [ ConnectorsIntegration::class, 'ajax_dismiss_notice' ] );
+		add_action( 'wp_ajax_htperkins_aipfc_dismiss_notice', [ ConnectorsIntegration::class, 'ajax_dismiss_notice' ] );
 	}
 
 	/**

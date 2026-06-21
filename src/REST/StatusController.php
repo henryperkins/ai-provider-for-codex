@@ -2,14 +2,14 @@
 /**
  * Local readiness REST endpoint.
  *
- * @package AIProviderForCodex
+ * @package HtperkinsAIProviderForCodex
  */
 
 declare( strict_types=1 );
 
-namespace AIProviderForCodex\REST;
+namespace Htperkins\AIProviderForCodex\REST;
 
-use AIProviderForCodex\Provider\SupportChecks;
+use Htperkins\AIProviderForCodex\Provider\SupportChecks;
 use WP_REST_Response;
 
 /**
@@ -24,7 +24,7 @@ final class StatusController {
 	 */
 	public static function register_routes(): void {
 		register_rest_route(
-			'codex-provider/v1',
+			'htperkins-aipfc/v1',
 			'/status',
 			[
 				'methods'             => 'GET',

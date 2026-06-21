@@ -247,12 +247,12 @@ sync_wordpress_runtime_settings() {
 		wp_cmd+=(--allow-root)
 	fi
 
-	if ! "${wp_cmd[@]}" option update codex_runtime_base_url "${RUNTIME_BASE_URL}" >/dev/null; then
-		printf 'Warning: failed to sync codex_runtime_base_url in %s.\n' "${wordpress_root}" >&2
+	if ! "${wp_cmd[@]}" option update htperkins_aipfc_runtime_base_url "${RUNTIME_BASE_URL}" >/dev/null; then
+		printf 'Warning: failed to sync htperkins_aipfc_runtime_base_url in %s.\n' "${wordpress_root}" >&2
 	fi
 
-	if ! "${wp_cmd[@]}" option update codex_runtime_bearer_token "${TOKEN}" >/dev/null; then
-		printf 'Warning: failed to sync codex_runtime_bearer_token in %s.\n' "${wordpress_root}" >&2
+	if ! "${wp_cmd[@]}" option update htperkins_aipfc_runtime_bearer_token "${TOKEN}" >/dev/null; then
+		printf 'Warning: failed to sync htperkins_aipfc_runtime_bearer_token in %s.\n' "${wordpress_root}" >&2
 	fi
 }
 

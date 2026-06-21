@@ -1,6 +1,6 @@
 # Codex WordPress Sidecar
 
-Local runtime service for `scriptorium-ai-provider-for-codex`.
+Local runtime service for `ai-provider-for-codex`.
 
 It wraps `codex app-server`, stores per-user ChatGPT/Codex auth state on disk, and exposes a localhost-only HTTP API for the WordPress plugin. Text-to-image generation is available through this sidecar only when the connected user's Codex runtime reports image-generation capability.
 
@@ -13,8 +13,8 @@ It wraps `codex app-server`, stores per-user ChatGPT/Codex auth state on disk, a
 ## Recommended Quick Start
 
 1. On the same host as WordPress, confirm Python 3.11+ and the `codex` CLI are installed.
-2. Copy `sidecar/systemd/codex-wp-sidecar.service` to `/etc/systemd/system/codex-wp-sidecar.service` and replace `/path/to/wp-content/plugins/scriptorium-ai-provider-for-codex` with the installed plugin directory.
-3. Create `/etc/codex-wp-sidecar.env` with the environment values below, then enable and start the service.
+2. Install the sidecar runtime as a local `codex-wp-sidecar` command.
+3. Create `/etc/codex-wp-sidecar.env` with the environment values below, then create a systemd service from the snippet shown in `Settings > Codex Provider`.
 4. In WordPress, open `Settings > Codex Provider`. If the values were not auto-detected, enter them manually.
 5. Open `Settings > Connectors` and confirm Codex reports a healthy local runtime.
 6. Each user finishes setup from `Users > Codex Provider` by connecting their own account.
@@ -39,10 +39,9 @@ python3 sidecar/app/main.py
 
 ## Install As A systemd Service
 
-This is the recommended path for most installs. The included
-`sidecar/systemd/codex-wp-sidecar.service` file is a template; replace the
-placeholder plugin path with the real installed plugin directory before copying
-it into `/etc/systemd/system/`.
+This is the recommended path for most installs. The WordPress plugin's
+`Settings > Codex Provider` screen renders a systemd unit snippet for an
+externally installed `codex-wp-sidecar` command.
 
 Create `/etc/codex-wp-sidecar.env` with values similar to:
 

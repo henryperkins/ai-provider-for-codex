@@ -1,6 +1,6 @@
 # WordPress.org Submission Readiness Checklist
 
-This checklist is specific to `scriptorium-ai-provider-for-codex`.
+This checklist is specific to `ai-provider-for-codex`.
 
 Use it before submitting a zip to the WordPress.org plugin directory and again before publishing the first approved SVN release.
 
@@ -16,7 +16,7 @@ Version and requirement references refreshed: 2026-06-08
 - `[pass]` A release-specific packaging step now builds a submission zip that excludes dev-only and local artifact files
 - `[pass]` The public readme now documents the external service/runtime requirement, Terms of Use, privacy, and data handling
 - `[pass]` A standalone GPL-2.0-or-later LICENSE file is present in the project root
-- `[pass]` The release zip includes `sidecar/` so the readme installation instructions work from the installed plugin directory
+- `[pass]` The release zip excludes the local sidecar directory; the readme and settings screen describe the separately installed local runtime.
 - `[pass]` The plugin was renamed to lead with `Scriptorium` so the display name no longer leads with `Codex`; `Codex` now appears only as a descriptive reference. The slug intentionally keeps the `codex` token for continuity. Confirm the residual descriptive use is acceptable at submission time.
 - `[verify at submission time]` `Tested up to: 7.0` is reasonable right now, but it must be re-checked against the current stable or release-candidate WordPress version on submission day
 
@@ -41,8 +41,8 @@ Repo notes:
 
 Repo notes:
 
-- The current display name is `Scriptorium AI Provider for Codex` in [`scriptorium-ai-provider-for-codex.php`](./scriptorium-ai-provider-for-codex.php).
-- The current text domain is `scriptorium-ai-provider-for-codex` in [`scriptorium-ai-provider-for-codex.php`](./scriptorium-ai-provider-for-codex.php).
+- The current display name is `Scriptorium AI Provider for Codex` in [`ai-provider-for-codex.php`](./ai-provider-for-codex.php).
+- The current text domain is `ai-provider-for-codex` in [`ai-provider-for-codex.php`](./ai-provider-for-codex.php).
 - The name was renamed to lead with `Scriptorium`, so it no longer leads with `Codex`; the residual `Codex` reference is descriptive, which lowers what was previously one of the highest review-risk items.
 
 ## 3. Main Plugin Headers And Readme Metadata
@@ -57,11 +57,11 @@ Repo notes:
 
 Repo notes:
 
-- `Version: 0.1.5` in [`scriptorium-ai-provider-for-codex.php`](./scriptorium-ai-provider-for-codex.php)
+- `Version: 0.1.5` in [`ai-provider-for-codex.php`](./ai-provider-for-codex.php)
 - `Stable tag: 0.1.5` in [`readme.txt`](./readme.txt)
-- `Text Domain: scriptorium-ai-provider-for-codex` in [`scriptorium-ai-provider-for-codex.php`](./scriptorium-ai-provider-for-codex.php)
-- `Requires at least: 7.0` in [`scriptorium-ai-provider-for-codex.php`](./scriptorium-ai-provider-for-codex.php)
-- `Requires PHP: 7.4` in [`scriptorium-ai-provider-for-codex.php`](./scriptorium-ai-provider-for-codex.php)
+- `Text Domain: ai-provider-for-codex` in [`ai-provider-for-codex.php`](./ai-provider-for-codex.php)
+- `Requires at least: 7.0` in [`ai-provider-for-codex.php`](./ai-provider-for-codex.php)
+- `Requires PHP: 7.4` in [`ai-provider-for-codex.php`](./ai-provider-for-codex.php)
 - `Tested up to: 7.0` in [`readme.txt`](./readme.txt)
 
 ## 4. Public Documentation Quality
@@ -102,9 +102,9 @@ Repo notes:
 
 Repo notes:
 
-- The plugin includes activation and uninstall hooks in [`scriptorium-ai-provider-for-codex.php`](./scriptorium-ai-provider-for-codex.php) and [`uninstall.php`](./uninstall.php).
-- The sidecar runtime is real and implemented in [`sidecar/app/main.py`](./sidecar/app/main.py).
-- The release zip includes [`sidecar/`](./sidecar), including the Python runtime and systemd template. Shell installer scripts are excluded because Plugin Check reports `.sh` files as disallowed application files.
+- The plugin includes activation and uninstall hooks in [`ai-provider-for-codex.php`](./ai-provider-for-codex.php) and [`uninstall.php`](./uninstall.php).
+- The sidecar runtime is real and implemented in this source checkout at [`sidecar/app/main.py`](./sidecar/app/main.py), but that Python source is not part of the WordPress.org plugin zip.
+- The release zip excludes [`sidecar/`](./sidecar). The shipped plugin provides copy-paste setup snippets and documents that the local runtime is installed separately.
 - The plugin depends on WordPress 7.0+ with AI Client SDK 1.0+; if the standalone WordPress AI plugin provides the client, WordPress AI plugin 1.0+ is required.
 
 ## 7. Security And WordPress Coding Expectations
@@ -135,14 +135,13 @@ Repo notes:
 
 Current packaged zip includes:
 
-- [`scriptorium-ai-provider-for-codex.php`](./scriptorium-ai-provider-for-codex.php)
+- [`ai-provider-for-codex.php`](./ai-provider-for-codex.php)
 - [`readme.txt`](./readme.txt)
 - [`uninstall.php`](./uninstall.php)
 - [`LICENSE`](./LICENSE)
 - [`src/`](./src)
 - [`assets/`](./assets)
 - [`languages/`](./languages)
-- [`sidecar/`](./sidecar)
 
 Current packager excludes:
 
@@ -160,7 +159,7 @@ Current packager excludes:
 - [`LOCAL-SIDECAR-SPEC.md`](./LOCAL-SIDECAR-SPEC.md)
 - [`PLUGIN-SUBMISSION-READINESS-CHECKLIST.md`](./PLUGIN-SUBMISSION-READINESS-CHECKLIST.md)
 - [`scripts/`](./scripts)
-- [`sidecar/scripts/`](./sidecar/scripts)
+- [`sidecar/`](./sidecar)
 - [`vendor/`](./vendor)
 - [`package-lock.json`](./package-lock.json)
 - Python build artifacts (`__pycache__`, `*.pyc`, `*.pyo`)
@@ -179,7 +178,7 @@ Repo notes:
 
 - Local verification currently passes using [`scripts/verify.sh`](./scripts/verify.sh).
 - The verification script covers text generation through the default loopback runtime URL so regressions caused by `wp_safe_remote_request()` rejecting `http://127.0.0.1:4317` are caught before release.
-- A release-style zip currently builds successfully at `../plugin-builds/scriptorium-ai-provider-for-codex-0.1.5.zip`.
+- A release-style zip currently builds successfully at `../plugin-builds/ai-provider-for-codex-0.1.5.zip`.
 - Plugin Check 1.9.0 is installed on this site and `WP_PATH=/home/dev/wp-hperkins-com bash scripts/plugin-check-release.sh` currently reports no findings.
 
 ## 10. Submission Packet

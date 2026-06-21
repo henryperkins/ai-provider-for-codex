@@ -3,23 +3,52 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WP_PATH="${WP_PATH:-/home/hperkins-wp/htdocs/wp.hperkins.com}"
+PLUGIN_SLUG="ai-provider-for-codex"
+PLUGIN_MAIN_FILE="$ROOT_DIR/ai-provider-for-codex.php"
+OLD_TEXT_DOMAIN="scriptorium-ai-provider-for-codex"
+
+if [[ ! -f "$PLUGIN_MAIN_FILE" ]]; then
+	echo "The main plugin file must match the assigned WordPress.org slug: ai-provider-for-codex.php." >&2
+	exit 1
+fi
+
+plugin_text_domain="$(
+	sed -n 's/^ \* Text Domain:[[:space:]]*//p' "$PLUGIN_MAIN_FILE" | head -n 1
+)"
+
+if [[ "$plugin_text_domain" != "$PLUGIN_SLUG" ]]; then
+	echo "Text Domain must match the assigned WordPress.org slug: $PLUGIN_SLUG." >&2
+	echo "  Found: ${plugin_text_domain:-<missing>}" >&2
+	exit 1
+fi
+
+if grep -R ",[[:space:]]*['\"]${OLD_TEXT_DOMAIN}['\"]" \
+	"$PLUGIN_MAIN_FILE" "$ROOT_DIR/src" "$ROOT_DIR/uninstall.php" >/dev/null; then
+	echo "Shipping PHP must not use the old ${OLD_TEXT_DOMAIN} gettext domain." >&2
+	exit 1
+fi
 
 while IFS= read -r -d '' file; do
 	php -l "$file" >/dev/null
 done < <(find "$ROOT_DIR" -type f -name '*.php' -not -path '*/vendor/*' -print0)
 
-for release_exclusion in "/docs" "/sidecar/scripts"; do
+for release_exclusion in "/docs" "/sidecar"; do
 	if ! grep -Fxq "$release_exclusion" "$ROOT_DIR/scripts/release-exclude.txt"; then
 		echo "scripts/release-exclude.txt must exclude $release_exclusion from release zips." >&2
 		exit 1
 	fi
 done
 
+if ! grep -Fxq "/sidecar" "$ROOT_DIR/.distignore"; then
+	echo ".distignore must exclude /sidecar from WordPress.org release zips." >&2
+	exit 1
+fi
+
 plugin_check_excludes="$(
 	sed -n 's/^EXCLUDE_DIRECTORIES="\([^"]*\)".*/\1/p' "$ROOT_DIR/scripts/plugin-check-release.sh" | head -n 1
 )"
 
-for plugin_check_exclusion in "docs" "sidecar/scripts"; do
+for plugin_check_exclusion in "docs" "sidecar"; do
 	case ",$plugin_check_excludes," in
 		*,"$plugin_check_exclusion",*) ;;
 		*)
@@ -52,7 +81,7 @@ if [[ "$locked_ai_client_version" != dev-* ]] && ! php -r 'exit(version_compare(
 fi
 
 plugin_requires_wp="$(
-	sed -n 's/^ \* Requires at least:[[:space:]]*//p' "$ROOT_DIR/scriptorium-ai-provider-for-codex.php" | head -n 1
+	sed -n 's/^ \* Requires at least:[[:space:]]*//p' "$ROOT_DIR/ai-provider-for-codex.php" | head -n 1
 )"
 readme_requires_wp="$(
 	sed -n 's/^Requires at least:[[:space:]]*//p' "$ROOT_DIR/readme.txt" | head -n 1
@@ -60,13 +89,13 @@ readme_requires_wp="$(
 readiness_checklist="$ROOT_DIR/PLUGIN-SUBMISSION-READINESS-CHECKLIST.md"
 
 if [[ -z "$plugin_requires_wp" ]]; then
-	echo "scriptorium-ai-provider-for-codex.php must declare a Requires at least header." >&2
+	echo "ai-provider-for-codex.php must declare a Requires at least header." >&2
 	exit 1
 fi
 
 if [[ "$plugin_requires_wp" != "$readme_requires_wp" ]]; then
-	echo "scriptorium-ai-provider-for-codex.php and readme.txt must declare the same Requires at least value." >&2
-	echo "  scriptorium-ai-provider-for-codex.php: $plugin_requires_wp" >&2
+	echo "ai-provider-for-codex.php and readme.txt must declare the same Requires at least value." >&2
+	echo "  ai-provider-for-codex.php: $plugin_requires_wp" >&2
 	echo "  readme.txt: $readme_requires_wp" >&2
 	exit 1
 fi
@@ -85,12 +114,12 @@ fi
 # the /healthz payload, and server_version). These are not derived from the
 # plugin header, so guard against the drift that shipped at 0.1.4.
 plugin_version="$(
-	sed -n 's/^ \* Version:[[:space:]]*//p' "$ROOT_DIR/scriptorium-ai-provider-for-codex.php" | head -n 1
+	sed -n 's/^ \* Version:[[:space:]]*//p' "$ROOT_DIR/ai-provider-for-codex.php" | head -n 1
 )"
 sidecar_main="$ROOT_DIR/sidecar/app/main.py"
 
 if [[ -z "$plugin_version" ]]; then
-	echo "scriptorium-ai-provider-for-codex.php must declare a Version header." >&2
+	echo "ai-provider-for-codex.php must declare a Version header." >&2
 	exit 1
 fi
 
@@ -116,4 +145,5 @@ node --test "$ROOT_DIR/assets/diagnostics.test.mjs"
 python3 "$ROOT_DIR/sidecar/scripts/test-token-usage.py"
 python3 "$ROOT_DIR/sidecar/scripts/test-diagnostics.py"
 python3 "$ROOT_DIR/sidecar/scripts/test-image-generation.py"
-wp --path="$WP_PATH" eval-file "$ROOT_DIR/scripts/verify.php"
+php "$ROOT_DIR/scripts/test-websocket-frame.php"
+wp --path="$WP_PATH" --skip-plugins=scriptorium-ai-provider-for-codex eval-file "$ROOT_DIR/scripts/verify.php"

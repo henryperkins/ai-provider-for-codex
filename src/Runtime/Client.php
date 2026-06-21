@@ -2,12 +2,12 @@
 /**
  * Local runtime HTTP client.
  *
- * @package AIProviderForCodex
+ * @package HtperkinsAIProviderForCodex
  */
 
 declare( strict_types=1 );
 
-namespace AIProviderForCodex\Runtime;
+namespace Htperkins\AIProviderForCodex\Runtime;
 
 use RuntimeException;
 
@@ -55,7 +55,7 @@ final class Client {
 	}
 
 	/**
-	 * Runs the sidecar's read-only diagnostics without touching the health cache.
+	 * Runs the runtime's read-only diagnostics without touching the health cache.
 	 *
 	 * @return array<string,mixed>
 	 */
@@ -78,17 +78,21 @@ final class Client {
 		$base_url = Settings::get_base_url();
 
 		if ( '' === $base_url ) {
-			throw self::runtime_exception( esc_html__( 'The Codex runtime URL is not configured.', 'scriptorium-ai-provider-for-codex' ) );
+			throw self::runtime_exception( esc_html__( 'The Codex runtime URL is not configured.', 'ai-provider-for-codex' ) );
 		}
 
 		if ( ! Settings::has_required_configuration() ) {
-			throw self::runtime_exception( esc_html__( 'The local Codex runtime settings are incomplete.', 'scriptorium-ai-provider-for-codex' ) );
+			throw self::runtime_exception( esc_html__( 'The local Codex runtime settings are incomplete.', 'ai-provider-for-codex' ) );
+		}
+
+		if ( AppServerClient::supports_url( $base_url ) ) {
+			return $this->request_app_server( $method, $path, $body, $record_health );
 		}
 
 		$body_json = [] === $body ? '' : wp_json_encode( $body );
 
 		if ( false === $body_json ) {
-			throw self::runtime_exception( esc_html__( 'The runtime request body could not be encoded as JSON.', 'scriptorium-ai-provider-for-codex' ) );
+			throw self::runtime_exception( esc_html__( 'The runtime request body could not be encoded as JSON.', 'ai-provider-for-codex' ) );
 		}
 
 		$url = $base_url . $path;
@@ -157,9 +161,9 @@ final class Client {
 
 			if ( JSON_ERROR_NONE !== json_last_error() ) {
 				if ( $record_health ) {
-					HealthMonitor::record_failure( __( 'The local Codex runtime returned invalid JSON.', 'scriptorium-ai-provider-for-codex' ) );
+					HealthMonitor::record_failure( __( 'The local Codex runtime returned invalid JSON.', 'ai-provider-for-codex' ) );
 				}
-				throw self::runtime_exception( esc_html__( 'The local Codex runtime returned invalid JSON.', 'scriptorium-ai-provider-for-codex' ) );
+				throw self::runtime_exception( esc_html__( 'The local Codex runtime returned invalid JSON.', 'ai-provider-for-codex' ) );
 			}
 		}
 
@@ -195,6 +199,64 @@ final class Client {
 	}
 
 	/**
+	 * Routes legacy runtime paths to a direct Codex app-server session.
+	 *
+	 * @param string              $method HTTP-like method.
+	 * @param string              $path Runtime path.
+	 * @param array<string,mixed> $body Request body.
+	 * @param bool                $record_health Whether to update health cache.
+	 * @return array<string,mixed>
+	 */
+	private function request_app_server( string $method, string $path, array $body, bool $record_health ): array {
+		$app_server = new AppServerClient();
+
+		try {
+			if ( 'GET' === $method && in_array( $path, [ '/healthz', '/ping' ], true ) ) {
+				$response = $app_server->health();
+			} elseif ( 'GET' === $method && '/v1/diagnostics' === $path ) {
+				$response = $app_server->diagnostics();
+			} elseif ( 'GET' === $method && '/v1/account/snapshot' === $path ) {
+				$response = $app_server->account_snapshot();
+			} elseif ( 'POST' === $method && '/v1/responses/text' === $path ) {
+				$response = $app_server->generate_text( $body );
+			} elseif ( 'POST' === $method && '/v1/responses/image' === $path ) {
+				$response = $app_server->generate_image( $body );
+			} elseif ( 'POST' === $method && '/v1/session/clear' === $path ) {
+				$response = [ 'ok' => true ];
+			} else {
+				throw self::runtime_exception( sprintf( 'Unsupported Codex app-server runtime path: %s %s', $method, $path ) );
+			}
+		} catch ( RuntimeRequestException $exception ) {
+			throw $exception;
+		} catch ( RuntimeException $exception ) {
+			if ( $record_health ) {
+				HealthMonitor::record_failure( $exception->getMessage() );
+			}
+
+			// phpcs:disable WordPress.Security.EscapeOutput.ExceptionNotEscaped -- App-server exception payload is rendered through escaped admin notices, not direct output.
+			throw new RuntimeRequestException(
+				esc_html( sanitize_text_field( $exception->getMessage() ) ),
+				500,
+				'app_server_error',
+				$exception->getMessage(),
+				[
+					'error' => [
+						'code'    => 'app_server_error',
+						'message' => $exception->getMessage(),
+					],
+				]
+			);
+			// phpcs:enable WordPress.Security.EscapeOutput.ExceptionNotEscaped
+		}
+
+		if ( $record_health ) {
+			HealthMonitor::record_success();
+		}
+
+		return $response;
+	}
+
+	/**
 	 * Returns the timeout to use for a runtime request.
 	 *
 	 * @param string $method HTTP method.
@@ -216,7 +278,7 @@ final class Client {
 		 * @param string $url Fully qualified request URL.
 		 */
 		$timeout = (int) apply_filters(
-			'codex_provider_runtime_request_timeout',
+			'htperkins_aipfc_runtime_request_timeout',
 			$timeout,
 			$method,
 			$path,
@@ -272,7 +334,7 @@ final class Client {
 		if ( '' !== $caller ) {
 			return sprintf(
 				/* translators: 1: connector ID, 2: plugin or theme basename. */
-				__( 'WordPress AI Connector Approval blocked the %1$s local-runtime request for %2$s. Open Tools > Connector Approvals and approve that caller for the Codex connector, or deactivate the Connector Approval experiment.', 'scriptorium-ai-provider-for-codex' ),
+				__( 'WordPress AI Connector Approval blocked the %1$s local-runtime request for %2$s. Open Tools > Connector Approvals and approve that caller for the Codex connector, or deactivate the Connector Approval experiment.', 'ai-provider-for-codex' ),
 				$connector_id,
 				$caller
 			);
@@ -280,7 +342,7 @@ final class Client {
 
 		return sprintf(
 			/* translators: %s: connector ID. */
-			__( 'WordPress AI Connector Approval blocked the %s local-runtime request. Open Tools > Connector Approvals and approve the pending caller for the Codex connector, or deactivate the Connector Approval experiment.', 'scriptorium-ai-provider-for-codex' ),
+			__( 'WordPress AI Connector Approval blocked the %s local-runtime request. Open Tools > Connector Approvals and approve the pending caller for the Codex connector, or deactivate the Connector Approval experiment.', 'ai-provider-for-codex' ),
 			$connector_id
 		);
 	}
@@ -312,8 +374,8 @@ final class Client {
 			return sprintf(
 				/* translators: %s: runtime host and port. */
 				__(
-					'The local Codex runtime is not reachable at %s. Start the sidecar service there, or update the Runtime URL if the service is listening on a different address.',
-					'scriptorium-ai-provider-for-codex'
+					'The local Codex runtime is not reachable at %s. Start codex app-server there, or update the Runtime URL if the service is listening on a different address.',
+					'ai-provider-for-codex'
 				),
 				$target
 			);
@@ -328,7 +390,7 @@ final class Client {
 				/* translators: 1: timeout in seconds, 2: runtime host and port */
 				__(
 					'The local Codex runtime request timed out after %1$d seconds while contacting %2$s. Increase the runtime request timeout if longer generations are expected.',
-					'scriptorium-ai-provider-for-codex'
+					'ai-provider-for-codex'
 				),
 				$timeout,
 				$target
@@ -352,8 +414,8 @@ final class Client {
 
 		if ( 'auth_required' === $runtime_error_code ) {
 			return __(
-				'The local Codex runtime no longer has a stored ChatGPT or Codex login for your WordPress account. Reconnect your account to refresh billing and model access.',
-				'scriptorium-ai-provider-for-codex'
+				'The local Codex runtime does not have stored ChatGPT or Codex auth. Run codex login for the service user that starts app-server, then restart the service.',
+				'ai-provider-for-codex'
 			);
 		}
 
@@ -363,22 +425,22 @@ final class Client {
 				|| self::string_contains( $lower, 'missing bearer token' )
 			) {
 				return __(
-					'The local Codex runtime rejected the shared bearer token. Make sure Settings > Codex Provider uses the same raw token value as CODEX_WP_BEARER_TOKEN in the sidecar, and paste only the token itself instead of a full Authorization header.',
-					'scriptorium-ai-provider-for-codex'
+					'The local Codex runtime rejected the shared bearer token. If app-server is started with WebSocket auth, make sure Settings > Codex Provider uses the same raw token value as CODEX_WP_BEARER_TOKEN, and paste only the token itself instead of a full Authorization header.',
+					'ai-provider-for-codex'
 				);
 			}
 
 			if ( self::string_contains( $lower, 'bearer token is not configured' ) ) {
 				return __(
-					'The local Codex runtime is missing its shared bearer token. Set CODEX_WP_BEARER_TOKEN for the sidecar and the matching Runtime bearer token in WordPress.',
-					'scriptorium-ai-provider-for-codex'
+					'The local Codex runtime is missing its shared bearer token. Set CODEX_WP_BEARER_TOKEN for app-server and the matching Runtime bearer token in WordPress, or remove the token from WordPress if app-server is not using WebSocket auth.',
+					'ai-provider-for-codex'
 				);
 			}
 
 			if ( self::string_contains( $lower, 'only accepts local connections' ) ) {
 				return __(
-					'The local Codex runtime only accepts requests from the same host. Run the sidecar on the WordPress host or point the Runtime URL at a local address.',
-					'scriptorium-ai-provider-for-codex'
+					'The local Codex runtime only accepts requests from the same host. Run codex app-server on the WordPress host or point the Runtime URL at a local address.',
+					'ai-provider-for-codex'
 				);
 			}
 		}

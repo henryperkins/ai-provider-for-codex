@@ -2,14 +2,14 @@
 /**
  * Scheduled refresh for local Codex account snapshots.
  *
- * @package AIProviderForCodex
+ * @package HtperkinsAIProviderForCodex
  */
 
 declare( strict_types=1 );
 
-namespace AIProviderForCodex\Auth;
+namespace Htperkins\AIProviderForCodex\Auth;
 
-use AIProviderForCodex\Runtime\Settings;
+use Htperkins\AIProviderForCodex\Runtime\Settings;
 use RuntimeException;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 final class ConnectionRefreshScheduler {
 
-	public const HOOK = 'codex_provider_refresh_connection_snapshots';
+	public const HOOK = 'htperkins_aipfc_refresh_connection_snapshots';
 
 	/**
 	 * Registers WordPress hooks for scheduled snapshot refreshes.

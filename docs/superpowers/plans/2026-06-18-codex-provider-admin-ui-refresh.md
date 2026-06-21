@@ -61,9 +61,9 @@
   $codex_provider_assert( false !== strpos( $codex_provider_site_settings_source, 'AdminPageStyle::css()' ), 'Site settings should use the shared Connectors-like admin page CSS helper.' );
   $codex_provider_assert( false !== strpos( $codex_provider_user_page_source, 'AdminPageStyle::css()' ), 'User connection page should use the shared Connectors-like admin page CSS helper.' );
   $codex_provider_assert( false !== strpos( $codex_provider_admin_style_source, 'final class AdminPageStyle' ), 'Shared admin page style helper should be available.' );
-  $codex_provider_assert( false !== strpos( $codex_provider_admin_style_source, 'settings_page_scriptorium-ai-provider-for-codex' ), 'Shared admin CSS should scope white-surface rules to the settings page body class.' );
-  $codex_provider_assert( false !== strpos( $codex_provider_admin_style_source, 'users_page_scriptorium-ai-provider-for-codex' ), 'Shared admin CSS should scope white-surface rules to the users page body class.' );
-  $codex_provider_assert( false !== strpos( $codex_provider_admin_style_source, 'profile_page_scriptorium-ai-provider-for-codex' ), 'Shared admin CSS should include the profile page body class for lower-capability user routing.' );
+  $codex_provider_assert( false !== strpos( $codex_provider_admin_style_source, 'settings_page_ai-provider-for-codex' ), 'Shared admin CSS should scope white-surface rules to the settings page body class.' );
+  $codex_provider_assert( false !== strpos( $codex_provider_admin_style_source, 'users_page_ai-provider-for-codex' ), 'Shared admin CSS should scope white-surface rules to the users page body class.' );
+  $codex_provider_assert( false !== strpos( $codex_provider_admin_style_source, 'profile_page_ai-provider-for-codex' ), 'Shared admin CSS should include the profile page body class for lower-capability user routing.' );
   $codex_provider_assert( false !== strpos( $codex_provider_admin_style_source, 'max-width: 680px' ), 'Shared admin CSS should use the measured Connectors content width.' );
   $codex_provider_assert( false !== strpos( $codex_provider_admin_style_source, 'padding: 24px' ), 'Shared admin CSS should use the measured Connectors desktop shell padding.' );
   $codex_provider_assert( false !== strpos( $codex_provider_admin_style_source, 'padding: 20px' ), 'Shared admin CSS should use the measured Connectors desktop card padding.' );
@@ -94,12 +94,12 @@
   /**
    * Shared Connectors-like admin page styles.
    *
-   * @package AIProviderForCodex
+   * @package HtperkinsAIProviderForCodex
    */
 
   declare( strict_types=1 );
 
-  namespace AIProviderForCodex\Admin;
+  namespace Htperkins\AIProviderForCodex\Admin;
 
   if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -117,30 +117,30 @@
 	 */
 	public static function css(): string {
 		return '
-		body.settings_page_scriptorium-ai-provider-for-codex,
-		body.users_page_scriptorium-ai-provider-for-codex,
-		body.profile_page_scriptorium-ai-provider-for-codex,
-		body.settings_page_scriptorium-ai-provider-for-codex #wpcontent,
-		body.users_page_scriptorium-ai-provider-for-codex #wpcontent,
-		body.profile_page_scriptorium-ai-provider-for-codex #wpcontent,
-		body.settings_page_scriptorium-ai-provider-for-codex #wpbody,
-		body.users_page_scriptorium-ai-provider-for-codex #wpbody,
-		body.profile_page_scriptorium-ai-provider-for-codex #wpbody,
-		body.settings_page_scriptorium-ai-provider-for-codex #wpbody-content,
-		body.users_page_scriptorium-ai-provider-for-codex #wpbody-content,
-		body.profile_page_scriptorium-ai-provider-for-codex #wpbody-content { background: #fff; }
-		body.settings_page_scriptorium-ai-provider-for-codex #wpwrap,
-		body.users_page_scriptorium-ai-provider-for-codex #wpwrap,
-		body.profile_page_scriptorium-ai-provider-for-codex #wpwrap { background: var(--wpds-color-fg-content-neutral, #1e1e1e); }
-		body.settings_page_scriptorium-ai-provider-for-codex #wpcontent,
-		body.users_page_scriptorium-ai-provider-for-codex #wpcontent,
-		body.profile_page_scriptorium-ai-provider-for-codex #wpcontent { padding-inline-start: 0; }
-		body.settings_page_scriptorium-ai-provider-for-codex #wpbody-content,
-		body.users_page_scriptorium-ai-provider-for-codex #wpbody-content,
-		body.profile_page_scriptorium-ai-provider-for-codex #wpbody-content { padding-bottom: 0; }
-		body.settings_page_scriptorium-ai-provider-for-codex #wpfooter,
-		body.users_page_scriptorium-ai-provider-for-codex #wpfooter,
-		body.profile_page_scriptorium-ai-provider-for-codex #wpfooter { display: none; }
+		body.settings_page_ai-provider-for-codex,
+		body.users_page_ai-provider-for-codex,
+		body.profile_page_ai-provider-for-codex,
+		body.settings_page_ai-provider-for-codex #wpcontent,
+		body.users_page_ai-provider-for-codex #wpcontent,
+		body.profile_page_ai-provider-for-codex #wpcontent,
+		body.settings_page_ai-provider-for-codex #wpbody,
+		body.users_page_ai-provider-for-codex #wpbody,
+		body.profile_page_ai-provider-for-codex #wpbody,
+		body.settings_page_ai-provider-for-codex #wpbody-content,
+		body.users_page_ai-provider-for-codex #wpbody-content,
+		body.profile_page_ai-provider-for-codex #wpbody-content { background: #fff; }
+		body.settings_page_ai-provider-for-codex #wpwrap,
+		body.users_page_ai-provider-for-codex #wpwrap,
+		body.profile_page_ai-provider-for-codex #wpwrap { background: var(--wpds-color-fg-content-neutral, #1e1e1e); }
+		body.settings_page_ai-provider-for-codex #wpcontent,
+		body.users_page_ai-provider-for-codex #wpcontent,
+		body.profile_page_ai-provider-for-codex #wpcontent { padding-inline-start: 0; }
+		body.settings_page_ai-provider-for-codex #wpbody-content,
+		body.users_page_ai-provider-for-codex #wpbody-content,
+		body.profile_page_ai-provider-for-codex #wpbody-content { padding-bottom: 0; }
+		body.settings_page_ai-provider-for-codex #wpfooter,
+		body.users_page_ai-provider-for-codex #wpfooter,
+		body.profile_page_ai-provider-for-codex #wpfooter { display: none; }
 
 		.codex-provider-admin-page { color: var(--wpds-color-fg-content-neutral, #1e1e1e); margin: 0; }
 		.codex-provider-admin-page a { color: #2271b1; }
@@ -332,7 +332,7 @@
 
   ```php
   <div class="wrap">
-	<h1><?php esc_html_e( 'Scriptorium AI Provider for Codex', 'scriptorium-ai-provider-for-codex' ); ?></h1>
+	<h1><?php esc_html_e( 'Scriptorium AI Provider for Codex', 'ai-provider-for-codex' ); ?></h1>
   ```
 
   through the closing `</div>` before `<?php` with this structure, reusing the variables already computed at the top of `render_page()`:
@@ -341,8 +341,8 @@
   <div class="wrap codex-provider-admin-page">
 	<div class="codex-provider-shell">
 		<header class="codex-provider-page-header">
-			<h1><?php esc_html_e( 'Codex Provider', 'scriptorium-ai-provider-for-codex' ); ?></h1>
-			<p class="codex-provider-page-subtitle"><?php esc_html_e( 'Configure the local Codex runtime used by this site\'s AI connector.', 'scriptorium-ai-provider-for-codex' ); ?></p>
+			<h1><?php esc_html_e( 'Codex Provider', 'ai-provider-for-codex' ); ?></h1>
+			<p class="codex-provider-page-subtitle"><?php esc_html_e( 'Configure the local Codex runtime used by this site\'s AI connector.', 'ai-provider-for-codex' ); ?></p>
 		</header>
 
 		<?php self::render_notice( $notice ); ?>
@@ -354,15 +354,15 @@
 					<div class="codex-provider-card__identity">
 						<span class="codex-provider-card__icon" aria-hidden="true">C</span>
 						<div>
-							<h2 class="codex-provider-card__title"><?php esc_html_e( 'Runtime', 'scriptorium-ai-provider-for-codex' ); ?></h2>
-							<p class="codex-provider-card__description"><?php esc_html_e( 'Local sidecar status and diagnostics.', 'scriptorium-ai-provider-for-codex' ); ?></p>
+							<h2 class="codex-provider-card__title"><?php esc_html_e( 'Runtime', 'ai-provider-for-codex' ); ?></h2>
+							<p class="codex-provider-card__description"><?php esc_html_e( 'Local sidecar status and diagnostics.', 'ai-provider-for-codex' ); ?></p>
 						</div>
 					</div>
 					<div class="codex-provider-card__action">
 						<span class="codex-provider-badge<?php echo esc_attr( $is_configured ? '' : ' is-error' ); ?>">
 							<?php
 							if ( ! $is_configured ) {
-								esc_html_e( 'Not configured', 'scriptorium-ai-provider-for-codex' );
+								esc_html_e( 'Not configured', 'ai-provider-for-codex' );
 							} else {
 								echo esc_html( StatusLabels::runtime_health_label( (string) $runtime_status['status'] ) );
 							}
@@ -376,7 +376,7 @@
 						<span>
 							<?php
 							if ( ! $is_configured ) {
-								esc_html_e( 'Runtime configuration is incomplete.', 'scriptorium-ai-provider-for-codex' );
+								esc_html_e( 'Runtime configuration is incomplete.', 'ai-provider-for-codex' );
 							} else {
 								echo esc_html( StatusLabels::runtime_health_label( (string) $runtime_status['status'] ) );
 							}
@@ -385,23 +385,23 @@
 					</p>
 					<dl class="codex-provider-meta-list">
 						<?php if ( ! empty( $runtime_status['checked_at'] ) ) : ?>
-							<dt><?php esc_html_e( 'Last check', 'scriptorium-ai-provider-for-codex' ); ?></dt>
+							<dt><?php esc_html_e( 'Last check', 'ai-provider-for-codex' ); ?></dt>
 							<dd><?php echo esc_html( StatusLabels::relative_time( (string) $runtime_status['checked_at'] ) ); ?></dd>
 						<?php endif; ?>
 						<?php if ( ! empty( $runtime_status['error'] ) ) : ?>
-							<dt><?php esc_html_e( 'Error', 'scriptorium-ai-provider-for-codex' ); ?></dt>
+							<dt><?php esc_html_e( 'Error', 'ai-provider-for-codex' ); ?></dt>
 							<dd class="codex-provider-error"><?php echo esc_html( (string) $runtime_status['error'] ); ?></dd>
 						<?php endif; ?>
-						<dt><?php esc_html_e( 'Runtime URL', 'scriptorium-ai-provider-for-codex' ); ?></dt>
+						<dt><?php esc_html_e( 'Runtime URL', 'ai-provider-for-codex' ); ?></dt>
 						<dd><?php echo esc_html( (string) $runtime_config['base_url_source'] ); ?></dd>
-						<dt><?php esc_html_e( 'Bearer token', 'scriptorium-ai-provider-for-codex' ); ?></dt>
+						<dt><?php esc_html_e( 'Bearer token', 'ai-provider-for-codex' ); ?></dt>
 						<dd><?php echo esc_html( (string) $runtime_config['bearer_token_source'] ); ?></dd>
 					</dl>
 					<div class="codex-provider-actions">
 						<button type="button" class="button button-secondary" data-codex-diagnostics-run>
-							<?php esc_html_e( 'Check runtime', 'scriptorium-ai-provider-for-codex' ); ?>
+							<?php esc_html_e( 'Check runtime', 'ai-provider-for-codex' ); ?>
 						</button>
-						<a class="button button-secondary" href="<?php echo esc_url( admin_url( 'options-connectors.php' ) ); ?>"><?php esc_html_e( 'Open Connectors', 'scriptorium-ai-provider-for-codex' ); ?></a>
+						<a class="button button-secondary" href="<?php echo esc_url( admin_url( 'options-connectors.php' ) ); ?>"><?php esc_html_e( 'Open Connectors', 'ai-provider-for-codex' ); ?></a>
 					</div>
 					<?php if ( is_array( $last_diagnostic ) ) : ?>
 						<p class="codex-provider-guidance">
@@ -409,14 +409,14 @@
 							echo esc_html(
 								SafeFormat::sprintf(
 									/* translators: 1: pass/fail summary, 2: relative time. */
-									__( 'Last diagnostics check: %1$s (%2$s).', 'scriptorium-ai-provider-for-codex' ),
+									__( 'Last diagnostics check: %1$s (%2$s).', 'ai-provider-for-codex' ),
 									empty( $last_diagnostic['ok'] )
 										? sprintf(
 											/* translators: %d: number of failed checks. */
-											_n( '%d issue', '%d issues', count( (array) ( $last_diagnostic['failed'] ?? [] ) ), 'scriptorium-ai-provider-for-codex' ),
+											_n( '%d issue', '%d issues', count( (array) ( $last_diagnostic['failed'] ?? [] ) ), 'ai-provider-for-codex' ),
 											count( (array) ( $last_diagnostic['failed'] ?? [] ) )
 										)
-										: __( 'healthy', 'scriptorium-ai-provider-for-codex' ),
+										: __( 'healthy', 'ai-provider-for-codex' ),
 									StatusLabels::relative_time( (string) ( $last_diagnostic['checked_at'] ?? '' ) )
 								)
 							);
@@ -428,36 +428,36 @@
 			</section>
 
 			<form method="post" action="options.php">
-				<?php settings_fields( \AIProviderForCodex\SLUG ); ?>
+				<?php settings_fields( \Htperkins\AIProviderForCodex\SLUG ); ?>
 				<section class="codex-provider-card codex-provider-card--settings">
 					<div class="codex-provider-card__header">
 						<div class="codex-provider-card__identity">
 							<span class="codex-provider-card__icon" aria-hidden="true">R</span>
 							<div>
-								<h2 class="codex-provider-card__title"><?php esc_html_e( 'Runtime settings', 'scriptorium-ai-provider-for-codex' ); ?></h2>
-								<p class="codex-provider-card__description"><?php esc_html_e( 'Shared sidecar endpoint and fallback model catalog.', 'scriptorium-ai-provider-for-codex' ); ?></p>
+								<h2 class="codex-provider-card__title"><?php esc_html_e( 'Runtime settings', 'ai-provider-for-codex' ); ?></h2>
+								<p class="codex-provider-card__description"><?php esc_html_e( 'Shared sidecar endpoint and fallback model catalog.', 'ai-provider-for-codex' ); ?></p>
 							</div>
 						</div>
 					</div>
 					<div class="codex-provider-card__body codex-provider-fields">
 						<div class="codex-provider-field">
-							<label for="<?php echo esc_attr( Settings::OPTION_RUNTIME_BASE_URL ); ?>"><?php esc_html_e( 'Runtime URL', 'scriptorium-ai-provider-for-codex' ); ?></label>
+							<label for="<?php echo esc_attr( Settings::OPTION_RUNTIME_BASE_URL ); ?>"><?php esc_html_e( 'Runtime URL', 'ai-provider-for-codex' ); ?></label>
 							<input class="regular-text code" id="<?php echo esc_attr( Settings::OPTION_RUNTIME_BASE_URL ); ?>" name="<?php echo esc_attr( Settings::OPTION_RUNTIME_BASE_URL ); ?>" type="url" value="<?php echo esc_attr( Settings::get_base_url() ); ?>" <?php disabled( $base_url_locked ); ?> />
-							<p class="description"><?php esc_html_e( 'Base URL for the local Codex runtime, typically http://127.0.0.1:4317.', 'scriptorium-ai-provider-for-codex' ); ?></p>
+							<p class="description"><?php esc_html_e( 'Base URL for the local Codex runtime, typically http://127.0.0.1:4317.', 'ai-provider-for-codex' ); ?></p>
 							<p class="description"><?php echo esc_html( (string) $runtime_config['base_url_source'] ); ?></p>
 						</div>
 						<div class="codex-provider-field">
-							<label for="<?php echo esc_attr( Settings::OPTION_RUNTIME_BEARER ); ?>"><?php esc_html_e( 'Runtime bearer token', 'scriptorium-ai-provider-for-codex' ); ?></label>
-							<input class="regular-text code" id="<?php echo esc_attr( Settings::OPTION_RUNTIME_BEARER ); ?>" name="<?php echo esc_attr( Settings::OPTION_RUNTIME_BEARER ); ?>" type="password" value="<?php echo esc_attr( $bearer_locked ? '' : Settings::get_bearer_token() ); ?>" <?php disabled( $bearer_locked ); ?> autocomplete="off" placeholder="<?php echo esc_attr( $bearer_locked ? __( 'Managed automatically', 'scriptorium-ai-provider-for-codex' ) : '' ); ?>" />
-							<p class="description"><?php esc_html_e( 'Shared raw token used between WordPress and the local runtime.', 'scriptorium-ai-provider-for-codex' ); ?></p>
+							<label for="<?php echo esc_attr( Settings::OPTION_RUNTIME_BEARER ); ?>"><?php esc_html_e( 'Runtime bearer token', 'ai-provider-for-codex' ); ?></label>
+							<input class="regular-text code" id="<?php echo esc_attr( Settings::OPTION_RUNTIME_BEARER ); ?>" name="<?php echo esc_attr( Settings::OPTION_RUNTIME_BEARER ); ?>" type="password" value="<?php echo esc_attr( $bearer_locked ? '' : Settings::get_bearer_token() ); ?>" <?php disabled( $bearer_locked ); ?> autocomplete="off" placeholder="<?php echo esc_attr( $bearer_locked ? __( 'Managed automatically', 'ai-provider-for-codex' ) : '' ); ?>" />
+							<p class="description"><?php esc_html_e( 'Shared raw token used between WordPress and the local runtime.', 'ai-provider-for-codex' ); ?></p>
 							<p class="description"><?php echo esc_html( (string) $runtime_config['bearer_token_source'] ); ?></p>
 						</div>
 						<div class="codex-provider-field">
-							<label for="<?php echo esc_attr( Settings::OPTION_ALLOWED_MODELS ); ?>"><?php esc_html_e( 'Fallback models', 'scriptorium-ai-provider-for-codex' ); ?></label>
+							<label for="<?php echo esc_attr( Settings::OPTION_ALLOWED_MODELS ); ?>"><?php esc_html_e( 'Fallback models', 'ai-provider-for-codex' ); ?></label>
 							<textarea class="large-text code" id="<?php echo esc_attr( Settings::OPTION_ALLOWED_MODELS ); ?>" name="<?php echo esc_attr( Settings::OPTION_ALLOWED_MODELS ); ?>" rows="4"><?php echo esc_textarea( Settings::allowed_models_as_text() ); ?></textarea>
-							<p class="description"><?php esc_html_e( 'One text model ID per line. Used until a user links an account.', 'scriptorium-ai-provider-for-codex' ); ?></p>
+							<p class="description"><?php esc_html_e( 'One text model ID per line. Used until a user links an account.', 'ai-provider-for-codex' ); ?></p>
 							<?php if ( ! empty( $fallback_models ) ) : ?>
-								<div class="codex-provider-models-list" aria-label="<?php esc_attr_e( 'Configured fallback models', 'scriptorium-ai-provider-for-codex' ); ?>">
+								<div class="codex-provider-models-list" aria-label="<?php esc_attr_e( 'Configured fallback models', 'ai-provider-for-codex' ); ?>">
 									<?php foreach ( $fallback_models as $model_id ) : ?>
 										<span class="codex-model-pill"><?php echo esc_html( $model_id ); ?></span>
 									<?php endforeach; ?>
@@ -465,7 +465,7 @@
 							<?php endif; ?>
 						</div>
 						<div class="codex-provider-actions">
-							<?php submit_button( __( 'Save settings', 'scriptorium-ai-provider-for-codex' ), 'primary', 'submit', false ); ?>
+							<?php submit_button( __( 'Save settings', 'ai-provider-for-codex' ), 'primary', 'submit', false ); ?>
 						</div>
 					</div>
 				</section>
@@ -476,19 +476,19 @@
 					<div class="codex-provider-card__identity">
 						<span class="codex-provider-card__icon" aria-hidden="true">S</span>
 						<div>
-							<h2 class="codex-provider-card__title"><?php esc_html_e( 'Setup', 'scriptorium-ai-provider-for-codex' ); ?></h2>
-							<p class="codex-provider-card__description"><?php esc_html_e( 'Install the local sidecar and link each user account.', 'scriptorium-ai-provider-for-codex' ); ?></p>
+							<h2 class="codex-provider-card__title"><?php esc_html_e( 'Setup', 'ai-provider-for-codex' ); ?></h2>
+							<p class="codex-provider-card__description"><?php esc_html_e( 'Install the local sidecar and link each user account.', 'ai-provider-for-codex' ); ?></p>
 						</div>
 					</div>
 				</div>
 				<div class="codex-provider-card__body">
 					<?php self::render_setup_guide(); ?>
 					<details class="codex-provider-details">
-						<summary><?php esc_html_e( 'systemd unit (/etc/systemd/system/codex-wp-sidecar.service)', 'scriptorium-ai-provider-for-codex' ); ?></summary>
+						<summary><?php esc_html_e( 'systemd unit (/etc/systemd/system/codex-wp-sidecar.service)', 'ai-provider-for-codex' ); ?></summary>
 						<textarea class="large-text code" rows="12" readonly><?php echo esc_textarea( SetupSnippets::systemd_unit() ); ?></textarea>
 					</details>
 					<details class="codex-provider-details">
-						<summary><?php esc_html_e( 'Environment file (/etc/codex-wp-sidecar.env)', 'scriptorium-ai-provider-for-codex' ); ?></summary>
+						<summary><?php esc_html_e( 'Environment file (/etc/codex-wp-sidecar.env)', 'ai-provider-for-codex' ); ?></summary>
 						<textarea class="large-text code" rows="10" readonly><?php echo esc_textarea( SetupSnippets::env_file() ); ?></textarea>
 					</details>
 				</div>
@@ -562,11 +562,11 @@
 	'User connection page should no longer render the old loose model section.'
   );
   $codex_provider_assert(
-	false !== strpos( $codex_provider_connection_page_html, 'id="codex_provider_model"' ),
+	false !== strpos( $codex_provider_connection_page_html, 'id="htperkins_aipfc_model"' ),
 	'User connection page should preserve the model selector.'
   );
   $codex_provider_assert(
-	false !== strpos( $codex_provider_connection_page_html, 'name="codex_provider_action" value="set-model"' ),
+	false !== strpos( $codex_provider_connection_page_html, 'name="htperkins_aipfc_action" value="set-model"' ),
 	'User connection page should preserve the set-model form action.'
   );
   ```
@@ -587,7 +587,7 @@
 
   ```php
   <div class="wrap">
-	<h1><?php esc_html_e( 'Codex Provider', 'scriptorium-ai-provider-for-codex' ); ?></h1>
+	<h1><?php esc_html_e( 'Codex Provider', 'ai-provider-for-codex' ); ?></h1>
 
 	<div data-codex-connection-root>
 	<?php self::render_notice( $notice ); ?>
@@ -601,8 +601,8 @@
   <div class="wrap codex-provider-admin-page">
 	<div class="codex-provider-shell" data-codex-connection-root>
 		<header class="codex-provider-page-header">
-			<h1><?php esc_html_e( 'Codex Provider', 'scriptorium-ai-provider-for-codex' ); ?></h1>
-			<p class="codex-provider-page-subtitle"><?php esc_html_e( 'Connect your Codex or ChatGPT account and choose the model used for your requests.', 'scriptorium-ai-provider-for-codex' ); ?></p>
+			<h1><?php esc_html_e( 'Codex Provider', 'ai-provider-for-codex' ); ?></h1>
+			<p class="codex-provider-page-subtitle"><?php esc_html_e( 'Connect your Codex or ChatGPT account and choose the model used for your requests.', 'ai-provider-for-codex' ); ?></p>
 		</header>
 
 		<?php self::render_notice( $notice ); ?>
@@ -623,8 +623,8 @@
 		<div class="codex-provider-card__identity">
 			<span class="codex-provider-card__icon" aria-hidden="true">C</span>
 			<div>
-				<h2 class="codex-provider-card__title"><?php esc_html_e( 'Account', 'scriptorium-ai-provider-for-codex' ); ?></h2>
-				<p class="codex-provider-card__description"><?php esc_html_e( 'Personal Codex connection for this WordPress user.', 'scriptorium-ai-provider-for-codex' ); ?></p>
+				<h2 class="codex-provider-card__title"><?php esc_html_e( 'Account', 'ai-provider-for-codex' ); ?></h2>
+				<p class="codex-provider-card__description"><?php esc_html_e( 'Personal Codex connection for this WordPress user.', 'ai-provider-for-codex' ); ?></p>
 			</div>
 		</div>
 		<div class="codex-provider-card__action">
@@ -642,27 +642,27 @@
 			<p class="codex-provider-guidance"><?php echo esc_html( $guidance ); ?></p>
 		<?php endif; ?>
 		<dl class="codex-provider-meta-list">
-			<dt><?php esc_html_e( 'Runtime configured', 'scriptorium-ai-provider-for-codex' ); ?></dt>
-			<dd><?php echo ! empty( $status['runtimeConfigured'] ) ? esc_html__( 'Yes', 'scriptorium-ai-provider-for-codex' ) : esc_html__( 'No', 'scriptorium-ai-provider-for-codex' ); ?></dd>
+			<dt><?php esc_html_e( 'Runtime configured', 'ai-provider-for-codex' ); ?></dt>
+			<dd><?php echo ! empty( $status['runtimeConfigured'] ) ? esc_html__( 'Yes', 'ai-provider-for-codex' ) : esc_html__( 'No', 'ai-provider-for-codex' ); ?></dd>
 			<?php if ( ! empty( $status['connection'] ) ) : ?>
-				<dt><?php esc_html_e( 'Connection ID', 'scriptorium-ai-provider-for-codex' ); ?></dt>
+				<dt><?php esc_html_e( 'Connection ID', 'ai-provider-for-codex' ); ?></dt>
 				<dd><code><?php echo esc_html( (string) $status['connection']['connection_id'] ); ?></code></dd>
-				<dt><?php esc_html_e( 'Account email', 'scriptorium-ai-provider-for-codex' ); ?></dt>
+				<dt><?php esc_html_e( 'Account email', 'ai-provider-for-codex' ); ?></dt>
 				<dd><?php echo esc_html( (string) $status['connection']['account_email'] ); ?></dd>
-				<dt><?php esc_html_e( 'Plan type', 'scriptorium-ai-provider-for-codex' ); ?></dt>
+				<dt><?php esc_html_e( 'Plan type', 'ai-provider-for-codex' ); ?></dt>
 				<dd><?php echo esc_html( (string) $status['connection']['plan_type'] ); ?></dd>
 			<?php endif; ?>
 		</dl>
 		<div class="codex-provider-actions" data-codex-base-actions>
 			<?php if ( empty( $status['runtimeConfigured'] ) ) : ?>
-				<a class="button button-secondary" href="<?php echo esc_url( SiteSettings::page_url() ); ?>"><?php esc_html_e( 'Configure local runtime', 'scriptorium-ai-provider-for-codex' ); ?></a>
+				<a class="button button-secondary" href="<?php echo esc_url( SiteSettings::page_url() ); ?>"><?php esc_html_e( 'Configure local runtime', 'ai-provider-for-codex' ); ?></a>
 			<?php elseif ( 'error' === $pending_status ) : ?>
-				<a class="button button-primary" data-codex-start-connect href="<?php echo esc_url( wp_nonce_url( add_query_arg( 'action', 'start-connect', self::page_url() ), 'codex-provider-start-connect' ) ); ?>"><?php esc_html_e( 'Start connection again', 'scriptorium-ai-provider-for-codex' ); ?></a>
+				<a class="button button-primary" data-codex-start-connect href="<?php echo esc_url( wp_nonce_url( add_query_arg( 'action', 'start-connect', self::page_url() ), 'codex-provider-start-connect' ) ); ?>"><?php esc_html_e( 'Start connection again', 'ai-provider-for-codex' ); ?></a>
 			<?php elseif ( empty( $status['connection'] ) && ! $pending_active ) : ?>
-				<a class="button button-primary" data-codex-start-connect href="<?php echo esc_url( wp_nonce_url( add_query_arg( 'action', 'start-connect', self::page_url() ), 'codex-provider-start-connect' ) ); ?>"><?php esc_html_e( 'Connect Codex account', 'scriptorium-ai-provider-for-codex' ); ?></a>
+				<a class="button button-primary" data-codex-start-connect href="<?php echo esc_url( wp_nonce_url( add_query_arg( 'action', 'start-connect', self::page_url() ), 'codex-provider-start-connect' ) ); ?>"><?php esc_html_e( 'Connect Codex account', 'ai-provider-for-codex' ); ?></a>
 			<?php else : ?>
-				<a class="button button-secondary" href="<?php echo esc_url( wp_nonce_url( add_query_arg( 'action', 'refresh-status', self::page_url() ), 'codex-provider-refresh-status' ) ); ?>"><?php echo esc_html( 'completed' === $pending_status ? __( 'Retry account sync', 'scriptorium-ai-provider-for-codex' ) : __( 'Refresh status', 'scriptorium-ai-provider-for-codex' ) ); ?></a>
-				<a class="button button-link-delete" href="<?php echo esc_url( wp_nonce_url( add_query_arg( 'action', 'disconnect', self::page_url() ), 'codex-provider-disconnect' ) ); ?>"><?php esc_html_e( 'Disconnect Codex account', 'scriptorium-ai-provider-for-codex' ); ?></a>
+				<a class="button button-secondary" href="<?php echo esc_url( wp_nonce_url( add_query_arg( 'action', 'refresh-status', self::page_url() ), 'codex-provider-refresh-status' ) ); ?>"><?php echo esc_html( 'completed' === $pending_status ? __( 'Retry account sync', 'ai-provider-for-codex' ) : __( 'Refresh status', 'ai-provider-for-codex' ) ); ?></a>
+				<a class="button button-link-delete" href="<?php echo esc_url( wp_nonce_url( add_query_arg( 'action', 'disconnect', self::page_url() ), 'codex-provider-disconnect' ) ); ?>"><?php esc_html_e( 'Disconnect Codex account', 'ai-provider-for-codex' ); ?></a>
 			<?php endif; ?>
 		</div>
 	</div>
@@ -703,15 +703,15 @@
 		<div class="codex-provider-card__identity">
 			<span class="codex-provider-card__icon" aria-hidden="true">M</span>
 			<div>
-				<h2 class="codex-provider-card__title"><?php esc_html_e( 'Model', 'scriptorium-ai-provider-for-codex' ); ?></h2>
-				<p class="codex-provider-card__description"><?php esc_html_e( 'Text model used for your Codex requests.', 'scriptorium-ai-provider-for-codex' ); ?></p>
+				<h2 class="codex-provider-card__title"><?php esc_html_e( 'Model', 'ai-provider-for-codex' ); ?></h2>
+				<p class="codex-provider-card__description"><?php esc_html_e( 'Text model used for your Codex requests.', 'ai-provider-for-codex' ); ?></p>
 			</div>
 		</div>
 	</div>
 	<div class="codex-provider-card__body">
   ```
 
-  Remove the old nested `<h3><?php esc_html_e( 'Model', 'scriptorium-ai-provider-for-codex' ); ?></h3>` line from inside the section.
+  Remove the old nested `<h3><?php esc_html_e( 'Model', 'ai-provider-for-codex' ); ?></h3>` line from inside the section.
 
   Replace the closing `</div>` for the old model section with:
 
@@ -735,14 +735,14 @@
   Replace the inline submit button style call:
 
   ```php
-  <?php submit_button( __( 'Set model', 'scriptorium-ai-provider-for-codex' ), 'secondary', 'submit', false, [ 'style' => 'margin-left: 0.5rem;' ] ); ?>
+  <?php submit_button( __( 'Set model', 'ai-provider-for-codex' ), 'secondary', 'submit', false, [ 'style' => 'margin-left: 0.5rem;' ] ); ?>
   ```
 
   with:
 
   ```php
   <span class="codex-provider-actions">
-	<?php submit_button( __( 'Set model', 'scriptorium-ai-provider-for-codex' ), 'secondary', 'submit', false ); ?>
+	<?php submit_button( __( 'Set model', 'ai-provider-for-codex' ), 'secondary', 'submit', false ); ?>
   </span>
   ```
 
@@ -850,9 +850,9 @@
     const page = await context.newPage();
     await page.goto('https://wp.hperkins.com/wp-admin/options-connectors.php', { waitUntil: 'networkidle' });
     await page.screenshot({ path: 'tmp-connectors-reference-desktop.png', fullPage: true });
-    await page.goto('https://wp.hperkins.com/wp-admin/options-general.php?page=scriptorium-ai-provider-for-codex', { waitUntil: 'networkidle' });
+    await page.goto('https://wp.hperkins.com/wp-admin/options-general.php?page=ai-provider-for-codex', { waitUntil: 'networkidle' });
     await page.screenshot({ path: 'tmp-codex-provider-settings-desktop.png', fullPage: true });
-    await page.goto('https://wp.hperkins.com/wp-admin/users.php?page=scriptorium-ai-provider-for-codex', { waitUntil: 'networkidle' });
+    await page.goto('https://wp.hperkins.com/wp-admin/users.php?page=ai-provider-for-codex', { waitUntil: 'networkidle' });
     await page.screenshot({ path: 'tmp-codex-provider-user-desktop.png', fullPage: true });
     await browser.close();
   })();
@@ -884,8 +884,8 @@
   In the browser, switch the test user to an alternate admin color scheme such as Modern or Midnight, then open:
 
   ```text
-  https://wp.hperkins.com/wp-admin/options-general.php?page=scriptorium-ai-provider-for-codex
-  https://wp.hperkins.com/wp-admin/users.php?page=scriptorium-ai-provider-for-codex
+  https://wp.hperkins.com/wp-admin/options-general.php?page=ai-provider-for-codex
+  https://wp.hperkins.com/wp-admin/users.php?page=ai-provider-for-codex
   ```
 
   If the install has RTL enabled or an RTL locale available, repeat once with RTL active.
@@ -950,4 +950,4 @@
 
 - Spec coverage: The plan covers both plugin-owned pages, the core Connectors measured values, the white-surface override set, no sibling-hiding rule, plugin notice alignment, global notice limitation by omission, page-reload interaction model by preserving forms/actions, accessibility focus and disabled-field contrast, and verification against preserved behavior.
 - Placeholder scan: The plan contains no `TBD`, `TODO`, `implement later`, or unspecified "write tests" steps. Each code-changing step includes concrete code or exact replacement instructions.
-- Type consistency: The only new PHP API is `AIProviderForCodex\Admin\AdminPageStyle::css(): string`, and both page classes call that exact method. Verification refers to existing `Settings` constants already imported in `scripts/verify.php`.
+- Type consistency: The only new PHP API is `Htperkins\AIProviderForCodex\Admin\AdminPageStyle::css(): string`, and both page classes call that exact method. Verification refers to existing `Settings` constants already imported in `scripts/verify.php`.

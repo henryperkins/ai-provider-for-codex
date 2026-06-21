@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SLUG="scriptorium-ai-provider-for-codex"
+SLUG="ai-provider-for-codex"
 EXCLUDE_FILE="${ROOT_DIR}/scripts/release-exclude.txt"
 DIST_DIR="${DIST_DIR:-$(dirname "${ROOT_DIR}")/plugin-builds}"
 STAGING_DIR="$(mktemp -d)"
@@ -16,11 +16,11 @@ trap cleanup EXIT
 
 # WordPress.org rejects submissions when the main file's Version: header does
 # not match readme.txt's Stable tag, so guard against drift here.
-HEADER_VERSION="$(sed -n 's/^ \* Version:[[:space:]]*//p' "${ROOT_DIR}/scriptorium-ai-provider-for-codex.php" | head -n 1)"
+HEADER_VERSION="$(sed -n 's/^ \* Version:[[:space:]]*//p' "${ROOT_DIR}/ai-provider-for-codex.php" | head -n 1)"
 README_STABLE="$(sed -n 's/^Stable tag:[[:space:]]*//p' "${ROOT_DIR}/readme.txt" | head -n 1)"
 
 if [[ -z "${HEADER_VERSION}" ]]; then
-	echo "Could not determine plugin version from scriptorium-ai-provider-for-codex.php" >&2
+	echo "Could not determine plugin version from ai-provider-for-codex.php" >&2
 	exit 1
 fi
 
@@ -31,7 +31,7 @@ fi
 
 if [[ "${HEADER_VERSION}" != "${README_STABLE}" ]]; then
 	echo "Version drift detected:" >&2
-	echo "  scriptorium-ai-provider-for-codex.php Version:    ${HEADER_VERSION}" >&2
+	echo "  ai-provider-for-codex.php Version:    ${HEADER_VERSION}" >&2
 	echo "  readme.txt Stable tag: ${README_STABLE}" >&2
 	echo "WordPress.org will reject the submission until these match." >&2
 	exit 1
@@ -80,6 +80,11 @@ rsync -a \
 	"${RSYNC_EXCLUDES[@]}" \
 	"${ROOT_DIR}/" \
 	"${TARGET_DIR}/"
+
+if [[ -e "${TARGET_DIR}/sidecar" ]]; then
+	echo "Release package must not include sidecar/; the local runtime is distributed separately." >&2
+	exit 1
+fi
 
 # Lint the exact PHP file set that will ship — catches errors that hide in dev
 # because of include ordering or files that only the packaged tree exposes.

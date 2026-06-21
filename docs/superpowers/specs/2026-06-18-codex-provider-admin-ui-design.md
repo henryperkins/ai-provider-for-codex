@@ -99,7 +99,7 @@ Page shell:
 - vertical rhythm matching the Connectors stack, roughly 12px to 16px between cards;
 - no nested cards.
 
-The white-surface override must be scoped to the Codex Provider screen body classes, expected to include `settings_page_scriptorium-ai-provider-for-codex`, `users_page_scriptorium-ai-provider-for-codex`, and where WordPress emits it for lower-capability users, `profile_page_scriptorium-ai-provider-for-codex`.
+The white-surface override must be scoped to the Codex Provider screen body classes, expected to include `settings_page_ai-provider-for-codex`, `users_page_ai-provider-for-codex`, and where WordPress emits it for lower-capability users, `profile_page_ai-provider-for-codex`.
 
 Use this override set as the implementation target:
 
@@ -263,7 +263,7 @@ Content:
 - source hint for fallback catalog;
 - model `<select>`;
 - `Set model` button;
-- existing nonce and `codex_provider_action=set-model` hidden field.
+- existing nonce and `htperkins_aipfc_action=set-model` hidden field.
 
 The text-model preference remains text-only. This work must not add image-generation model behavior or change `ModelCatalogState`.
 

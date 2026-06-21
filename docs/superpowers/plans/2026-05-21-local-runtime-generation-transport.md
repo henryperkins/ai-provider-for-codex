@@ -157,7 +157,7 @@ Verify the diff still shows `generateTextResult()` routing through `$client->sen
 
 - [ ] **Step 1: Add AI Client message imports**
 
-Add these imports after the existing `use AIProviderForCodex\Runtime\Settings;` line:
+Add these imports after the existing `use Htperkins\AIProviderForCodex\Runtime\Settings;` line:
 
 ```php
 use WordPress\AiClient\AiClient;

@@ -2,12 +2,12 @@
 /**
  * Local connection persistence.
  *
- * @package AIProviderForCodex
+ * @package HtperkinsAIProviderForCodex
  */
 
 declare( strict_types=1 );
 
-namespace AIProviderForCodex\Auth;
+namespace Htperkins\AIProviderForCodex\Auth;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -18,7 +18,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 final class ConnectionRepository {
 
-	private const TABLE_SUFFIX = 'codex_provider_connections';
+	private const TABLE_SUFFIX = 'htperkins_aipfc_connections';
 
 	/**
 	 * Returns the table name.

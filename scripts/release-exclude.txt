@@ -112,6 +112,7 @@ venv
 
 # Internal-only docs and runtime artifacts
 /docs
+/sidecar
 LOCAL-SIDECAR-SPEC.md
 PLUGIN-SUBMISSION-READINESS-CHECKLIST.md
 /README.md

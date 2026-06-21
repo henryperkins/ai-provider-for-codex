@@ -10,9 +10,9 @@
 
 The existing backend already exposes the primitives needed for this flow.
 
-- `POST /wp-json/codex-provider/v1/connect/start` starts a local runtime login for the current user and returns `authSessionId`, `verificationUrl`, `userCode`, and `status`.
-- `GET /wp-json/codex-provider/v1/connect/status` polls the pending login and converts a completed runtime login into a persisted WordPress connection and catalog snapshot.
-- `GET /wp-json/codex-provider/v1/status` returns provider readiness, runtime health, existing connection state, catalog data, and pending connection state.
+- `POST /wp-json/htperkins-aipfc/v1/connect/start` starts a local runtime login for the current user and returns `authSessionId`, `verificationUrl`, `userCode`, and `status`.
+- `GET /wp-json/htperkins-aipfc/v1/connect/status` polls the pending login and converts a completed runtime login into a persisted WordPress connection and catalog snapshot.
+- `GET /wp-json/htperkins-aipfc/v1/status` returns provider readiness, runtime health, existing connection state, catalog data, and pending connection state.
 - The sidecar starts Codex app-server login with `account/login/start` using `chatgptDeviceCode` and watches for `account/login/completed`.
 
 The gap is UI orchestration. `assets/connectors.js` currently starts a login from Settings > Connectors and redirects the user to the connection page. `UserConnectionPage` currently renders a server-side manual flow where the user opens the verification page and clicks Check connection status.

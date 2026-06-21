@@ -139,7 +139,7 @@ function node( name, attrs = {}, text = '' ) {
 
 function buildFixture( configOverrides = {}, fetchImpl = async () => jsonResponse( {} ) ) {
 	const document = new FakeDocument();
-	const configElement = new FakeElement( { id: 'wp-script-module-data-scriptorium-ai-provider-for-codex/user-connection' } );
+	const configElement = new FakeElement( { id: 'wp-script-module-data-htperkins-ai-provider-for-codex/user-connection' } );
 	const root = node( 'data-codex-connection-root' );
 	const consolePanel = node( 'data-codex-connection-console' );
 	const heading = node( 'data-codex-connection-heading' );
@@ -196,10 +196,10 @@ function buildFixture( configOverrides = {}, fetchImpl = async () => jsonRespons
 	root.append( consolePanel, tableStatus, serverFallback, baseActions );
 
 	configElement.textContent = JSON.stringify( {
-		pageUrl: 'https://example.test/wp-admin/users.php?page=scriptorium-ai-provider-for-codex',
-		startUrl: 'https://example.test/wp-json/codex-provider/v1/connect/start',
-		connectStatusUrl: 'https://example.test/wp-json/codex-provider/v1/connect/status',
-		providerStatusUrl: 'https://example.test/wp-json/codex-provider/v1/status',
+		pageUrl: 'https://example.test/wp-admin/users.php?page=ai-provider-for-codex',
+		startUrl: 'https://example.test/wp-json/htperkins-aipfc/v1/connect/start',
+		connectStatusUrl: 'https://example.test/wp-json/htperkins-aipfc/v1/connect/status',
+		providerStatusUrl: 'https://example.test/wp-json/htperkins-aipfc/v1/status',
 		restNonce: 'nonce_123',
 		currentPending: null,
 		text: DEFAULT_TEXT,

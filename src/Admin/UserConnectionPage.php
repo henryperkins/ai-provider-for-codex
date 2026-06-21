@@ -2,17 +2,17 @@
 /**
  * Per-user connection UI.
  *
- * @package AIProviderForCodex
+ * @package HtperkinsAIProviderForCodex
  */
 
 declare( strict_types=1 );
 
-namespace AIProviderForCodex\Admin;
+namespace Htperkins\AIProviderForCodex\Admin;
 
-use AIProviderForCodex\Auth\ConnectionService;
-use AIProviderForCodex\Provider\ModelCatalogState;
-use AIProviderForCodex\Provider\SupportChecks;
-use AIProviderForCodex\Runtime\Settings;
+use Htperkins\AIProviderForCodex\Auth\ConnectionService;
+use Htperkins\AIProviderForCodex\Provider\ModelCatalogState;
+use Htperkins\AIProviderForCodex\Provider\SupportChecks;
+use Htperkins\AIProviderForCodex\Runtime\Settings;
 use RuntimeException;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -24,7 +24,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 final class UserConnectionPage {
 
-	private const SCRIPT_MODULE_ID = 'scriptorium-ai-provider-for-codex/user-connection';
+	private const SCRIPT_MODULE_ID = 'htperkins-ai-provider-for-codex/user-connection';
 
 	private const STYLE_HANDLE = 'codex-provider-user-connection';
 
@@ -42,10 +42,10 @@ final class UserConnectionPage {
 	 */
 	public static function register_page(): void {
 		$hook = add_users_page(
-			__( 'Codex Provider', 'scriptorium-ai-provider-for-codex' ),
-			__( 'Codex Provider', 'scriptorium-ai-provider-for-codex' ),
+			__( 'Codex Provider', 'ai-provider-for-codex' ),
+			__( 'Codex Provider', 'ai-provider-for-codex' ),
 			'read',
-			\AIProviderForCodex\SLUG,
+			\Htperkins\AIProviderForCodex\SLUG,
 			[ self::class, 'render_page' ]
 		);
 
@@ -73,13 +73,13 @@ final class UserConnectionPage {
 	public static function enqueue_assets(): void {
 		wp_register_script_module(
 			self::SCRIPT_MODULE_ID,
-			plugins_url( 'assets/user-connection.js', \AIProviderForCodex\PLUGIN_FILE ),
+			plugins_url( 'assets/user-connection.js', \Htperkins\AIProviderForCodex\PLUGIN_FILE ),
 			[],
-			\AIProviderForCodex\VERSION
+			\Htperkins\AIProviderForCodex\VERSION
 		);
 		wp_enqueue_script_module( self::SCRIPT_MODULE_ID );
 
-		wp_register_style( self::STYLE_HANDLE, false, [], \AIProviderForCodex\VERSION );
+		wp_register_style( self::STYLE_HANDLE, false, [], \Htperkins\AIProviderForCodex\VERSION );
 		wp_enqueue_style( self::STYLE_HANDLE );
 		wp_add_inline_style( self::STYLE_HANDLE, self::inline_css() );
 	}
@@ -122,7 +122,7 @@ final class UserConnectionPage {
 		$screen->add_help_tab(
 			[
 				'id'       => 'codex-provider-how-it-works',
-				'title'    => __( 'How Codex Provider works', 'scriptorium-ai-provider-for-codex' ),
+				'title'    => __( 'How Codex Provider works', 'ai-provider-for-codex' ),
 				'callback' => [ self::class, 'render_help_tab' ],
 			]
 		);
@@ -136,33 +136,58 @@ final class UserConnectionPage {
 	public static function render_help_tab(): void {
 		$runtime_configured = Settings::has_required_configuration();
 		?>
-		<ul>
-			<li><?php esc_html_e( 'This site uses a local Codex runtime running on the same host as WordPress.', 'scriptorium-ai-provider-for-codex' ); ?></li>
-			<li><?php esc_html_e( 'Each person connects their own Codex or ChatGPT account so access and billing stay user-specific.', 'scriptorium-ai-provider-for-codex' ); ?></li>
-		</ul>
-		<p>
-			<?php
-			echo wp_kses_post(
-				SafeFormat::sprintf(
-					/* translators: 1: site settings URL, 2: connectors settings URL. */
-					__(
-						'This page manages your personal account link. <a href="%1$s">Plugin settings</a> control the local runtime shared by all users. <a href="%2$s">Settings &gt; Connectors</a> shows overall provider status.',
-						'scriptorium-ai-provider-for-codex'
-					),
-					esc_url( SiteSettings::page_url() ),
-					esc_url( admin_url( 'options-connectors.php' ) )
-				)
-			);
-			?>
-		</p>
-		<?php if ( ! $runtime_configured ) : ?>
-			<p><strong><?php esc_html_e( 'A site administrator still needs to finish the shared runtime setup before you can connect an account here.', 'scriptorium-ai-provider-for-codex' ); ?></strong></p>
+		<?php if ( Settings::is_app_server_endpoint() ) : ?>
+			<ul>
+				<li><?php esc_html_e( 'This site uses codex app-server running on the same host as WordPress.', 'ai-provider-for-codex' ); ?></li>
+				<li><?php esc_html_e( 'The service user that starts app-server owns the site-level Codex login.', 'ai-provider-for-codex' ); ?></li>
+			</ul>
+			<p>
+				<?php
+				echo wp_kses_post(
+					SafeFormat::sprintf(
+						/* translators: 1: site settings URL, 2: connectors settings URL. */
+						__(
+							'<a href="%1$s">Plugin settings</a> control the app-server endpoint. <a href="%2$s">Settings &gt; Connectors</a> shows overall provider status.',
+							'ai-provider-for-codex'
+						),
+						esc_url( SiteSettings::page_url() ),
+						esc_url( admin_url( 'options-connectors.php' ) )
+					)
+				);
+				?>
+			</p>
+			<?php if ( ! $runtime_configured ) : ?>
+				<p><strong><?php esc_html_e( 'A site administrator still needs to finish the app-server setup before Codex can be used.', 'ai-provider-for-codex' ); ?></strong></p>
+			<?php endif; ?>
+		<?php else : ?>
+			<ul>
+				<li><?php esc_html_e( 'This site uses a legacy local Codex runtime running on the same host as WordPress.', 'ai-provider-for-codex' ); ?></li>
+				<li><?php esc_html_e( 'In that legacy runtime mode, Codex or ChatGPT accounts are linked per WordPress user.', 'ai-provider-for-codex' ); ?></li>
+			</ul>
+			<p>
+				<?php
+				echo wp_kses_post(
+					SafeFormat::sprintf(
+						/* translators: 1: site settings URL, 2: connectors settings URL. */
+						__(
+							'This page manages your personal account link. <a href="%1$s">Plugin settings</a> control the local runtime shared by all users. <a href="%2$s">Settings &gt; Connectors</a> shows overall provider status.',
+							'ai-provider-for-codex'
+						),
+						esc_url( SiteSettings::page_url() ),
+						esc_url( admin_url( 'options-connectors.php' ) )
+					)
+				);
+				?>
+			</p>
+			<?php if ( ! $runtime_configured ) : ?>
+				<p><strong><?php esc_html_e( 'A site administrator still needs to finish the shared runtime setup before you can connect an account here.', 'ai-provider-for-codex' ); ?></strong></p>
+			<?php endif; ?>
+			<ol>
+				<li><?php esc_html_e( 'A site administrator starts the local runtime, then confirms Codex is healthy on Settings > Connectors.', 'ai-provider-for-codex' ); ?></li>
+				<li><?php esc_html_e( 'You click Connect Codex account on this page.', 'ai-provider-for-codex' ); ?></li>
+				<li><?php esc_html_e( 'WordPress opens the verification page, keeps the verification code visible, and checks automatically while you return to this tab after approval.', 'ai-provider-for-codex' ); ?></li>
+			</ol>
 		<?php endif; ?>
-		<ol>
-			<li><?php esc_html_e( 'A site administrator creates and starts the local sidecar service, then confirms Codex is healthy on Settings > Connectors.', 'scriptorium-ai-provider-for-codex' ); ?></li>
-			<li><?php esc_html_e( 'You click Connect Codex account on this page.', 'scriptorium-ai-provider-for-codex' ); ?></li>
-			<li><?php esc_html_e( 'WordPress opens the verification page, keeps the device code visible, and checks automatically while you return to this tab after approval.', 'scriptorium-ai-provider-for-codex' ); ?></li>
-		</ol>
 		<?php
 	}
 
@@ -172,7 +197,7 @@ final class UserConnectionPage {
 	 * @return string
 	 */
 	public static function page_url(): string {
-		return admin_url( 'users.php?page=' . \AIProviderForCodex\SLUG );
+		return admin_url( 'users.php?page=' . \Htperkins\AIProviderForCodex\SLUG );
 	}
 
 	/**
@@ -187,16 +212,16 @@ final class UserConnectionPage {
 
 		$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : '';
 
-		if ( \AIProviderForCodex\SLUG !== $page ) {
+		if ( \Htperkins\AIProviderForCodex\SLUG !== $page ) {
 			return;
 		}
 
-		$post_action = isset( $_POST['codex_provider_action'] ) ? sanitize_key( wp_unslash( $_POST['codex_provider_action'] ) ) : '';
+		$post_action = isset( $_POST['htperkins_aipfc_action'] ) ? sanitize_key( wp_unslash( $_POST['htperkins_aipfc_action'] ) ) : '';
 
 		if ( 'set-model' === $post_action ) {
 			check_admin_referer( 'codex-provider-set-model' );
-			$model_id = isset( $_POST['codex_provider_model'] )
-				? sanitize_text_field( (string) wp_unslash( $_POST['codex_provider_model'] ) )
+			$model_id = isset( $_POST['htperkins_aipfc_model'] )
+				? sanitize_text_field( (string) wp_unslash( $_POST['htperkins_aipfc_model'] ) )
 				: '';
 			self::set_model( $model_id );
 		}
@@ -234,26 +259,27 @@ final class UserConnectionPage {
 			return;
 		}
 
-		$status         = SupportChecks::current_user_status();
-		$catalog        = is_array( $status['catalog'] ?? null ) ? $status['catalog'] : ModelCatalogState::get_effective_catalog();
-		$notice         = self::read_notice();
-		$reason         = (string) $status['reason'];
-		$pending        = is_array( $status['pendingConnection'] ?? null ) ? $status['pendingConnection'] : null;
-		$pending_status = is_array( $pending ) ? sanitize_key( (string) ( $pending['status'] ?? 'pending' ) ) : '';
-		$pending_active = in_array( $pending_status, [ 'pending', 'completed' ], true );
-		$ind            = StatusLabels::status_indicator( $reason );
-		$reason_label   = StatusLabels::readiness_label( $reason );
-		$guidance       = StatusLabels::readiness_guidance( $reason );
-		$text_models    = ModelCatalogState::models_for_kind( $catalog, 'text' );
-		$model_labels   = ModelCatalogState::labels_from_catalog( [ 'models' => $text_models ] );
-		$model_ids      = is_array( $catalog['text_model_ids'] ?? null ) ? $catalog['text_model_ids'] : ( is_array( $catalog['model_ids'] ?? null ) ? $catalog['model_ids'] : [] );
-		$selected_model = (string) ( $catalog['selected_text_model'] ?? $catalog['selected_model'] ?? '' );
-		$logo_url       = plugins_url( 'src/Provider/logo.svg', \AIProviderForCodex\PLUGIN_FILE );
-		$connection_config = [
+		$status             = SupportChecks::current_user_status();
+		$site_level_runtime = Settings::is_app_server_endpoint();
+		$catalog            = is_array( $status['catalog'] ?? null ) ? $status['catalog'] : ModelCatalogState::get_effective_catalog();
+		$notice             = self::read_notice();
+		$reason             = (string) $status['reason'];
+		$pending            = is_array( $status['pendingConnection'] ?? null ) ? $status['pendingConnection'] : null;
+		$pending_status     = is_array( $pending ) ? sanitize_key( (string) ( $pending['status'] ?? 'pending' ) ) : '';
+		$pending_active     = in_array( $pending_status, [ 'pending', 'completed' ], true );
+		$ind                = StatusLabels::status_indicator( $reason );
+		$reason_label       = StatusLabels::readiness_label( $reason );
+		$guidance           = StatusLabels::readiness_guidance( $reason );
+		$text_models        = ModelCatalogState::models_for_kind( $catalog, 'text' );
+		$model_labels       = ModelCatalogState::labels_from_catalog( [ 'models' => $text_models ] );
+		$model_ids          = is_array( $catalog['text_model_ids'] ?? null ) ? $catalog['text_model_ids'] : ( is_array( $catalog['model_ids'] ?? null ) ? $catalog['model_ids'] : [] );
+		$selected_model     = (string) ( $catalog['selected_text_model'] ?? $catalog['selected_model'] ?? '' );
+		$logo_url           = plugins_url( 'src/Provider/logo.svg', \Htperkins\AIProviderForCodex\PLUGIN_FILE );
+		$connection_config  = [
 			'pageUrl'           => self::page_url(),
-			'startUrl'          => rest_url( 'codex-provider/v1/connect/start' ),
-			'connectStatusUrl'  => rest_url( 'codex-provider/v1/connect/status' ),
-			'providerStatusUrl' => rest_url( 'codex-provider/v1/status' ),
+			'startUrl'          => rest_url( 'htperkins-aipfc/v1/connect/start' ),
+			'connectStatusUrl'  => rest_url( 'htperkins-aipfc/v1/connect/status' ),
+			'providerStatusUrl' => rest_url( 'htperkins-aipfc/v1/status' ),
 			'restNonce'         => wp_create_nonce( 'wp_rest' ),
 			'currentPending'    => $pending && ! empty( $pending['authSessionId'] )
 				? [
@@ -265,20 +291,20 @@ final class UserConnectionPage {
 				]
 				: null,
 			'text'              => [
-				'heading'          => __( 'Complete account connection', 'scriptorium-ai-provider-for-codex' ),
-				'connectedHeading' => __( 'Codex account connected', 'scriptorium-ai-provider-for-codex' ),
-				'syncRetryHeading' => __( 'Retry account sync', 'scriptorium-ai-provider-for-codex' ),
-				'failedHeading'    => __( 'Connection needs attention', 'scriptorium-ai-provider-for-codex' ),
-				'starting'         => __( 'Starting Codex login...', 'scriptorium-ai-provider-for-codex' ),
-				'pending'          => __( 'Waiting for ChatGPT approval...', 'scriptorium-ai-provider-for-codex' ),
-				'copied'           => __( 'Code copied.', 'scriptorium-ai-provider-for-codex' ),
-				'copyFailed'       => __( 'Copy did not work in this browser. Select the code below.', 'scriptorium-ai-provider-for-codex' ),
-				'popupBlocked'     => __( 'Your browser blocked the verification tab. Open it manually.', 'scriptorium-ai-provider-for-codex' ),
-				'connected'        => __( 'Your Codex account is connected.', 'scriptorium-ai-provider-for-codex' ),
-				'syncRetry'        => __( 'Your login was approved, but WordPress could not sync your Codex account yet.', 'scriptorium-ai-provider-for-codex' ),
-				'missing'          => __( 'The local runtime no longer has this login session. Start again to get a fresh code.', 'scriptorium-ai-provider-for-codex' ),
-				'timedOut'         => __( 'Still waiting. You can check again or start over.', 'scriptorium-ai-provider-for-codex' ),
-				'failed'           => __( 'The local Codex runtime request failed.', 'scriptorium-ai-provider-for-codex' ),
+				'heading'          => __( 'Complete account connection', 'ai-provider-for-codex' ),
+				'connectedHeading' => __( 'Codex account connected', 'ai-provider-for-codex' ),
+				'syncRetryHeading' => __( 'Retry account sync', 'ai-provider-for-codex' ),
+				'failedHeading'    => __( 'Connection needs attention', 'ai-provider-for-codex' ),
+				'starting'         => __( 'Starting Codex login...', 'ai-provider-for-codex' ),
+				'pending'          => __( 'Waiting for ChatGPT approval...', 'ai-provider-for-codex' ),
+				'copied'           => __( 'Code copied.', 'ai-provider-for-codex' ),
+				'copyFailed'       => __( 'Copy did not work in this browser. Select the code below.', 'ai-provider-for-codex' ),
+				'popupBlocked'     => __( 'Your browser blocked the verification tab. Open it manually.', 'ai-provider-for-codex' ),
+				'connected'        => __( 'Your Codex account is connected.', 'ai-provider-for-codex' ),
+				'syncRetry'        => __( 'Your login was approved, but WordPress could not sync Codex account details yet.', 'ai-provider-for-codex' ),
+				'missing'          => __( 'The local runtime no longer has this login session. Start again to get a fresh code.', 'ai-provider-for-codex' ),
+				'timedOut'         => __( 'Still waiting. You can check again or start over.', 'ai-provider-for-codex' ),
+				'failed'           => __( 'The local Codex runtime request failed.', 'ai-provider-for-codex' ),
 			],
 		];
 
@@ -286,15 +312,23 @@ final class UserConnectionPage {
 
 		if ( 'completed' === $pending_status ) {
 			$ind          = 'warning';
-			$reason_label = __( 'Account sync needs retry', 'scriptorium-ai-provider-for-codex' );
-			$guidance     = __( 'Device-code login already completed, but WordPress could not refresh your Codex account details yet. Retry the account sync below.', 'scriptorium-ai-provider-for-codex' );
+			$reason_label = __( 'Account sync needs retry', 'ai-provider-for-codex' );
+			$guidance     = __( 'Login already completed, but WordPress could not refresh Codex account details yet. Retry the account sync below.', 'ai-provider-for-codex' );
 		}
 		?>
 		<div class="wrap codex-provider-admin-page">
 			<div class="codex-provider-shell" data-codex-connection-root>
 				<header class="codex-provider-page-header">
-					<h1><?php esc_html_e( 'Codex Provider', 'scriptorium-ai-provider-for-codex' ); ?></h1>
-					<p class="codex-provider-page-subtitle"><?php esc_html_e( 'Connect your Codex or ChatGPT account and choose the model used for your requests.', 'scriptorium-ai-provider-for-codex' ); ?></p>
+					<h1><?php esc_html_e( 'Codex Provider', 'ai-provider-for-codex' ); ?></h1>
+					<p class="codex-provider-page-subtitle">
+						<?php
+						echo esc_html(
+							$site_level_runtime
+								? __( 'Review the site-level Codex runtime and choose the model used for your requests.', 'ai-provider-for-codex' )
+								: __( 'Connect your Codex or ChatGPT account and choose the model used for your requests.', 'ai-provider-for-codex' )
+						);
+						?>
+					</p>
 				</header>
 
 				<?php self::render_notice( $notice ); ?>
@@ -305,8 +339,16 @@ final class UserConnectionPage {
 							<div class="codex-provider-card__identity">
 								<img class="codex-provider-card__logo" src="<?php echo esc_url( $logo_url ); ?>" alt="" width="40" height="40" aria-hidden="true" />
 								<div>
-									<h2 class="codex-provider-card__title"><?php esc_html_e( 'Account', 'scriptorium-ai-provider-for-codex' ); ?></h2>
-									<p class="codex-provider-card__description"><?php esc_html_e( 'Personal Codex connection for this WordPress user.', 'scriptorium-ai-provider-for-codex' ); ?></p>
+									<h2 class="codex-provider-card__title"><?php esc_html_e( 'Account', 'ai-provider-for-codex' ); ?></h2>
+									<p class="codex-provider-card__description">
+										<?php
+										echo esc_html(
+											$site_level_runtime
+												? __( 'Site-level Codex auth is owned by the service user that starts app-server.', 'ai-provider-for-codex' )
+												: __( 'Personal Codex connection for this WordPress user.', 'ai-provider-for-codex' )
+										);
+										?>
+									</p>
 								</div>
 							</div>
 							<div class="codex-provider-card__action">
@@ -324,98 +366,100 @@ final class UserConnectionPage {
 								<p class="codex-provider-guidance"><?php echo esc_html( $guidance ); ?></p>
 							<?php endif; ?>
 							<dl class="codex-provider-meta-list">
-								<dt><?php esc_html_e( 'Runtime configured', 'scriptorium-ai-provider-for-codex' ); ?></dt>
-								<dd><?php echo ! empty( $status['runtimeConfigured'] ) ? esc_html__( 'Yes', 'scriptorium-ai-provider-for-codex' ) : esc_html__( 'No', 'scriptorium-ai-provider-for-codex' ); ?></dd>
+								<dt><?php esc_html_e( 'Runtime configured', 'ai-provider-for-codex' ); ?></dt>
+								<dd><?php echo ! empty( $status['runtimeConfigured'] ) ? esc_html__( 'Yes', 'ai-provider-for-codex' ) : esc_html__( 'No', 'ai-provider-for-codex' ); ?></dd>
 								<?php if ( ! empty( $status['connection'] ) ) : ?>
-									<dt><?php esc_html_e( 'Connection ID', 'scriptorium-ai-provider-for-codex' ); ?></dt>
+									<dt><?php esc_html_e( 'Connection ID', 'ai-provider-for-codex' ); ?></dt>
 									<dd><code><?php echo esc_html( (string) $status['connection']['connection_id'] ); ?></code></dd>
-									<dt><?php esc_html_e( 'Account email', 'scriptorium-ai-provider-for-codex' ); ?></dt>
+									<dt><?php esc_html_e( 'Account email', 'ai-provider-for-codex' ); ?></dt>
 									<dd><?php echo esc_html( (string) $status['connection']['account_email'] ); ?></dd>
-									<dt><?php esc_html_e( 'Plan type', 'scriptorium-ai-provider-for-codex' ); ?></dt>
+									<dt><?php esc_html_e( 'Plan type', 'ai-provider-for-codex' ); ?></dt>
 									<dd><?php echo esc_html( (string) $status['connection']['plan_type'] ); ?></dd>
-								<?php endif; ?>
-							</dl>
+									<?php endif; ?>
+								</dl>
 							<div class="codex-provider-actions" data-codex-base-actions>
 								<?php if ( empty( $status['runtimeConfigured'] ) ) : ?>
-									<a class="button button-secondary" href="<?php echo esc_url( SiteSettings::page_url() ); ?>"><?php esc_html_e( 'Configure local runtime', 'scriptorium-ai-provider-for-codex' ); ?></a>
+									<a class="button button-secondary" href="<?php echo esc_url( SiteSettings::page_url() ); ?>"><?php esc_html_e( 'Configure local runtime', 'ai-provider-for-codex' ); ?></a>
+								<?php elseif ( $site_level_runtime ) : ?>
+									<a class="button button-secondary" href="<?php echo esc_url( SiteSettings::page_url() ); ?>"><?php esc_html_e( 'Manage site-level runtime', 'ai-provider-for-codex' ); ?></a>
 								<?php elseif ( 'error' === $pending_status ) : ?>
-									<a class="button button-primary" data-codex-start-connect href="<?php echo esc_url( wp_nonce_url( add_query_arg( 'action', 'start-connect', self::page_url() ), 'codex-provider-start-connect' ) ); ?>"><?php esc_html_e( 'Start connection again', 'scriptorium-ai-provider-for-codex' ); ?></a>
+									<a class="button button-primary" data-codex-start-connect href="<?php echo esc_url( wp_nonce_url( add_query_arg( 'action', 'start-connect', self::page_url() ), 'codex-provider-start-connect' ) ); ?>"><?php esc_html_e( 'Start connection again', 'ai-provider-for-codex' ); ?></a>
 								<?php elseif ( empty( $status['connection'] ) && ! $pending_active ) : ?>
-									<a class="button button-primary" data-codex-start-connect href="<?php echo esc_url( wp_nonce_url( add_query_arg( 'action', 'start-connect', self::page_url() ), 'codex-provider-start-connect' ) ); ?>"><?php esc_html_e( 'Connect Codex account', 'scriptorium-ai-provider-for-codex' ); ?></a>
+									<a class="button button-primary" data-codex-start-connect href="<?php echo esc_url( wp_nonce_url( add_query_arg( 'action', 'start-connect', self::page_url() ), 'codex-provider-start-connect' ) ); ?>"><?php esc_html_e( 'Connect Codex account', 'ai-provider-for-codex' ); ?></a>
 								<?php else : ?>
-									<a class="button button-secondary" href="<?php echo esc_url( wp_nonce_url( add_query_arg( 'action', 'refresh-status', self::page_url() ), 'codex-provider-refresh-status' ) ); ?>"><?php echo esc_html( 'completed' === $pending_status ? __( 'Retry account sync', 'scriptorium-ai-provider-for-codex' ) : __( 'Refresh status', 'scriptorium-ai-provider-for-codex' ) ); ?></a>
-									<a class="button button-link-delete" href="<?php echo esc_url( wp_nonce_url( add_query_arg( 'action', 'disconnect', self::page_url() ), 'codex-provider-disconnect' ) ); ?>"><?php esc_html_e( 'Disconnect Codex account', 'scriptorium-ai-provider-for-codex' ); ?></a>
+									<a class="button button-secondary" href="<?php echo esc_url( wp_nonce_url( add_query_arg( 'action', 'refresh-status', self::page_url() ), 'codex-provider-refresh-status' ) ); ?>"><?php echo esc_html( 'completed' === $pending_status ? __( 'Retry account sync', 'ai-provider-for-codex' ) : __( 'Refresh status', 'ai-provider-for-codex' ) ); ?></a>
+									<a class="button button-link-delete" href="<?php echo esc_url( wp_nonce_url( add_query_arg( 'action', 'disconnect', self::page_url() ), 'codex-provider-disconnect' ) ); ?>"><?php esc_html_e( 'Disconnect Codex account', 'ai-provider-for-codex' ); ?></a>
 								<?php endif; ?>
 							</div>
 						</div>
 					</section>
 
 					<section class="codex-provider-card codex-provider-card--connection-console codex-device-box" data-codex-connection-console hidden>
-						<h2 class="codex-provider-card__title" data-codex-connection-heading><?php esc_html_e( 'Complete account connection', 'scriptorium-ai-provider-for-codex' ); ?></h2>
+						<h2 class="codex-provider-card__title" data-codex-connection-heading><?php esc_html_e( 'Complete account connection', 'ai-provider-for-codex' ); ?></h2>
 						<p data-codex-connection-status aria-live="polite"></p>
 						<p class="codex-device-code" data-codex-connection-code hidden></p>
 						<p data-codex-code-actions hidden>
-							<button type="button" class="button button-secondary" data-codex-copy-code><?php esc_html_e( 'Copy code', 'scriptorium-ai-provider-for-codex' ); ?></button>
-							<a class="button button-secondary" data-codex-open-verification href="#" target="_blank" rel="noopener noreferrer" hidden><?php esc_html_e( 'Open verification page', 'scriptorium-ai-provider-for-codex' ); ?></a>
-							<a class="button button-secondary" data-codex-check-status href="<?php echo esc_url( wp_nonce_url( add_query_arg( 'action', 'check-connect', self::page_url() ), 'codex-provider-check-connect' ) ); ?>" hidden><?php esc_html_e( 'Check connection status', 'scriptorium-ai-provider-for-codex' ); ?></a>
+							<button type="button" class="button button-secondary" data-codex-copy-code><?php esc_html_e( 'Copy code', 'ai-provider-for-codex' ); ?></button>
+							<a class="button button-secondary" data-codex-open-verification href="#" target="_blank" rel="noopener noreferrer" hidden><?php esc_html_e( 'Open verification page', 'ai-provider-for-codex' ); ?></a>
+							<a class="button button-secondary" data-codex-check-status href="<?php echo esc_url( wp_nonce_url( add_query_arg( 'action', 'check-connect', self::page_url() ), 'codex-provider-check-connect' ) ); ?>" hidden><?php esc_html_e( 'Check connection status', 'ai-provider-for-codex' ); ?></a>
 						</p>
 						<p class="description" data-codex-terminal-text aria-live="polite" hidden></p>
 						<dl class="codex-provider-meta-list" data-codex-connected-details hidden>
-							<dt><?php esc_html_e( 'Account email', 'scriptorium-ai-provider-for-codex' ); ?></dt>
+							<dt><?php esc_html_e( 'Account email', 'ai-provider-for-codex' ); ?></dt>
 							<dd data-codex-connected-email></dd>
-							<dt><?php esc_html_e( 'Plan type', 'scriptorium-ai-provider-for-codex' ); ?></dt>
+							<dt><?php esc_html_e( 'Plan type', 'ai-provider-for-codex' ); ?></dt>
 							<dd data-codex-connected-plan></dd>
-							<dt><?php esc_html_e( 'Selected model', 'scriptorium-ai-provider-for-codex' ); ?></dt>
+							<dt><?php esc_html_e( 'Selected model', 'ai-provider-for-codex' ); ?></dt>
 							<dd data-codex-connected-model></dd>
 						</dl>
 						<p data-codex-connected-actions hidden>
-							<a class="button button-secondary" data-codex-refresh-status href="<?php echo esc_url( wp_nonce_url( add_query_arg( 'action', 'refresh-status', self::page_url() ), 'codex-provider-refresh-status' ) ); ?>" hidden><?php esc_html_e( 'Refresh status', 'scriptorium-ai-provider-for-codex' ); ?></a>
-							<a class="button button-link-delete" data-codex-disconnect href="<?php echo esc_url( wp_nonce_url( add_query_arg( 'action', 'disconnect', self::page_url() ), 'codex-provider-disconnect' ) ); ?>" hidden><?php esc_html_e( 'Disconnect Codex account', 'scriptorium-ai-provider-for-codex' ); ?></a>
+							<a class="button button-secondary" data-codex-refresh-status href="<?php echo esc_url( wp_nonce_url( add_query_arg( 'action', 'refresh-status', self::page_url() ), 'codex-provider-refresh-status' ) ); ?>" hidden><?php esc_html_e( 'Refresh status', 'ai-provider-for-codex' ); ?></a>
+							<a class="button button-link-delete" data-codex-disconnect href="<?php echo esc_url( wp_nonce_url( add_query_arg( 'action', 'disconnect', self::page_url() ), 'codex-provider-disconnect' ) ); ?>" hidden><?php esc_html_e( 'Disconnect Codex account', 'ai-provider-for-codex' ); ?></a>
 						</p>
 						<p data-codex-terminal-actions hidden>
-							<a class="button button-primary" data-codex-retry-sync href="<?php echo esc_url( wp_nonce_url( add_query_arg( 'action', 'refresh-status', self::page_url() ), 'codex-provider-refresh-status' ) ); ?>" hidden><?php esc_html_e( 'Retry account sync', 'scriptorium-ai-provider-for-codex' ); ?></a>
-							<a class="button button-primary" data-codex-start-connect data-codex-start-again href="<?php echo esc_url( wp_nonce_url( add_query_arg( 'action', 'start-connect', self::page_url() ), 'codex-provider-start-connect' ) ); ?>" hidden><?php esc_html_e( 'Start connection again', 'scriptorium-ai-provider-for-codex' ); ?></a>
+							<a class="button button-primary" data-codex-retry-sync href="<?php echo esc_url( wp_nonce_url( add_query_arg( 'action', 'refresh-status', self::page_url() ), 'codex-provider-refresh-status' ) ); ?>" hidden><?php esc_html_e( 'Retry account sync', 'ai-provider-for-codex' ); ?></a>
+							<a class="button button-primary" data-codex-start-connect data-codex-start-again href="<?php echo esc_url( wp_nonce_url( add_query_arg( 'action', 'start-connect', self::page_url() ), 'codex-provider-start-connect' ) ); ?>" hidden><?php esc_html_e( 'Start connection again', 'ai-provider-for-codex' ); ?></a>
 						</p>
 					</section>
 
 					<?php if ( $pending && ! empty( $pending['authSessionId'] ) ) : ?>
 						<section class="codex-provider-card codex-provider-card--connection-fallback codex-device-box" data-codex-server-fallback>
 							<?php if ( 'pending' === $pending_status ) : ?>
-								<h2 class="codex-provider-card__title"><?php esc_html_e( 'Complete account connection', 'scriptorium-ai-provider-for-codex' ); ?></h2>
-								<p><?php esc_html_e( 'Finish the connection in three quick steps:', 'scriptorium-ai-provider-for-codex' ); ?></p>
+								<h2 class="codex-provider-card__title"><?php esc_html_e( 'Complete account connection', 'ai-provider-for-codex' ); ?></h2>
+								<p><?php esc_html_e( 'Finish the connection in three quick steps:', 'ai-provider-for-codex' ); ?></p>
 								<ol>
-									<li><?php esc_html_e( 'Open the verification page.', 'scriptorium-ai-provider-for-codex' ); ?></li>
-									<li><?php esc_html_e( 'Enter this device code.', 'scriptorium-ai-provider-for-codex' ); ?></li>
-									<li><?php esc_html_e( 'Return to this tab after approving. WordPress will keep checking automatically, and the Check status button remains available.', 'scriptorium-ai-provider-for-codex' ); ?></li>
+									<li><?php esc_html_e( 'Open the verification page.', 'ai-provider-for-codex' ); ?></li>
+									<li><?php esc_html_e( 'Enter this verification code.', 'ai-provider-for-codex' ); ?></li>
+									<li><?php esc_html_e( 'Return to this tab after approving. WordPress will keep checking automatically, and the Check status button remains available.', 'ai-provider-for-codex' ); ?></li>
 								</ol>
 								<p class="codex-device-code" data-codex-connection-code><?php echo esc_html( (string) $pending['userCode'] ); ?></p>
 								<p class="codex-provider-actions">
-									<button type="button" class="button button-secondary" data-codex-copy-code><?php esc_html_e( 'Copy code', 'scriptorium-ai-provider-for-codex' ); ?></button>
-									<a class="button button-secondary" data-codex-open-verification href="<?php echo esc_url( (string) $pending['verificationUrl'] ); ?>" target="_blank" rel="noopener noreferrer"><?php esc_html_e( 'Open verification page', 'scriptorium-ai-provider-for-codex' ); ?></a>
-									<a class="button button-primary" data-codex-check-status href="<?php echo esc_url( wp_nonce_url( add_query_arg( 'action', 'check-connect', self::page_url() ), 'codex-provider-check-connect' ) ); ?>"><?php esc_html_e( 'Check connection status', 'scriptorium-ai-provider-for-codex' ); ?></a>
+									<button type="button" class="button button-secondary" data-codex-copy-code><?php esc_html_e( 'Copy code', 'ai-provider-for-codex' ); ?></button>
+									<a class="button button-secondary" data-codex-open-verification href="<?php echo esc_url( (string) $pending['verificationUrl'] ); ?>" target="_blank" rel="noopener noreferrer"><?php esc_html_e( 'Open verification page', 'ai-provider-for-codex' ); ?></a>
+									<a class="button button-primary" data-codex-check-status href="<?php echo esc_url( wp_nonce_url( add_query_arg( 'action', 'check-connect', self::page_url() ), 'codex-provider-check-connect' ) ); ?>"><?php esc_html_e( 'Check connection status', 'ai-provider-for-codex' ); ?></a>
 								</p>
 								<p class="description" data-codex-terminal-text aria-live="polite" hidden></p>
 								<?php if ( ! empty( $pending['error'] ) ) : ?>
 									<p class="description codex-provider-error"><?php echo esc_html( (string) $pending['error'] ); ?></p>
 								<?php endif; ?>
 							<?php elseif ( 'completed' === $pending_status ) : ?>
-								<h2 class="codex-provider-card__title"><?php esc_html_e( 'Retry account sync', 'scriptorium-ai-provider-for-codex' ); ?></h2>
-								<p><?php esc_html_e( 'Your device-code login finished, but WordPress could not finish syncing your Codex account yet.', 'scriptorium-ai-provider-for-codex' ); ?></p>
+								<h2 class="codex-provider-card__title"><?php esc_html_e( 'Retry account sync', 'ai-provider-for-codex' ); ?></h2>
+								<p><?php esc_html_e( 'Your login finished, but WordPress could not finish syncing Codex account details yet.', 'ai-provider-for-codex' ); ?></p>
 								<ol>
-									<li><?php esc_html_e( 'Confirm the local sidecar is still running.', 'scriptorium-ai-provider-for-codex' ); ?></li>
-									<li><?php esc_html_e( 'Click Retry account sync below.', 'scriptorium-ai-provider-for-codex' ); ?></li>
-									<li><?php esc_html_e( 'If it still fails, disconnect and start the connection again.', 'scriptorium-ai-provider-for-codex' ); ?></li>
+									<li><?php esc_html_e( 'Confirm the local runtime is still running.', 'ai-provider-for-codex' ); ?></li>
+									<li><?php esc_html_e( 'Click Retry account sync below.', 'ai-provider-for-codex' ); ?></li>
+									<li><?php esc_html_e( 'If it still fails, disconnect and start the connection again.', 'ai-provider-for-codex' ); ?></li>
 								</ol>
 								<?php if ( ! empty( $pending['error'] ) ) : ?>
 									<p class="description codex-provider-error"><?php echo esc_html( (string) $pending['error'] ); ?></p>
 								<?php endif; ?>
 							<?php elseif ( 'error' === $pending_status ) : ?>
-								<h2 class="codex-provider-card__title"><?php esc_html_e( 'Connection attempt failed', 'scriptorium-ai-provider-for-codex' ); ?></h2>
-								<p><?php esc_html_e( 'The previous device-code login did not finish successfully.', 'scriptorium-ai-provider-for-codex' ); ?></p>
+								<h2 class="codex-provider-card__title"><?php esc_html_e( 'Connection attempt failed', 'ai-provider-for-codex' ); ?></h2>
+								<p><?php esc_html_e( 'The previous verification login did not finish successfully.', 'ai-provider-for-codex' ); ?></p>
 								<ol>
-									<li><?php esc_html_e( 'Review the error below.', 'scriptorium-ai-provider-for-codex' ); ?></li>
-									<li><?php esc_html_e( 'Click Start connection again to request a fresh device code.', 'scriptorium-ai-provider-for-codex' ); ?></li>
-									<li><?php esc_html_e( 'Complete the new verification flow from the beginning.', 'scriptorium-ai-provider-for-codex' ); ?></li>
+									<li><?php esc_html_e( 'Review the error below.', 'ai-provider-for-codex' ); ?></li>
+									<li><?php esc_html_e( 'Click Start connection again to request a fresh verification code.', 'ai-provider-for-codex' ); ?></li>
+									<li><?php esc_html_e( 'Complete the new verification flow from the beginning.', 'ai-provider-for-codex' ); ?></li>
 								</ol>
 								<?php if ( ! empty( $pending['error'] ) ) : ?>
 									<p class="description codex-provider-error"><?php echo esc_html( (string) $pending['error'] ); ?></p>
@@ -430,8 +474,8 @@ final class UserConnectionPage {
 								<div class="codex-provider-card__identity">
 									<img class="codex-provider-card__logo" src="<?php echo esc_url( $logo_url ); ?>" alt="" width="40" height="40" aria-hidden="true" />
 									<div>
-										<h2 class="codex-provider-card__title"><?php esc_html_e( 'Model', 'scriptorium-ai-provider-for-codex' ); ?></h2>
-										<p class="codex-provider-card__description"><?php esc_html_e( 'Text model used for your Codex requests.', 'scriptorium-ai-provider-for-codex' ); ?></p>
+										<h2 class="codex-provider-card__title"><?php esc_html_e( 'Model', 'ai-provider-for-codex' ); ?></h2>
+										<p class="codex-provider-card__description"><?php esc_html_e( 'Text model used for your Codex requests.', 'ai-provider-for-codex' ); ?></p>
 									</div>
 								</div>
 							</div>
@@ -442,7 +486,7 @@ final class UserConnectionPage {
 										echo wp_kses(
 											SafeFormat::sprintf(
 												/* translators: %s: model name. */
-												__( 'Using: %s', 'scriptorium-ai-provider-for-codex' ),
+												__( 'Using: %s', 'ai-provider-for-codex' ),
 												'<strong>' . esc_html( ModelCatalogState::label_for_model_id( $selected_model ) ) . '</strong>'
 											),
 											[ 'strong' => [] ]
@@ -458,13 +502,13 @@ final class UserConnectionPage {
 									<?php endforeach; ?>
 								</div>
 								<?php if ( 'settings_fallback' === ( $catalog['source'] ?? '' ) ) : ?>
-									<p class="description"><?php esc_html_e( 'Using configured defaults — connect an account for live model discovery.', 'scriptorium-ai-provider-for-codex' ); ?></p>
+									<p class="description"><?php esc_html_e( 'Using configured defaults — connect an account for live model discovery.', 'ai-provider-for-codex' ); ?></p>
 								<?php endif; ?>
 								<form class="codex-provider-field" method="post" action="<?php echo esc_url( self::page_url() ); ?>">
 									<?php wp_nonce_field( 'codex-provider-set-model' ); ?>
-									<input type="hidden" name="codex_provider_action" value="set-model" />
-									<label for="codex_provider_model"><strong><?php esc_html_e( 'Choose model', 'scriptorium-ai-provider-for-codex' ); ?></strong></label><br />
-									<select id="codex_provider_model" name="codex_provider_model" <?php disabled( [] === $model_ids ); ?>>
+									<input type="hidden" name="htperkins_aipfc_action" value="set-model" />
+									<label for="htperkins_aipfc_model"><strong><?php esc_html_e( 'Choose model', 'ai-provider-for-codex' ); ?></strong></label><br />
+									<select id="htperkins_aipfc_model" name="htperkins_aipfc_model" <?php disabled( [] === $model_ids ); ?>>
 										<?php foreach ( $model_ids as $model_id ) : ?>
 											<option value="<?php echo esc_attr( (string) $model_id ); ?>" <?php selected( $selected_model, (string) $model_id ); ?>>
 												<?php echo esc_html( ModelCatalogState::label_for_model_id( (string) $model_id ) ); ?>
@@ -472,9 +516,9 @@ final class UserConnectionPage {
 										<?php endforeach; ?>
 									</select>
 									<span class="codex-provider-actions">
-										<?php submit_button( __( 'Set model', 'scriptorium-ai-provider-for-codex' ), 'secondary', 'submit', false ); ?>
+										<?php submit_button( __( 'Set model', 'ai-provider-for-codex' ), 'secondary', 'submit', false ); ?>
 									</span>
-									<p class="description"><?php esc_html_e( 'This model will be used for all your Codex requests until you change it.', 'scriptorium-ai-provider-for-codex' ); ?></p>
+									<p class="description"><?php esc_html_e( 'This model will be used for all your Codex requests until you change it.', 'ai-provider-for-codex' ); ?></p>
 								</form>
 							</div>
 						</section>
@@ -519,7 +563,7 @@ final class UserConnectionPage {
 			}
 
 			if ( 'error' === (string) ( $result['status'] ?? '' ) ) {
-				self::redirect_with_notice( 'connect-failed', (string) ( $result['error'] ?? __( 'The local Codex runtime reported a login error.', 'scriptorium-ai-provider-for-codex' ) ) );
+				self::redirect_with_notice( 'connect-failed', (string) ( $result['error'] ?? __( 'The local Codex runtime reported a login error.', 'ai-provider-for-codex' ) ) );
 			}
 
 			self::redirect_with_notice( 'connect-pending' );
@@ -565,7 +609,7 @@ final class UserConnectionPage {
 		$model_ids  = $catalog['text_model_ids'];
 
 		if ( '' !== $model_id && ! in_array( $model_id, $model_ids, true ) ) {
-			self::redirect_with_notice( 'model-failed', __( 'That model is not available in your current Codex catalog.', 'scriptorium-ai-provider-for-codex' ) );
+			self::redirect_with_notice( 'model-failed', __( 'That model is not available in your current Codex catalog.', 'ai-provider-for-codex' ) );
 		}
 
 		ModelCatalogState::update_user_preferred_model( $wp_user_id, $model_id );
@@ -583,8 +627,8 @@ final class UserConnectionPage {
 		wp_safe_redirect(
 			add_query_arg(
 				[
-					'codex_provider_notice'         => $code,
-					'codex_provider_notice_message' => rawurlencode( (string) $message ),
+					'htperkins_aipfc_notice'         => $code,
+					'htperkins_aipfc_notice_message' => rawurlencode( (string) $message ),
 				],
 				self::page_url()
 			)
@@ -599,9 +643,9 @@ final class UserConnectionPage {
 	 */
 	private static function read_notice(): array {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reads display-only notice query args added by this screen's redirects.
-		$code    = isset( $_GET['codex_provider_notice'] ) ? sanitize_key( wp_unslash( $_GET['codex_provider_notice'] ) ) : '';
+		$code    = isset( $_GET['htperkins_aipfc_notice'] ) ? sanitize_key( wp_unslash( $_GET['htperkins_aipfc_notice'] ) ) : '';
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reads display-only notice query args added by this screen's redirects.
-		$message = isset( $_GET['codex_provider_notice_message'] ) ? rawurldecode( sanitize_text_field( wp_unslash( $_GET['codex_provider_notice_message'] ) ) ) : '';
+		$message = isset( $_GET['htperkins_aipfc_notice_message'] ) ? rawurldecode( sanitize_text_field( wp_unslash( $_GET['htperkins_aipfc_notice_message'] ) ) ) : '';
 
 		return [
 			'code'    => $code,
@@ -623,37 +667,37 @@ final class UserConnectionPage {
 		$class = 'notice notice-success';
 		$text  = '';
 
-		switch ( $notice['code'] ) {
-			case 'connect-started':
-				$text = __( 'The local Codex runtime started a device-code login for your account.', 'scriptorium-ai-provider-for-codex' );
-				break;
-			case 'connect-pending':
-				$class = 'notice notice-info';
-				$text  = __( 'The login is still pending. Complete the device-code step and check status again.', 'scriptorium-ai-provider-for-codex' );
-				break;
-			case 'connect-missing':
-				$class = 'notice notice-warning';
-				$text  = '' !== $notice['message']
-					? $notice['message']
-					: __( 'The previous device-code session is no longer available in the local runtime. Start the connection again to finish linking your account.', 'scriptorium-ai-provider-for-codex' );
-				break;
+			switch ( $notice['code'] ) {
+				case 'connect-started':
+					$text = __( 'The local Codex runtime started a verification login for your account.', 'ai-provider-for-codex' );
+					break;
+				case 'connect-pending':
+					$class = 'notice notice-info';
+					$text  = __( 'The login is still pending. Complete the verification step and check status again.', 'ai-provider-for-codex' );
+					break;
+				case 'connect-missing':
+					$class = 'notice notice-warning';
+					$text  = '' !== $notice['message']
+						? $notice['message']
+						: __( 'The previous verification session is no longer available in the local runtime. Start the connection again to finish linking your account.', 'ai-provider-for-codex' );
+					break;
 			case 'connected':
-				$text = __( 'Your Codex account is now linked.', 'scriptorium-ai-provider-for-codex' );
+				$text = __( 'Your Codex account is now linked.', 'ai-provider-for-codex' );
 				break;
 			case 'disconnected':
-				$text = __( 'Your local Codex link has been removed.', 'scriptorium-ai-provider-for-codex' );
+				$text = __( 'Your local Codex link has been removed.', 'ai-provider-for-codex' );
 				break;
 			case 'status-refreshed':
-				$text = __( 'The local Codex snapshot was refreshed.', 'scriptorium-ai-provider-for-codex' );
+				$text = __( 'The local Codex snapshot was refreshed.', 'ai-provider-for-codex' );
 				break;
 			case 'model-updated':
-				$text = __( 'Your model has been updated.', 'scriptorium-ai-provider-for-codex' );
+				$text = __( 'Your model has been updated.', 'ai-provider-for-codex' );
 				break;
 			case 'connect-failed':
 			case 'refresh-failed':
 			case 'model-failed':
 				$class = 'notice notice-error';
-				$text  = '' !== $notice['message'] ? $notice['message'] : __( 'The local Codex runtime request failed.', 'scriptorium-ai-provider-for-codex' );
+				$text  = '' !== $notice['message'] ? $notice['message'] : __( 'The local Codex runtime request failed.', 'ai-provider-for-codex' );
 				break;
 		}
 

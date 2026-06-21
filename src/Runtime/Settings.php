@@ -2,12 +2,12 @@
 /**
  * Local runtime option helpers.
  *
- * @package AIProviderForCodex
+ * @package HtperkinsAIProviderForCodex
  */
 
 declare( strict_types=1 );
 
-namespace AIProviderForCodex\Runtime;
+namespace Htperkins\AIProviderForCodex\Runtime;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -18,11 +18,11 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 final class Settings {
 
-	public const OPTION_RUNTIME_BASE_URL   = 'codex_runtime_base_url';
-	public const OPTION_RUNTIME_BEARER     = 'codex_runtime_bearer_token';
-	public const OPTION_ALLOWED_MODELS     = 'codex_runtime_allowed_models';
-	public const DEFAULT_RUNTIME_BASE_URL  = 'http://127.0.0.1:4317';
-	private const DEFAULT_SHARED_ENV_FILE  = '/etc/codex-wp-sidecar.env';
+	public const OPTION_RUNTIME_BASE_URL   = 'htperkins_aipfc_runtime_base_url';
+	public const OPTION_RUNTIME_BEARER     = 'htperkins_aipfc_runtime_bearer_token';
+	public const OPTION_ALLOWED_MODELS     = 'htperkins_aipfc_runtime_allowed_models';
+	public const DEFAULT_RUNTIME_BASE_URL  = 'ws://127.0.0.1:4500';
+	private const DEFAULT_SHARED_ENV_FILE  = '/etc/codex-app-server.env';
 
 	/**
 	 * Default models used before a user connects an account.
@@ -103,7 +103,30 @@ final class Settings {
 	 * @return bool
 	 */
 	public static function has_required_configuration(): bool {
-		return '' !== self::get_base_url() && '' !== self::get_bearer_token();
+		return '' !== self::get_base_url();
+	}
+
+	/**
+	 * Returns whether the configured runtime is Codex app-server directly.
+	 *
+	 * @return bool
+	 */
+	public static function is_app_server_endpoint(): bool {
+		return self::is_app_server_url( self::get_base_url() );
+	}
+
+	/**
+	 * Returns whether a URL targets Codex app-server directly.
+	 *
+	 * @param string $url Runtime URL.
+	 * @return bool
+	 */
+	public static function is_app_server_url( string $url ): bool {
+		return in_array(
+			strtolower( (string) wp_parse_url( $url, PHP_URL_SCHEME ) ),
+			[ 'ws', 'wss' ],
+			true
+		);
 	}
 
 	/**
@@ -122,6 +145,16 @@ final class Settings {
 		}
 
 		return self::normalize_base_url_value( (string) $value );
+	}
+
+	/**
+	 * Normalizes a runtime endpoint URL.
+	 *
+	 * @param string $value Raw URL.
+	 * @return string
+	 */
+	public static function normalize_base_url( string $value ): string {
+		return self::normalize_base_url_value( $value );
 	}
 
 	/**
@@ -161,12 +194,12 @@ final class Settings {
 			'base_url_managed'     => '' !== $base_url_override['value'],
 			'base_url_source'      => self::override_label(
 				$base_url_override,
-				__( 'Saved in WordPress options.', 'scriptorium-ai-provider-for-codex' )
+				__( 'Saved in WordPress options.', 'ai-provider-for-codex' )
 			),
 			'bearer_token_managed' => '' !== $bearer_override['value'],
 			'bearer_token_source'  => self::override_label(
 				$bearer_override,
-				__( 'Saved in WordPress options.', 'scriptorium-ai-provider-for-codex' )
+				__( 'Saved in WordPress options.', 'ai-provider-for-codex' )
 			),
 			'shared_env_file'      => self::shared_env_file(),
 		];
@@ -270,7 +303,14 @@ final class Settings {
 	 * @return string
 	 */
 	private static function normalize_base_url_value( string $value ): string {
-		$value = esc_url_raw( trim( $value ) );
+		$value  = trim( $value );
+		$scheme = strtolower( (string) wp_parse_url( $value, PHP_URL_SCHEME ) );
+
+		if ( in_array( $scheme, [ 'ws', 'wss' ], true ) ) {
+			$value = sanitize_text_field( $value );
+		} else {
+			$value = esc_url_raw( $value );
+		}
 
 		if ( '' === $value ) {
 			return '';
@@ -353,8 +393,8 @@ final class Settings {
 			return self::empty_override();
 		}
 
-		$port   = self::setting_override( 'CODEX_WP_PORT' );
-		$target = 'http://' . $host['value'];
+		$port       = self::setting_override( 'CODEX_WP_PORT' );
+		$target     = 'http://' . $host['value'];
 		$port_value = preg_replace( '/[^0-9]/', '', $port['value'] );
 
 		if ( is_string( $port_value ) && '' !== $port_value ) {
@@ -431,19 +471,19 @@ final class Settings {
 			case 'constant':
 				return sprintf(
 					/* translators: %s: PHP constant name. */
-					__( 'Managed by the `%s` constant.', 'scriptorium-ai-provider-for-codex' ),
+					__( 'Managed by the `%s` constant.', 'ai-provider-for-codex' ),
 					$override['detail']
 				);
 			case 'env':
 				return sprintf(
 					/* translators: %s: environment variable name. */
-					__( 'Managed by the `%s` environment variable.', 'scriptorium-ai-provider-for-codex' ),
+					__( 'Managed by the `%s` environment variable.', 'ai-provider-for-codex' ),
 					$override['detail']
 				);
 			case 'file':
 				return sprintf(
 					/* translators: %s: absolute shared env file path. */
-					__( 'Auto-detected from `%s`.', 'scriptorium-ai-provider-for-codex' ),
+					__( 'Auto-detected from `%s`.', 'ai-provider-for-codex' ),
 					$override['detail']
 				);
 			default:
@@ -452,7 +492,7 @@ final class Settings {
 	}
 
 	/**
-	 * Returns the shared sidecar env file path.
+	 * Returns the shared runtime env file path.
 	 *
 	 * @return string
 	 */
@@ -481,7 +521,7 @@ final class Settings {
 	}
 
 	/**
-	 * Parses the shared sidecar env file.
+	 * Parses the shared runtime env file.
 	 *
 	 * @return array<string,string>
 	 */

@@ -2,12 +2,12 @@
 /**
  * Structured runtime request failures.
  *
- * @package AIProviderForCodex
+ * @package HtperkinsAIProviderForCodex
  */
 
 declare( strict_types=1 );
 
-namespace AIProviderForCodex\Runtime;
+namespace Htperkins\AIProviderForCodex\Runtime;
 
 use RuntimeException;
 
@@ -28,7 +28,7 @@ final class RuntimeRequestException extends RuntimeException {
 	private $status_code;
 
 	/**
-	 * Runtime error code from the sidecar payload.
+	 * Runtime error code from the local runtime payload.
 	 *
 	 * @var string
 	 */
@@ -53,7 +53,7 @@ final class RuntimeRequestException extends RuntimeException {
 	 *
 	 * @param string $user_message Normalized user-facing error message.
 	 * @param int    $status_code Runtime HTTP status code.
-	 * @param string $runtime_error_code Sidecar error code.
+	 * @param string $runtime_error_code Runtime error code.
 	 * @param string              $runtime_message Raw runtime error message.
 	 * @param array<string,mixed> $payload Raw decoded runtime payload.
 	 */
@@ -76,7 +76,7 @@ final class RuntimeRequestException extends RuntimeException {
 	}
 
 	/**
-	 * Returns the sidecar error code.
+	 * Returns the runtime error code.
 	 *
 	 * @return string
 	 */
@@ -85,7 +85,7 @@ final class RuntimeRequestException extends RuntimeException {
 	}
 
 	/**
-	 * Returns the raw sidecar error message.
+	 * Returns the raw runtime error message.
 	 *
 	 * @return string
 	 */

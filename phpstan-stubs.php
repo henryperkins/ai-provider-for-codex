@@ -4,7 +4,7 @@
  * this plugin's dependencies: WordPress core symbols not yet in
  * wordpress-stubs, and the WordPress AI plugin's Request Logging classes.
  *
- * @package AIProviderForCodex
+ * @package HtperkinsAIProviderForCodex
  */
 
 declare( strict_types=1 );

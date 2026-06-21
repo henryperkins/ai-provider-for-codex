@@ -59,7 +59,7 @@ export function mapRequestError( status, body, labels = {} ) {
 	};
 }
 
-const MODULE_ID = 'scriptorium-ai-provider-for-codex/diagnostics';
+const MODULE_ID = 'htperkins-ai-provider-for-codex/diagnostics';
 const documentRef = typeof document !== 'undefined' ? document : null;
 const configElement = documentRef?.getElementById( `wp-script-module-data-${ MODULE_ID }` );
 const runButton = documentRef?.querySelector( '[data-codex-diagnostics-run]' );

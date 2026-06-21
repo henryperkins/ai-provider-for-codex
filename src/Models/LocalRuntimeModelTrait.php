@@ -2,12 +2,12 @@
 /**
  * Shared helpers for local-runtime-backed models.
  *
- * @package AIProviderForCodex
+ * @package HtperkinsAIProviderForCodex
  */
 
 declare( strict_types=1 );
 
-namespace AIProviderForCodex\Models;
+namespace Htperkins\AIProviderForCodex\Models;
 
 use RuntimeException;
 
