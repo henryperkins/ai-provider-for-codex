@@ -4,12 +4,12 @@ This checklist is specific to `scriptorium-ai-provider-for-codex`.
 
 Use it before submitting a zip to the WordPress.org plugin directory and again before publishing the first approved SVN release.
 
-Last reviewed: 2026-04-04
-Version and requirement references refreshed: 2026-06-08
+Last reviewed: 2026-06-22
+Version and requirement references refreshed: 2026-06-22
 
 ## Current Status Summary
 
-- `[pass]` Header version and readme stable tag currently match: `0.1.5`
+- `[pass]` Header version and readme stable tag currently match: `2.0`
 - `[pass]` `Requires at least` and `Requires PHP` are aligned between the main plugin file and `readme.txt`
 - `[pass]` Local verification script currently passes
 - `[pass]` Plugin Check has been run locally against the release-style file set and currently reports no findings
@@ -57,8 +57,8 @@ Repo notes:
 
 Repo notes:
 
-- `Version: 0.1.5` in [`scriptorium-ai-provider-for-codex.php`](./scriptorium-ai-provider-for-codex.php)
-- `Stable tag: 0.1.5` in [`readme.txt`](./readme.txt)
+- `Version: 2.0` in [`scriptorium-ai-provider-for-codex.php`](./scriptorium-ai-provider-for-codex.php)
+- `Stable tag: 2.0` in [`readme.txt`](./readme.txt)
 - `Text Domain: scriptorium-ai-provider-for-codex` in [`scriptorium-ai-provider-for-codex.php`](./scriptorium-ai-provider-for-codex.php)
 - `Requires at least: 7.0` in [`scriptorium-ai-provider-for-codex.php`](./scriptorium-ai-provider-for-codex.php)
 - `Requires PHP: 7.4` in [`scriptorium-ai-provider-for-codex.php`](./scriptorium-ai-provider-for-codex.php)
@@ -179,7 +179,7 @@ Repo notes:
 
 - Local verification currently passes using [`scripts/verify.sh`](./scripts/verify.sh).
 - The verification script covers text generation through the default loopback runtime URL so regressions caused by `wp_safe_remote_request()` rejecting `http://127.0.0.1:4317` are caught before release.
-- A release-style zip currently builds successfully at `../plugin-builds/scriptorium-ai-provider-for-codex-0.1.5.zip`.
+- A release-style zip currently builds successfully at `../plugin-builds/scriptorium-ai-provider-for-codex-2.0.zip`.
 - Plugin Check 1.9.0 is installed on this site and `WP_PATH=/home/dev/wp-hperkins-com bash scripts/plugin-check-release.sh` currently reports no findings.
 
 ## 10. Submission Packet

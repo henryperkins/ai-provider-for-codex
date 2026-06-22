@@ -4,7 +4,7 @@ Tags: ai, codex, wordpress-ai-client
 Requires at least: 7.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.1.5
+Stable tag: 2.0
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -128,8 +128,14 @@ Support is limited to documented, self-managed environments that can run the loc
 
 == Changelog ==
 
-= 0.1.5 =
+= 2.0 =
 * Add snapshot-gated text-to-image generation through the local Codex runtime when the connected account reports image-generation capability.
+* Add Codex text and image requests to the WordPress AI plugin's Request Log, including non-fatal success and error details without generated image payloads.
+* Add runtime diagnostics for the local Python runtime, Codex CLI, storage path, and app-server handshake.
+* Refresh the Codex Provider settings and user connection screens with shared, core-aligned admin styles and clearer status details.
+* Harden release packaging and verification with untracked release-path guards plus expanded JavaScript, Python, PHP, and Plugin Check coverage.
+
+= 0.1.5 =
 * Rename the plugin to Scriptorium AI Provider for Codex and the main plugin file to scriptorium-ai-provider-for-codex.php.
 * Carry the connector approval across the plugin rename (preserving any prior admin revocation) for sites using the WordPress AI Connector Approval experiment.
 * Deliver admin screen styles through wp_add_inline_style() and the connection-page config through script module data instead of inline style/script tags.
@@ -157,6 +163,9 @@ Support is limited to documented, self-managed environments that can run the loc
 * Initial local-runtime release with Connectors integration, per-user account linking, local runtime snapshots, and Codex provider support for the WordPress AI Client.
 
 == Upgrade Notice ==
+
+= 2.0 =
+After updating, refresh connected Codex accounts so the plugin can discover image-generation capability and expose codex-image when available.
 
 = 0.1.5 =
 Renaming the main plugin file means an in-place update deactivates the plugin (its previous file no longer exists). Reactivate it from the Plugins screen after updating; your settings and connections are preserved. Fresh installs are unaffected.

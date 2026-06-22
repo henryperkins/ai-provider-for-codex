@@ -5,7 +5,7 @@
  * Description:       Codex provider for the WordPress AI Client using a local runtime sidecar.
  * Requires at least: 7.0
  * Requires PHP:      7.4
- * Version:           0.1.5
+ * Version:           2.0
  * Author:            htperkins
  * Author URI:        https://profiles.wordpress.org/htperkins/
  * License:           GPL-2.0-or-later
@@ -29,7 +29,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-const VERSION = '0.1.5';
+const VERSION = '2.0';
 const SLUG = 'scriptorium-ai-provider-for-codex';
 const PLUGIN_URI = 'https://github.com/henryperkins/ai-provider-for-codex';
 const MIN_WP_VERSION = '7.0';

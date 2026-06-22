@@ -2871,7 +2871,7 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 							[
 								'ok'      => true,
 								'service' => 'codex-wp-sidecar',
-								'version' => '0.1.5',
+								'version' => '2.0',
 								'checks'  => [
 									[ 'id' => 'python_version', 'label' => 'Python runtime', 'status' => 'pass', 'detail' => 'Python 3.11.6' ],
 								],
