@@ -229,20 +229,28 @@ final class Client {
 		} catch ( RuntimeRequestException $exception ) {
 			throw $exception;
 		} catch ( RuntimeException $exception ) {
-			if ( $record_health ) {
-				HealthMonitor::record_failure( $exception->getMessage() );
+			$message        = $exception->getMessage();
+			$is_unreachable = self::is_app_server_transport_failure( $message );
+			$error_code     = $is_unreachable ? 'app_server_unreachable' : 'app_server_error';
+
+			// Only transport/connection failures mean the runtime is unreachable.
+			// Expected domain errors (missing input, missing account auth, image
+			// capability denial) come back from a runtime that answered, so they
+			// must not poison the health cache.
+			if ( $record_health && $is_unreachable ) {
+				HealthMonitor::record_failure( $message );
 			}
 
 			// phpcs:disable WordPress.Security.EscapeOutput.ExceptionNotEscaped -- App-server exception payload is rendered through escaped admin notices, not direct output.
 			throw new RuntimeRequestException(
-				esc_html( sanitize_text_field( $exception->getMessage() ) ),
-				500,
-				'app_server_error',
-				$exception->getMessage(),
+				esc_html( sanitize_text_field( $message ) ),
+				$is_unreachable ? 503 : 400,
+				$error_code,
+				$message,
 				[
 					'error' => [
-						'code'    => 'app_server_error',
-						'message' => $exception->getMessage(),
+						'code'    => $error_code,
+						'message' => $message,
 					],
 				]
 			);
@@ -457,6 +465,36 @@ final class Client {
 	 */
 	private static function string_contains( string $haystack, string $needle ): bool {
 		return '' === $needle || false !== strpos( $haystack, $needle );
+	}
+
+	/**
+	 * Returns whether an app-server RuntimeException is a transport/connection failure.
+	 *
+	 * These map to AppServerConnection socket, handshake, and timeout errors and
+	 * mean the runtime is unreachable. Everything else is an expected domain
+	 * error from a runtime that answered.
+	 *
+	 * @param string $message Exception message.
+	 * @return bool
+	 */
+	private static function is_app_server_transport_failure( string $message ): bool {
+		$lower = strtolower( $message );
+
+		foreach ( [
+			'could not connect',
+			'could not read',
+			'could not write',
+			'socket',
+			'handshake',
+			'timed out',
+			'closed the websocket',
+		] as $needle ) {
+			if ( self::string_contains( $lower, $needle ) ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**

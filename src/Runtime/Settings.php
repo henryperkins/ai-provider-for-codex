@@ -103,7 +103,21 @@ final class Settings {
 	 * @return bool
 	 */
 	public static function has_required_configuration(): bool {
-		return '' !== self::get_base_url();
+		$base_url = self::get_base_url();
+
+		if ( '' === $base_url ) {
+			return false;
+		}
+
+		// Site-level app-server (ws/wss) endpoints authenticate through the
+		// service user's stored Codex login, so a shared bearer token is
+		// optional. Legacy HTTP sidecar endpoints sign every call with a bearer
+		// token, so an empty token there means the runtime is not yet usable.
+		if ( self::is_app_server_url( $base_url ) ) {
+			return true;
+		}
+
+		return '' !== self::get_bearer_token();
 	}
 
 	/**

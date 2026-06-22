@@ -60,7 +60,11 @@ final class AppServerClient {
 	 */
 	public function health(): array {
 		return $this->with_session(
-			static function (): array {
+			static function ( $session ): array {
+				// Force the WebSocket connect + JSON-RPC handshake so health
+				// reflects real reachability instead of a no-op success.
+				$session->ping();
+
 				return [
 					'ok'      => true,
 					'service' => 'codex-app-server',
@@ -76,38 +80,24 @@ final class AppServerClient {
 	 * @return array<string,mixed>
 	 */
 	public function diagnostics(): array {
-		try {
-			$this->health();
-			$rows = [
+		// Let a connection failure propagate: Client::request_app_server() wraps it
+		// as a transport error so DiagnosticsController owns the unreachable row,
+		// instead of reporting a misleading "reachable" pass here.
+		$this->health();
+
+		return [
+			'ok'      => true,
+			'service' => 'codex-app-server',
+			'version' => \Htperkins\AIProviderForCodex\VERSION,
+			'checks'  => [
 				[
 					'id'     => 'app_server',
 					'label'  => __( 'Codex app-server reachable', 'ai-provider-for-codex' ),
 					'status' => 'pass',
 					'detail' => Settings::get_base_url(),
 				],
-			];
-
-			return [
-				'ok'      => true,
-				'service' => 'codex-app-server',
-				'version' => \Htperkins\AIProviderForCodex\VERSION,
-				'checks'  => $rows,
-			];
-		} catch ( \Throwable $exception ) {
-			return [
-				'ok'      => false,
-				'service' => 'codex-app-server',
-				'version' => \Htperkins\AIProviderForCodex\VERSION,
-				'checks'  => [
-					[
-						'id'     => 'app_server',
-						'label'  => __( 'Codex app-server reachable', 'ai-provider-for-codex' ),
-						'status' => 'fail',
-						'detail' => $exception->getMessage(),
-					],
-				],
-			];
-		}
+			],
+		];
 	}
 
 	/**
@@ -128,11 +118,11 @@ final class AppServerClient {
 					$capabilities = [];
 				}
 
-					$account_payload = self::normalize_account_payload( $account );
-					if ( empty( $account_payload['authMode'] ) ) {
-						// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception messages are escaped at the render boundary.
-						throw self::runtime_exception( __( 'No site-level Codex account is available. Run `codex login` for the service user that starts app-server.', 'ai-provider-for-codex' ) );
-					}
+				$account_payload = self::normalize_account_payload( $account );
+				if ( empty( $account_payload['authMode'] ) ) {
+					// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception messages are escaped at the render boundary.
+					throw self::runtime_exception( __( 'No site-level Codex account is available. Run `codex login` for the service user that starts app-server.', 'ai-provider-for-codex' ) );
+				}
 
 				return [
 					'account'      => $account_payload,
@@ -249,11 +239,11 @@ final class AppServerClient {
 						continue;
 					}
 
-						$turn = $params['turn'] ?? null;
-						if ( is_array( $turn ) && ! empty( $turn['error'] ) ) {
-							// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception messages are escaped at the render boundary.
-							throw self::runtime_exception( sanitize_text_field( (string) $turn['error'] ) );
-						}
+					$turn = $params['turn'] ?? null;
+					if ( is_array( $turn ) && ! empty( $turn['error'] ) ) {
+						// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception messages are escaped at the render boundary.
+						throw self::runtime_exception( sanitize_text_field( (string) $turn['error'] ) );
+					}
 					break;
 				}
 
@@ -369,11 +359,11 @@ final class AppServerClient {
 						continue;
 					}
 
-						$turn = $params['turn'] ?? null;
-						if ( is_array( $turn ) && ! empty( $turn['error'] ) ) {
-							// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception messages are escaped at the render boundary.
-							throw self::runtime_exception( sanitize_text_field( (string) $turn['error'] ) );
-						}
+					$turn = $params['turn'] ?? null;
+					if ( is_array( $turn ) && ! empty( $turn['error'] ) ) {
+						// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception messages are escaped at the render boundary.
+						throw self::runtime_exception( sanitize_text_field( (string) $turn['error'] ) );
+					}
 					break;
 				}
 

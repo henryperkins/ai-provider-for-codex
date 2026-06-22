@@ -41,8 +41,12 @@ final class WebSocketFrame {
 			$frame .= chr( 0x80 | $length );
 		} elseif ( $length <= 65535 ) {
 			$frame .= chr( 0x80 | 126 ) . pack( 'n', $length );
-		} else {
+		} elseif ( $length <= 0xFFFFFFFF ) {
 			$frame .= chr( 0x80 | 127 ) . pack( 'NN', 0, $length );
+		} else {
+			// The high 32 bits are hard-coded to zero; refuse to silently
+			// truncate a payload that would not fit in the low 32 bits.
+			throw new RuntimeException( 'WebSocket frame payload exceeds the supported size.' );
 		}
 
 		return $frame . $mask_key . self::mask_payload( $payload, $mask_key );
@@ -76,7 +80,12 @@ final class WebSocketFrame {
 			if ( strlen( $frame ) < 10 ) {
 				throw new RuntimeException( 'Incomplete WebSocket frame length.' );
 			}
-			$parts  = unpack( 'Nhigh/Nlow', substr( $frame, 2, 8 ) );
+			$parts = unpack( 'Nhigh/Nlow', substr( $frame, 2, 8 ) );
+			if ( 0 !== $parts['high'] ) {
+				// Reject frames whose length needs the high 32 bits rather than
+				// truncating to the low word and mis-framing the stream.
+				throw new RuntimeException( 'WebSocket frame payload exceeds the supported size.' );
+			}
 			$length = (int) $parts['low'];
 			$offset = 10;
 		}
@@ -138,13 +147,18 @@ final class WebSocketFrame {
 	 * @return string
 	 */
 	private static function mask_payload( string $payload, string $mask_key ): string {
-		$output = '';
 		$length = strlen( $payload );
 
-		for ( $i = 0; $i < $length; $i++ ) {
-			$output .= $payload[ $i ] ^ $mask_key[ $i % 4 ];
+		if ( 0 === $length ) {
+			return '';
 		}
 
-		return $output;
+		// Repeat the 4-byte key to at least the payload length, then XOR in one
+		// operation. PHP's string `^` is byte-wise, truncates to the shorter
+		// operand, and is far faster than a per-byte loop on large payloads such
+		// as base64-encoded images.
+		$repeated_mask = str_repeat( $mask_key, (int) ceil( $length / 4 ) );
+
+		return $payload ^ $repeated_mask;
 	}
 }

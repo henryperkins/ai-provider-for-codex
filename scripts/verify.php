@@ -239,7 +239,15 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 			putenv( 'CODEX_WP_RUNTIME_BASE_URL' );
 			unset( $_ENV['CODEX_WP_RUNTIME_BASE_URL'] );
 			update_option( Settings::OPTION_RUNTIME_BASE_URL, 'http://127.0.0.1:4317' );
+			$codex_provider_assert(
+				! Settings::has_required_configuration(),
+				'A legacy HTTP runtime endpoint without a bearer token must not be reported as configured.'
+			);
 		update_option( Settings::OPTION_RUNTIME_BEARER, 'verify-token' );
+			$codex_provider_assert(
+				Settings::has_required_configuration(),
+				'A legacy HTTP runtime endpoint with a bearer token should be considered configured.'
+			);
 		update_option( Settings::OPTION_RUNTIME_BASE_URL, null );
 		update_option( Settings::OPTION_RUNTIME_BEARER, null );
 		$codex_provider_assert(
@@ -1456,6 +1464,8 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 							throw new RuntimeException( 'No matching fake app-server notification.' );
 						}
 
+						public function ping(): void {}
+
 						public function close(): void {}
 					};
 				};
@@ -1493,6 +1503,32 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 					$codex_provider_assert(
 						in_array( 'turn/start', array_column( $codex_provider_app_server_requests, 'method' ), true ),
 						'Site-level Codex app-server mode should start a turn through app-server.'
+					);
+
+					// Health probe for a ws:// runtime must complete a WebSocket
+					// handshake instead of an HTTP /healthz GET, and report healthy.
+					delete_transient( 'htperkins_aipfc_runtime_health' );
+					$codex_provider_app_server_health = HealthMonitor::probe();
+					$codex_provider_assert(
+						'healthy' === $codex_provider_app_server_health['status'],
+						'A ws:// runtime probe should report healthy via the app-server handshake, not unreachable.'
+					);
+
+					// Diagnostics over app-server should report a reachable runtime.
+					$codex_provider_app_server_diagnostics = \Htperkins\AIProviderForCodex\REST\DiagnosticsController::run()->get_data();
+					$codex_provider_assert(
+						true === ( $codex_provider_app_server_diagnostics['ok'] ?? null ),
+						'App-server diagnostics should report ok when the runtime handshake succeeds.'
+					);
+					$codex_provider_app_server_reachable = '';
+					foreach ( (array) ( $codex_provider_app_server_diagnostics['rows'] ?? [] ) as $codex_provider_diag_row ) {
+						if ( 'reachable' === ( $codex_provider_diag_row['id'] ?? '' ) ) {
+							$codex_provider_app_server_reachable = (string) ( $codex_provider_diag_row['status'] ?? '' );
+						}
+					}
+					$codex_provider_assert(
+						'pass' === $codex_provider_app_server_reachable,
+						'App-server diagnostics should mark the reachable row as pass on a successful handshake.'
 					);
 				} finally {
 					remove_all_filters( 'htperkins_aipfc_app_server_session_factory' );

@@ -89,11 +89,24 @@ final class DiagnosticsController {
 
 			$ok = (bool) ( $result['ok'] ?? false );
 		} catch ( RuntimeRequestException $exception ) {
-			// A structured error means the runtime answered, so it is reachable;
-			// the failure is classified by status + code.
-			$rows[] = self::row( 'reachable', __( 'Codex app-server reachable', 'ai-provider-for-codex' ), 'pass', '' );
-			$rows[] = self::runtime_error_row( $exception );
-			$ok     = false;
+			if ( 'app_server_unreachable' === $exception->get_runtime_error_code() ) {
+				// The app-server WebSocket connection itself failed, so it is not
+				// reachable; do not emit a passing reachable row.
+				$detail = '' !== $exception->get_runtime_message() ? $exception->get_runtime_message() : $exception->getMessage();
+				$rows[] = self::row(
+					'reachable',
+					__( 'Codex app-server reachable', 'ai-provider-for-codex' ),
+					'fail',
+					$detail,
+					self::remediation_for_transport( $detail )
+				);
+			} else {
+				// A structured error means the runtime answered, so it is reachable;
+				// the failure is classified by status + code.
+				$rows[] = self::row( 'reachable', __( 'Codex app-server reachable', 'ai-provider-for-codex' ), 'pass', '' );
+				$rows[] = self::runtime_error_row( $exception );
+			}
+			$ok = false;
 		} catch ( RuntimeException $exception ) {
 			$rows[] = self::row(
 				'reachable',

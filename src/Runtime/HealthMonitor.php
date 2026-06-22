@@ -121,6 +121,12 @@ final class HealthMonitor {
 			return self::get_status();
 		}
 
+		// A ws/wss app-server endpoint has no HTTP /healthz route, so probe it
+		// with a real WebSocket handshake instead of wp_remote_get().
+		if ( Settings::is_app_server_url( $base_url ) ) {
+			return self::probe_app_server();
+		}
+
 		$response = wp_remote_get(
 			$base_url . '/healthz',
 			[
@@ -158,6 +164,22 @@ final class HealthMonitor {
 		}
 
 		self::record_success();
+
+		return self::get_status();
+	}
+
+	/**
+	 * Probes a Codex app-server endpoint with a cheap WebSocket handshake.
+	 *
+	 * @return array{status:string,checked_at:?string,error:string}
+	 */
+	private static function probe_app_server(): array {
+		try {
+			( new AppServerClient() )->health();
+			self::record_success();
+		} catch ( \Throwable $exception ) {
+			self::record_failure( $exception->getMessage() );
+		}
 
 		return self::get_status();
 	}

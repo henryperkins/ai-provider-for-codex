@@ -51,7 +51,7 @@ final class CodexTextGenerationModel extends AbstractApiBasedModel implements Te
 		$is_site_level_app_server = Settings::is_app_server_endpoint();
 		$connection               = ConnectionRepository::get_for_user( $wp_user_id );
 
-		if ( ! $is_site_level_app_server && ! $connection ) {
+		if ( ! $is_site_level_app_server && ( ! $connection || ConnectionRepository::is_expired( $connection ) ) ) {
 			throw self::runtime_exception( esc_html__( 'Connect a Codex account before requesting text generation.', 'ai-provider-for-codex' ) );
 		}
 

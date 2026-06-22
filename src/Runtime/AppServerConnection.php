@@ -100,11 +100,11 @@ final class AppServerConnection {
 		while ( microtime( true ) < $deadline ) {
 			$message = $this->receive_json( max( 1, (int) ceil( $deadline - microtime( true ) ) ) );
 
-				if ( isset( $message['id'] ) && (int) $message['id'] === $id ) {
-					if ( isset( $message['error'] ) && is_array( $message['error'] ) ) {
-						// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception messages are escaped at the render boundary.
-						throw self::runtime_exception( sanitize_text_field( (string) ( $message['error']['message'] ?? $method . ' failed.' ) ) );
-					}
+			if ( isset( $message['id'] ) && (int) $message['id'] === $id ) {
+				if ( isset( $message['error'] ) && is_array( $message['error'] ) ) {
+					// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception messages are escaped at the render boundary.
+					throw self::runtime_exception( sanitize_text_field( (string) ( $message['error']['message'] ?? $method . ' failed.' ) ) );
+				}
 
 				return $message['result'] ?? [];
 			}
@@ -206,8 +206,25 @@ final class AppServerConnection {
 
 		$this->socket = $socket;
 		stream_set_timeout( $this->socket, $this->timeout );
-		$this->handshake( $parts );
-		$this->initialize();
+
+		try {
+			$this->handshake( $parts );
+			$this->initialize();
+		} catch ( \Throwable $exception ) {
+			// Leave no half-open socket behind: a later connect() must be able to
+			// retry instead of short-circuiting on a wedged resource.
+			$this->close();
+			throw $exception;
+		}
+	}
+
+	/**
+	 * Forces the connection and JSON-RPC handshake as a cheap liveness probe.
+	 *
+	 * @return void
+	 */
+	public function ping(): void {
+		$this->connect();
 	}
 
 	/**
@@ -256,7 +273,9 @@ final class AppServerConnection {
 		];
 
 		if ( '' !== $this->token ) {
-			$headers[] = 'Authorization: Bearer ' . $this->token;
+			// Defensively strip CR/LF so an opaque token can never inject extra
+			// headers into the upgrade request.
+			$headers[] = 'Authorization: Bearer ' . str_replace( [ "\r", "\n" ], '', $this->token );
 		}
 
 		$this->write( implode( "\r\n", $headers ) . "\r\n\r\n" );
@@ -272,6 +291,17 @@ final class AppServerConnection {
 
 		if ( ! preg_match( '/^HTTP\/\d(?:\.\d)?\s+101\s/i', $response ) ) {
 			throw new RuntimeException( 'Codex app-server WebSocket handshake failed.' );
+		}
+
+		// RFC 6455: confirm the server echoed the expected accept key so we are
+		// talking to a real WebSocket peer and not an arbitrary HTTP responder.
+		$expected_accept = base64_encode( sha1( $key . '258EAFA5-E914-47DA-95CA-C5AB0DC85B11', true ) );
+
+		if (
+			! preg_match( '/Sec-WebSocket-Accept:\s*(.+?)\r\n/i', $response, $matches )
+			|| ! hash_equals( $expected_accept, trim( $matches[1] ) )
+		) {
+			throw new RuntimeException( 'Codex app-server WebSocket handshake validation failed.' );
 		}
 	}
 
@@ -318,18 +348,28 @@ final class AppServerConnection {
 	 * @return array<string,mixed>
 	 */
 	private function receive_json( int $timeout ): array {
-		if ( is_resource( $this->socket ) ) {
-			stream_set_timeout( $this->socket, max( 1, $timeout ) );
-		}
+		$deadline = microtime( true ) + max( 1, $timeout );
 
-		$frame = $this->read_frame();
+		// Loop instead of recursing so a long run of non-text frames (ping/pong)
+		// can never exhaust the PHP call stack.
+		while ( true ) {
+			if ( is_resource( $this->socket ) ) {
+				stream_set_timeout( $this->socket, max( 1, (int) ceil( $deadline - microtime( true ) ) ) );
+			}
 
-		if ( 'close' === $frame['type'] ) {
-			throw new RuntimeException( 'Codex app-server closed the WebSocket connection.' );
-		}
+			$frame = $this->read_frame();
 
-		if ( 'text' !== $frame['type'] ) {
-			return $this->receive_json( $timeout );
+			if ( 'close' === $frame['type'] ) {
+				throw new RuntimeException( 'Codex app-server closed the WebSocket connection.' );
+			}
+
+			if ( 'text' === $frame['type'] ) {
+				break;
+			}
+
+			if ( microtime( true ) >= $deadline ) {
+				throw new RuntimeException( 'Timed out waiting for a Codex app-server text frame.' );
+			}
 		}
 
 		$message = json_decode( $frame['payload'], true );
@@ -358,6 +398,9 @@ final class AppServerConnection {
 		} elseif ( 127 === $length ) {
 			$extra = $this->read_exact( 8 );
 			$parts = unpack( 'Nhigh/Nlow', $extra );
+			if ( 0 !== $parts['high'] ) {
+				throw self::runtime_exception( 'Codex app-server frame payload exceeds the supported size.' );
+			}
 			$length = (int) $parts['low'];
 		}
 
@@ -431,6 +474,15 @@ final class AppServerConnection {
 			$chunk = $this->read( $length - strlen( $buffer ) );
 
 			if ( '' === $chunk ) {
+				// fread() returns '' for both a read timeout and a closed peer;
+				// the stream metadata tells the two apart so the error is honest.
+				if ( is_resource( $this->socket ) ) {
+					$meta = stream_get_meta_data( $this->socket );
+					if ( ! empty( $meta['timed_out'] ) ) {
+						throw self::runtime_exception( 'Codex app-server socket read timed out.' );
+					}
+				}
+
 				throw self::runtime_exception( 'Codex app-server socket closed unexpectedly.' );
 			}
 

@@ -130,12 +130,21 @@ final class Installer {
 			);
 		}
 
-		$legacy_auth_states = $wpdb->prefix . 'htperkins_aipfc_auth_states';
+		// Drop the removed auth-state table plus the pre-rename data tables that
+		// the renamed schema abandons (no migration runs into the new tables).
+		$legacy_tables = [
+			$wpdb->prefix . 'htperkins_aipfc_auth_states',
+			$wpdb->prefix . 'codex_provider_auth_states',
+			$wpdb->prefix . 'codex_provider_connections',
+			$wpdb->prefix . 'codex_provider_connection_snapshots',
+		];
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Schema cleanup during upgrade must run directly.
-		$wpdb->query(
-			$wpdb->prepare( 'DROP TABLE IF EXISTS %i', $legacy_auth_states ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery.SchemaChange -- Schema cleanup during upgrade must run directly.
-		);
+		foreach ( $legacy_tables as $legacy_table ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Schema cleanup during upgrade must run directly.
+			$wpdb->query(
+				$wpdb->prepare( 'DROP TABLE IF EXISTS %i', $legacy_table ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery.SchemaChange -- Schema cleanup during upgrade must run directly.
+			);
+		}
 	}
 
 	/**
@@ -167,6 +176,20 @@ final class Installer {
 	 * @return void
 	 */
 	private static function cleanup_legacy_options(): void {
-		delete_option( self::LEGACY_DEFAULT_MODEL );
+		$legacy_options = [
+			self::LEGACY_DEFAULT_MODEL,
+			// Pre-rename option keys from releases before the htperkins_aipfc_* prefix.
+			'codex_runtime_base_url',
+			'codex_runtime_bearer_token',
+			'codex_runtime_allowed_models',
+			'codex_runtime_suggested_bearer_token',
+			'codex_runtime_default_model',
+			'codex_provider_schema_version',
+			'codex_provider_connector_self_approval_seeded',
+		];
+
+		foreach ( $legacy_options as $legacy_option ) {
+			delete_option( $legacy_option );
+		}
 	}
 }
