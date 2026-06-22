@@ -480,15 +480,15 @@ Rationale: `Plugin::init()` only runs after `check_php_version()`, `check_wp_ver
 In `scripts/verify.php`, add this import near the other provider imports:
 
 ```php
-use AIProviderForCodex\Provider\CodexProvider;
+use Htperkins\AIProviderForCodex\Provider\CodexProvider;
 ```
 
 The provider import group should include:
 
 ```php
-use AIProviderForCodex\Provider\CodexProvider;
-use AIProviderForCodex\Provider\ModelCatalogState;
-use AIProviderForCodex\Provider\SupportChecks;
+use Htperkins\AIProviderForCodex\Provider\CodexProvider;
+use Htperkins\AIProviderForCodex\Provider\ModelCatalogState;
+use Htperkins\AIProviderForCodex\Provider\SupportChecks;
 ```
 
 - [ ] **Step 9: Add a helper to reset the AI Client default registry during verification**
@@ -509,7 +509,7 @@ In `scripts/verify.php`, after the reset helper from Step 9 and before the `$cod
 
 ```php
 			$codex_provider_assert(
-				is_wp_version_compatible( \AIProviderForCodex\MIN_WP_VERSION ),
+				is_wp_version_compatible( \Htperkins\AIProviderForCodex\MIN_WP_VERSION ),
 				'AI Provider for Codex verification requires WordPress 7.0 or newer.'
 			);
 			$codex_provider_assert(
@@ -533,7 +533,7 @@ In `scripts/verify.php`, after the reset helper from Step 9 and before the `$cod
 
 			try {
 				$codex_provider_reset_ai_client_registry();
-				\AIProviderForCodex\register_provider();
+				\Htperkins\AIProviderForCodex\register_provider();
 				$codex_provider_assert(
 					! AiClient::defaultRegistry()->hasProvider( CodexProvider::class ),
 					'Codex provider should not register when wp_supports_ai disables AI globally.'
@@ -543,7 +543,7 @@ In `scripts/verify.php`, after the reset helper from Step 9 and before the `$cod
 			}
 
 			$codex_provider_reset_ai_client_registry();
-			\AIProviderForCodex\register_provider();
+			\Htperkins\AIProviderForCodex\register_provider();
 			$codex_provider_assert(
 				AiClient::defaultRegistry()->hasProvider( CodexProvider::class ),
 				'Codex provider should register when AI is supported and the AI Client is available.'
@@ -592,15 +592,15 @@ git commit -m "fix: gate codex provider registration"
 In `src/Provider/CodexProvider.php`, add this import with the other imports:
 
 ```php
-use AIProviderForCodex\Admin\UserConnectionPage;
+use Htperkins\AIProviderForCodex\Admin\UserConnectionPage;
 ```
 
 The top import block should begin:
 
 ```php
-use AIProviderForCodex\Admin\UserConnectionPage;
-use AIProviderForCodex\Models\CodexTextGenerationModel;
-use AIProviderForCodex\Runtime\Settings;
+use Htperkins\AIProviderForCodex\Admin\UserConnectionPage;
+use Htperkins\AIProviderForCodex\Models\CodexTextGenerationModel;
+use Htperkins\AIProviderForCodex\Runtime\Settings;
 ```
 
 - [ ] **Step 2: Point `credentialsUrl` at the per-user connection page**

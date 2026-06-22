@@ -4,13 +4,13 @@ parameters:
 			message: '#^If condition is always true\.$#'
 			identifier: if.alwaysTrue
 			count: 1
-			path: scriptorium-ai-provider-for-codex.php
+			path: ai-provider-for-codex.php
 
 		-
 			message: '#^Unreachable statement \- code above always terminates\.$#'
 			identifier: deadCode.unreachable
 			count: 1
-			path: scriptorium-ai-provider-for-codex.php
+			path: ai-provider-for-codex.php
 
 		# Runtime version checks are forward-compatible with older supported SDKs even
 		# when the local Composer dependency is newer.
@@ -18,7 +18,7 @@ parameters:
 			message: '#^Right side of && is always true\.$#'
 			identifier: booleanAnd.rightAlwaysTrue
 			count: 1
-			path: scriptorium-ai-provider-for-codex.php
+			path: ai-provider-for-codex.php
 
 		# Description support was added in php-ai-client 1.2.0, logoPath in 1.3.0.
 		-

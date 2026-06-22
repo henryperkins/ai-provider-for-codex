@@ -2,19 +2,19 @@
 /**
  * Per-user pending local runtime connection persistence.
  *
- * @package AIProviderForCodex
+ * @package HtperkinsAIProviderForCodex
  */
 
 declare( strict_types=1 );
 
-namespace AIProviderForCodex\Auth;
+namespace Htperkins\AIProviderForCodex\Auth;
 
 /**
  * Stores short-lived local runtime login session data in user meta.
  */
 final class PendingConnectionRepository {
 
-	private const USER_META_KEY = 'codex_provider_pending_auth_session';
+	private const USER_META_KEY = 'htperkins_aipfc_pending_auth_session';
 
 	/**
 	 * Returns the pending login session for a user.

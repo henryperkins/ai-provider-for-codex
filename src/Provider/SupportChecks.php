@@ -2,18 +2,18 @@
 /**
  * Local readiness helpers.
  *
- * @package AIProviderForCodex
+ * @package HtperkinsAIProviderForCodex
  */
 
 declare( strict_types=1 );
 
-namespace AIProviderForCodex\Provider;
+namespace Htperkins\AIProviderForCodex\Provider;
 
-use AIProviderForCodex\Auth\ConnectionRepository;
-use AIProviderForCodex\Auth\ConnectionSnapshotRepository;
-use AIProviderForCodex\Auth\PendingConnectionRepository;
-use AIProviderForCodex\Runtime\HealthMonitor;
-use AIProviderForCodex\Runtime\Settings;
+use Htperkins\AIProviderForCodex\Auth\ConnectionRepository;
+use Htperkins\AIProviderForCodex\Auth\ConnectionSnapshotRepository;
+use Htperkins\AIProviderForCodex\Auth\PendingConnectionRepository;
+use Htperkins\AIProviderForCodex\Runtime\HealthMonitor;
+use Htperkins\AIProviderForCodex\Runtime\Settings;
 
 /**
  * Computes user-aware provider status from local state.
@@ -70,6 +70,19 @@ final class SupportChecks {
 				'snapshot'          => null,
 				'catalog'           => $catalog,
 				'pendingConnection' => $pending,
+			];
+		}
+
+		if ( Settings::is_app_server_endpoint() ) {
+			return [
+				'ready'             => true,
+				'reason'            => 'ready',
+				'runtime'           => $runtime,
+				'runtimeConfigured' => true,
+				'connection'        => null,
+				'snapshot'          => null,
+				'catalog'           => $catalog,
+				'pendingConnection' => null,
 			];
 		}
 

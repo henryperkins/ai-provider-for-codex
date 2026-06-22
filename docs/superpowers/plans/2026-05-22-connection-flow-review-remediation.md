@@ -433,9 +433,9 @@ function buildFixture( configOverrides = {}, fetchImpl = async () => jsonRespons
 
 	configElement.textContent = JSON.stringify( {
 		pageUrl: 'https://example.test/wp-admin/users.php?page=ai-provider-for-codex',
-		startUrl: 'https://example.test/wp-json/codex-provider/v1/connect/start',
-		connectStatusUrl: 'https://example.test/wp-json/codex-provider/v1/connect/status',
-		providerStatusUrl: 'https://example.test/wp-json/codex-provider/v1/status',
+		startUrl: 'https://example.test/wp-json/htperkins-aipfc/v1/connect/start',
+		connectStatusUrl: 'https://example.test/wp-json/htperkins-aipfc/v1/connect/status',
+		providerStatusUrl: 'https://example.test/wp-json/htperkins-aipfc/v1/status',
 		restNonce: 'nonce_123',
 		currentPending: null,
 		text: DEFAULT_TEXT,

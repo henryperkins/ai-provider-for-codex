@@ -11,10 +11,10 @@
 ## Global Constraints
 
 - **Do NOT bump any version.** Everything stays `0.1.5`. The sidecar must keep **exactly two** `"version": "0.1.5"` literals so `scripts/verify.sh:84-107` passes.
-- **WordPress floor:** 7.0+ (`\AIProviderForCodex\MIN_WP_VERSION`). **PHP floor:** 7.4 (use `strpos`, not `str_contains`). **Sidecar:** Python 3.11+, stdlib only.
+- **WordPress floor:** 7.0+ (`\Htperkins\AIProviderForCodex\MIN_WP_VERSION`). **PHP floor:** 7.4 (use `strpos`, not `str_contains`). **Sidecar:** Python 3.11+, stdlib only.
 - **No new dependencies** (runtime autoloader is hand-rolled; Composer is dev-only).
 - **WordPress.org-safe:** PHP never writes to the OS, executes installers, or phones home. Snippets are display-only text.
-- **Naming:** keep `codex_provider_*` / `codex_runtime_*` option prefixes; text domain `'scriptorium-ai-provider-for-codex'`.
+- **Naming:** keep `codex_provider_*` / `codex_runtime_*` option prefixes; text domain `'ai-provider-for-codex'`.
 - **Parallel work in flight:** `sidecar/app/main.py` is being edited on this branch for unrelated image-gen/token-usage work. Locate sidecar edit points by **surrounding code/strings**, not absolute line numbers.
 - **Every commit message ends with the trailer** `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>` (omitted from the command examples below for brevity).
 - New PHP classes load by PSR-4 convention (`src/<Sub>/<Class>.php`) — no autoloader registration needed.
@@ -484,7 +484,7 @@ In `scripts/verify.php`, inside the IIFE (after the helper closures are defined,
 
 ```php
 		// --- Runtime diagnostics: Client::diagnostics() does not touch HealthMonitor. ---
-		delete_transient( 'codex_provider_runtime_health' );
+		delete_transient( 'htperkins_aipfc_runtime_health' );
 		HealthMonitor::record_failure( 'sentinel-before-diagnostics' );
 
 		$codex_provider_with_mock_runtime(
@@ -505,7 +505,7 @@ In `scripts/verify.php`, inside the IIFE (after the helper closures are defined,
 				return $preempt;
 			},
 			static function () use ( $codex_provider_assert ) {
-				$client = new \AIProviderForCodex\Runtime\Client();
+				$client = new \Htperkins\AIProviderForCodex\Runtime\Client();
 				$result = $client->diagnostics();
 				$codex_provider_assert( true === ( $result['ok'] ?? null ), 'Client::diagnostics() should return the sidecar ok flag.' );
 				$codex_provider_assert( 'pass' === $result['checks'][0]['status'], 'Client::diagnostics() should return sidecar checks.' );
@@ -519,7 +519,7 @@ In `scripts/verify.php`, inside the IIFE (after the helper closures are defined,
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `wp --path=$WP_PATH eval-file wp-content/plugins/scriptorium-ai-provider-for-codex/scripts/verify.php`
+Run: `wp --path=$WP_PATH eval-file wp-content/plugins/ai-provider-for-codex/scripts/verify.php`
 Expected: FAIL with an error like `Call to undefined method ...Client::diagnostics()`
 
 - [ ] **Step 3: Thread `$record_health` through the client and add `diagnostics()`**
@@ -595,8 +595,8 @@ Inside `process_response()`, guard the invalid-JSON failure record. Find:
 
 ```php
 			if ( JSON_ERROR_NONE !== json_last_error() ) {
-				HealthMonitor::record_failure( __( 'The local Codex runtime returned invalid JSON.', 'scriptorium-ai-provider-for-codex' ) );
-				throw self::runtime_exception( esc_html__( 'The local Codex runtime returned invalid JSON.', 'scriptorium-ai-provider-for-codex' ) );
+				HealthMonitor::record_failure( __( 'The local Codex runtime returned invalid JSON.', 'ai-provider-for-codex' ) );
+				throw self::runtime_exception( esc_html__( 'The local Codex runtime returned invalid JSON.', 'ai-provider-for-codex' ) );
 			}
 ```
 
@@ -605,9 +605,9 @@ Replace with:
 ```php
 			if ( JSON_ERROR_NONE !== json_last_error() ) {
 				if ( $record_health ) {
-					HealthMonitor::record_failure( __( 'The local Codex runtime returned invalid JSON.', 'scriptorium-ai-provider-for-codex' ) );
+					HealthMonitor::record_failure( __( 'The local Codex runtime returned invalid JSON.', 'ai-provider-for-codex' ) );
 				}
-				throw self::runtime_exception( esc_html__( 'The local Codex runtime returned invalid JSON.', 'scriptorium-ai-provider-for-codex' ) );
+				throw self::runtime_exception( esc_html__( 'The local Codex runtime returned invalid JSON.', 'ai-provider-for-codex' ) );
 			}
 ```
 
@@ -660,7 +660,7 @@ Finally, add the `diagnostics()` method (e.g. right after `post()`):
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `wp --path=$WP_PATH eval-file wp-content/plugins/scriptorium-ai-provider-for-codex/scripts/verify.php`
+Run: `wp --path=$WP_PATH eval-file wp-content/plugins/ai-provider-for-codex/scripts/verify.php`
 Expected: the script runs to completion with its existing success output (no exception).
 
 - [ ] **Step 5: Lint**
@@ -688,9 +688,9 @@ git commit -m "runtime: add Client::diagnostics() that skips health-cache writes
 **Interfaces:**
 - Consumes: `Client::diagnostics()`, `RuntimeRequestException::get_status_code()`, `Settings::configuration_metadata()`.
 - Produces:
-  - `DiagnosticsController::register_routes(): void` → `POST codex-provider/v1/diagnostics`, `permission_callback` = `manage_options`.
+  - `DiagnosticsController::register_routes(): void` → `POST htperkins-aipfc/v1/diagnostics`, `permission_callback` = `manage_options`.
   - `DiagnosticsController::run(): WP_REST_Response` → body `['ok'=>bool,'checkedAt'=>string,'rows'=>array<int,array{id:string,label:string,status:string,detail:string}>,'config'=>array<int,array{label:string,value:string}>]`.
-  - Writes transient `codex_provider_last_diagnostics` = `['checked_at'=>string,'ok'=>bool,'failed'=>string[]]` (TTL `HOUR_IN_SECONDS`). Never writes `HealthMonitor`.
+  - Writes transient `htperkins_aipfc_last_diagnostics` = `['checked_at'=>string,'ok'=>bool,'failed'=>string[]]` (TTL `HOUR_IN_SECONDS`). Never writes `HealthMonitor`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -707,7 +707,7 @@ In `scripts/verify.php`, inside the IIFE (after the Task 5 block), add:
 		};
 
 		// 200 with a failing sidecar check => overall ok false, verdict recorded.
-		delete_transient( 'codex_provider_last_diagnostics' );
+		delete_transient( 'htperkins_aipfc_last_diagnostics' );
 		$codex_provider_with_mock_runtime(
 			static function ( $preempt, array $args, string $url ) use ( $codex_provider_http_json_response ) {
 				if ( false !== strpos( $url, '/v1/diagnostics' ) ) {
@@ -724,14 +724,14 @@ In `scripts/verify.php`, inside the IIFE (after the Task 5 block), add:
 				return $preempt;
 			},
 			static function () use ( $codex_provider_assert, $codex_provider_diagnostics_rows ) {
-				$response = \AIProviderForCodex\REST\DiagnosticsController::run();
+				$response = \Htperkins\AIProviderForCodex\REST\DiagnosticsController::run();
 				$body     = $response->get_data();
 				$rows     = $codex_provider_diagnostics_rows( $body );
 				$codex_provider_assert( false === $body['ok'], 'A 200 with a failing check must yield overall ok=false.' );
 				$codex_provider_assert( 'pass' === $rows['reachable']['status'], 'Reachable row should pass on HTTP 200.' );
 				$codex_provider_assert( 'pass' === $rows['bearer']['status'], 'Bearer row should pass on HTTP 200.' );
 				$codex_provider_assert( 'fail' === $rows['codex_cli']['status'], 'Failing sidecar check should surface as a fail row.' );
-				$verdict = get_transient( 'codex_provider_last_diagnostics' );
+				$verdict = get_transient( 'htperkins_aipfc_last_diagnostics' );
 				$codex_provider_assert( is_array( $verdict ) && false === $verdict['ok'], 'Verdict transient must record ok=false.' );
 			}
 		);
@@ -745,7 +745,7 @@ In `scripts/verify.php`, inside the IIFE (after the Task 5 block), add:
 				return $preempt;
 			},
 			static function () use ( $codex_provider_assert, $codex_provider_diagnostics_rows ) {
-				$rows = $codex_provider_diagnostics_rows( \AIProviderForCodex\REST\DiagnosticsController::run()->get_data() );
+				$rows = $codex_provider_diagnostics_rows( \Htperkins\AIProviderForCodex\REST\DiagnosticsController::run()->get_data() );
 				$codex_provider_assert( 'pass' === $rows['reachable']['status'], '401 still proves reachability.' );
 				$codex_provider_assert( 'fail' === $rows['bearer']['status'], '401 must mark the bearer row as failed.' );
 			}
@@ -760,7 +760,7 @@ In `scripts/verify.php`, inside the IIFE (after the Task 5 block), add:
 				return $preempt;
 			},
 			static function () use ( $codex_provider_assert, $codex_provider_diagnostics_rows ) {
-				$rows = $codex_provider_diagnostics_rows( \AIProviderForCodex\REST\DiagnosticsController::run()->get_data() );
+				$rows = $codex_provider_diagnostics_rows( \Htperkins\AIProviderForCodex\REST\DiagnosticsController::run()->get_data() );
 				$codex_provider_assert( 'fail' === $rows['reachable']['status'], 'A transport failure must mark reachability as failed.' );
 			}
 		);
@@ -768,8 +768,8 @@ In `scripts/verify.php`, inside the IIFE (after the Task 5 block), add:
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `wp --path=$WP_PATH eval-file wp-content/plugins/scriptorium-ai-provider-for-codex/scripts/verify.php`
-Expected: FAIL with `Class "AIProviderForCodex\REST\DiagnosticsController" not found`
+Run: `wp --path=$WP_PATH eval-file wp-content/plugins/ai-provider-for-codex/scripts/verify.php`
+Expected: FAIL with `Class "Htperkins\AIProviderForCodex\REST\DiagnosticsController" not found`
 
 - [ ] **Step 3: Create the controller**
 
@@ -780,16 +780,16 @@ Create `src/REST/DiagnosticsController.php`:
 /**
  * Read-only runtime diagnostics REST endpoint.
  *
- * @package AIProviderForCodex
+ * @package HtperkinsAIProviderForCodex
  */
 
 declare( strict_types=1 );
 
-namespace AIProviderForCodex\REST;
+namespace Htperkins\AIProviderForCodex\REST;
 
-use AIProviderForCodex\Runtime\Client;
-use AIProviderForCodex\Runtime\RuntimeRequestException;
-use AIProviderForCodex\Runtime\Settings;
+use Htperkins\AIProviderForCodex\Runtime\Client;
+use Htperkins\AIProviderForCodex\Runtime\RuntimeRequestException;
+use Htperkins\AIProviderForCodex\Runtime\Settings;
 use RuntimeException;
 use WP_REST_Response;
 
@@ -802,7 +802,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 final class DiagnosticsController {
 
-	private const VERDICT_TRANSIENT = 'codex_provider_last_diagnostics';
+	private const VERDICT_TRANSIENT = 'htperkins_aipfc_last_diagnostics';
 
 	/**
 	 * Registers routes.
@@ -811,7 +811,7 @@ final class DiagnosticsController {
 	 */
 	public static function register_routes(): void {
 		register_rest_route(
-			'codex-provider/v1',
+			'htperkins-aipfc/v1',
 			'/diagnostics',
 			[
 				'methods'             => 'POST',
@@ -840,8 +840,8 @@ final class DiagnosticsController {
 
 		try {
 			$result = ( new Client() )->diagnostics();
-			$rows[] = self::row( 'reachable', __( 'Sidecar reachable', 'scriptorium-ai-provider-for-codex' ), 'pass', '' );
-			$rows[] = self::row( 'bearer', __( 'Bearer token matches', 'scriptorium-ai-provider-for-codex' ), 'pass', '' );
+			$rows[] = self::row( 'reachable', __( 'Sidecar reachable', 'ai-provider-for-codex' ), 'pass', '' );
+			$rows[] = self::row( 'bearer', __( 'Bearer token matches', 'ai-provider-for-codex' ), 'pass', '' );
 
 			foreach ( (array) ( $result['checks'] ?? [] ) as $check ) {
 				if ( ! is_array( $check ) ) {
@@ -857,17 +857,17 @@ final class DiagnosticsController {
 
 			$ok = (bool) ( $result['ok'] ?? false );
 		} catch ( RuntimeRequestException $exception ) {
-			$rows[] = self::row( 'reachable', __( 'Sidecar reachable', 'scriptorium-ai-provider-for-codex' ), 'pass', '' );
+			$rows[] = self::row( 'reachable', __( 'Sidecar reachable', 'ai-provider-for-codex' ), 'pass', '' );
 
 			if ( 401 === $exception->get_status_code() ) {
-				$rows[] = self::row( 'bearer', __( 'Bearer token matches', 'scriptorium-ai-provider-for-codex' ), 'fail', $exception->getMessage() );
+				$rows[] = self::row( 'bearer', __( 'Bearer token matches', 'ai-provider-for-codex' ), 'fail', $exception->getMessage() );
 			} else {
-				$rows[] = self::row( 'bearer', __( 'Bearer token matches', 'scriptorium-ai-provider-for-codex' ), 'warn', $exception->getMessage() );
+				$rows[] = self::row( 'bearer', __( 'Bearer token matches', 'ai-provider-for-codex' ), 'warn', $exception->getMessage() );
 			}
 
 			$ok = false;
 		} catch ( RuntimeException $exception ) {
-			$rows[] = self::row( 'reachable', __( 'Sidecar reachable', 'scriptorium-ai-provider-for-codex' ), 'fail', $exception->getMessage() );
+			$rows[] = self::row( 'reachable', __( 'Sidecar reachable', 'ai-provider-for-codex' ), 'fail', $exception->getMessage() );
 			$ok     = false;
 		}
 
@@ -922,11 +922,11 @@ final class DiagnosticsController {
 
 		return [
 			[
-				'label' => __( 'Runtime URL source', 'scriptorium-ai-provider-for-codex' ),
+				'label' => __( 'Runtime URL source', 'ai-provider-for-codex' ),
 				'value' => (string) ( $meta['base_url_source'] ?? '' ),
 			],
 			[
-				'label' => __( 'Bearer token source', 'scriptorium-ai-provider-for-codex' ),
+				'label' => __( 'Bearer token source', 'ai-provider-for-codex' ),
 				'value' => (string) ( $meta['bearer_token_source'] ?? '' ),
 			],
 		];
@@ -966,7 +966,7 @@ final class DiagnosticsController {
 In `src/Plugin.php`, add the import near the other REST imports:
 
 ```php
-use AIProviderForCodex\REST\DiagnosticsController;
+use Htperkins\AIProviderForCodex\REST\DiagnosticsController;
 ```
 
 And register it next to the existing `rest_api_init` hooks. Find:
@@ -989,21 +989,21 @@ Replace with:
 In `uninstall.php`, find:
 
 ```php
-delete_transient( 'codex_provider_runtime_health' );
-delete_transient( 'codex_provider_site_catalog_refresh_attempt' );
+delete_transient( 'htperkins_aipfc_runtime_health' );
+delete_transient( 'htperkins_aipfc_site_catalog_refresh_attempt' );
 ```
 
 Replace with:
 
 ```php
-delete_transient( 'codex_provider_runtime_health' );
-delete_transient( 'codex_provider_site_catalog_refresh_attempt' );
-delete_transient( 'codex_provider_last_diagnostics' );
+delete_transient( 'htperkins_aipfc_runtime_health' );
+delete_transient( 'htperkins_aipfc_site_catalog_refresh_attempt' );
+delete_transient( 'htperkins_aipfc_last_diagnostics' );
 ```
 
 - [ ] **Step 6: Run the test to verify it passes**
 
-Run: `wp --path=$WP_PATH eval-file wp-content/plugins/scriptorium-ai-provider-for-codex/scripts/verify.php`
+Run: `wp --path=$WP_PATH eval-file wp-content/plugins/ai-provider-for-codex/scripts/verify.php`
 Expected: runs to completion with no exception.
 
 - [ ] **Step 7: Lint**
@@ -1029,11 +1029,11 @@ git commit -m "rest: add manage_options diagnostics route with decoupled verdict
 - Modify: `scripts/verify.php` (assertions)
 
 **Interfaces:**
-- Consumes: `Settings::get_base_url()`, `Settings::get_bearer_token()`, `\AIProviderForCodex\PLUGIN_DIR`.
+- Consumes: `Settings::get_base_url()`, `Settings::get_bearer_token()`, `\Htperkins\AIProviderForCodex\PLUGIN_DIR`.
 - Produces:
   - `SetupSnippets::systemd_unit(): string` — the bundled unit template with the placeholder path replaced by the real plugin dir.
   - `SetupSnippets::env_file(): string` — env content with documented defaults, the resolved base URL, and a stable suggested token.
-  - `SetupSnippets::suggested_bearer_token(): string` — the configured token if set, else a cached generated one (option `codex_runtime_suggested_bearer_token`, `autoload=false`).
+  - `SetupSnippets::suggested_bearer_token(): string` — the configured token if set, else a cached generated one (option `htperkins_aipfc_suggested_bearer_token`, `autoload=false`).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1041,38 +1041,38 @@ In `scripts/verify.php`, inside the IIFE (after the Task 6 block), add:
 
 ```php
 		// --- Setup snippets + stable suggested token. ---
-		delete_option( 'codex_runtime_suggested_bearer_token' );
-		$codex_provider_unit = \AIProviderForCodex\Admin\SetupSnippets::systemd_unit();
+		delete_option( 'htperkins_aipfc_suggested_bearer_token' );
+		$codex_provider_unit = \Htperkins\AIProviderForCodex\Admin\SetupSnippets::systemd_unit();
 		$codex_provider_assert(
-			false === strpos( $codex_provider_unit, '/path/to/wp-content/plugins/scriptorium-ai-provider-for-codex' ),
+			false === strpos( $codex_provider_unit, '/path/to/wp-content/plugins/ai-provider-for-codex' ),
 			'The systemd snippet must replace the placeholder plugin path.'
 		);
 		$codex_provider_assert(
-			false !== strpos( $codex_provider_unit, untrailingslashit( \AIProviderForCodex\PLUGIN_DIR ) ),
+			false !== strpos( $codex_provider_unit, untrailingslashit( \Htperkins\AIProviderForCodex\PLUGIN_DIR ) ),
 			'The systemd snippet must contain the real plugin directory.'
 		);
 
-		$codex_provider_env = \AIProviderForCodex\Admin\SetupSnippets::env_file();
+		$codex_provider_env = \Htperkins\AIProviderForCodex\Admin\SetupSnippets::env_file();
 		$codex_provider_assert(
 			false !== strpos( $codex_provider_env, 'CODEX_WP_BEARER_TOKEN=' ),
 			'The env snippet must include the bearer token line.'
 		);
 
-		$codex_provider_token_a = \AIProviderForCodex\Admin\SetupSnippets::suggested_bearer_token();
-		$codex_provider_token_b = \AIProviderForCodex\Admin\SetupSnippets::suggested_bearer_token();
+		$codex_provider_token_a = \Htperkins\AIProviderForCodex\Admin\SetupSnippets::suggested_bearer_token();
+		$codex_provider_token_b = \Htperkins\AIProviderForCodex\Admin\SetupSnippets::suggested_bearer_token();
 		$codex_provider_assert( '' !== $codex_provider_token_a, 'A suggested token must be generated.' );
 		$codex_provider_assert( $codex_provider_token_a === $codex_provider_token_b, 'The suggested token must be stable across calls.' );
 		// A non-autoloaded option is absent from wp_load_alloptions() (which holds autoloaded options only).
 		$codex_provider_assert(
-			! array_key_exists( 'codex_runtime_suggested_bearer_token', wp_load_alloptions() ),
+			! array_key_exists( 'htperkins_aipfc_suggested_bearer_token', wp_load_alloptions() ),
 			'The suggested-token option must not autoload.'
 		);
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `wp --path=$WP_PATH eval-file wp-content/plugins/scriptorium-ai-provider-for-codex/scripts/verify.php`
-Expected: FAIL with `Class "AIProviderForCodex\Admin\SetupSnippets" not found`
+Run: `wp --path=$WP_PATH eval-file wp-content/plugins/ai-provider-for-codex/scripts/verify.php`
+Expected: FAIL with `Class "Htperkins\AIProviderForCodex\Admin\SetupSnippets" not found`
 
 - [ ] **Step 3: Create the generator**
 
@@ -1083,14 +1083,14 @@ Create `src/Admin/SetupSnippets.php`:
 /**
  * Read-only setup snippet generator (systemd unit + env file).
  *
- * @package AIProviderForCodex
+ * @package HtperkinsAIProviderForCodex
  */
 
 declare( strict_types=1 );
 
-namespace AIProviderForCodex\Admin;
+namespace Htperkins\AIProviderForCodex\Admin;
 
-use AIProviderForCodex\Runtime\Settings;
+use Htperkins\AIProviderForCodex\Runtime\Settings;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -1101,8 +1101,8 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 final class SetupSnippets {
 
-	private const TOKEN_OPTION       = 'codex_runtime_suggested_bearer_token';
-	private const PLACEHOLDER_PATH   = '/path/to/wp-content/plugins/scriptorium-ai-provider-for-codex';
+	private const TOKEN_OPTION       = 'htperkins_aipfc_suggested_bearer_token';
+	private const PLACEHOLDER_PATH   = '/path/to/wp-content/plugins/ai-provider-for-codex';
 
 	/**
 	 * Returns the bundled systemd unit with the real plugin path substituted.
@@ -1110,14 +1110,14 @@ final class SetupSnippets {
 	 * @return string
 	 */
 	public static function systemd_unit(): string {
-		$template_path = untrailingslashit( \AIProviderForCodex\PLUGIN_DIR ) . '/sidecar/systemd/codex-wp-sidecar.service';
+		$template_path = untrailingslashit( \Htperkins\AIProviderForCodex\PLUGIN_DIR ) . '/sidecar/systemd/codex-wp-sidecar.service';
 		$template      = is_readable( $template_path ) ? (string) file_get_contents( $template_path ) : '';
 
 		if ( '' === $template ) {
 			return '';
 		}
 
-		return str_replace( self::PLACEHOLDER_PATH, untrailingslashit( \AIProviderForCodex\PLUGIN_DIR ), $template );
+		return str_replace( self::PLACEHOLDER_PATH, untrailingslashit( \Htperkins\AIProviderForCodex\PLUGIN_DIR ), $template );
 	}
 
 	/**
@@ -1181,11 +1181,11 @@ In `uninstall.php`, find the option-name array:
 
 ```php
 foreach ( [
-	'codex_runtime_base_url',
-	'codex_runtime_bearer_token',
-	'codex_runtime_allowed_models',
-	'codex_provider_schema_version',
-	'codex_provider_connector_self_approval_seeded',
+	'htperkins_aipfc_runtime_base_url',
+	'htperkins_aipfc_runtime_bearer_token',
+	'htperkins_aipfc_runtime_allowed_models',
+	'htperkins_aipfc_schema_version',
+	'htperkins_aipfc_connector_self_approval_seeded',
 ] as $codex_provider_option_name ) {
 ```
 
@@ -1193,12 +1193,12 @@ Replace with:
 
 ```php
 foreach ( [
-	'codex_runtime_base_url',
-	'codex_runtime_bearer_token',
-	'codex_runtime_allowed_models',
-	'codex_runtime_suggested_bearer_token',
-	'codex_provider_schema_version',
-	'codex_provider_connector_self_approval_seeded',
+	'htperkins_aipfc_runtime_base_url',
+	'htperkins_aipfc_runtime_bearer_token',
+	'htperkins_aipfc_runtime_allowed_models',
+	'htperkins_aipfc_suggested_bearer_token',
+	'htperkins_aipfc_schema_version',
+	'htperkins_aipfc_connector_self_approval_seeded',
 ] as $codex_provider_option_name ) {
 ```
 
@@ -1218,7 +1218,7 @@ Add a line immediately after it:
 
 - [ ] **Step 6: Run the test to verify it passes**
 
-Run: `wp --path=$WP_PATH eval-file wp-content/plugins/scriptorium-ai-provider-for-codex/scripts/verify.php`
+Run: `wp --path=$WP_PATH eval-file wp-content/plugins/ai-provider-for-codex/scripts/verify.php`
 Expected: runs to completion with no exception.
 
 - [ ] **Step 7: Lint**
@@ -1243,9 +1243,9 @@ git commit -m "admin: add read-only setup snippet generator and suggested token"
 - Modify: `scripts/verify.php` (assertions)
 
 **Interfaces:**
-- Consumes: `HealthMonitor::get_status()`, `SetupSnippets::systemd_unit()/env_file()`, `Settings::configuration_metadata()`, the `codex_provider_last_diagnostics` transient.
+- Consumes: `HealthMonitor::get_status()`, `SetupSnippets::systemd_unit()/env_file()`, `Settings::configuration_metadata()`, the `htperkins_aipfc_last_diagnostics` transient.
 - Produces:
-  - `SiteSettings::SCRIPT_MODULE_ID = 'scriptorium-ai-provider-for-codex/diagnostics'`.
+  - `SiteSettings::SCRIPT_MODULE_ID = 'htperkins-ai-provider-for-codex/diagnostics'`.
   - `SiteSettings::render_setup_guide(): void` (shared by the Help tab and the page body).
   - `SiteSettings::script_module_data( array $data ): array` (supplies `diagnosticsUrl`, `restNonce`, `labels`).
   - The settings page body contains: a `[data-codex-diagnostics-run]` button, a `[data-codex-diagnostics-results]` container, and the two snippet `<textarea>` blocks. `render_page()` makes **no** HTTP request on load.
@@ -1281,7 +1281,7 @@ In `scripts/verify.php`, inside the IIFE (after the Task 7 block), add:
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `wp --path=$WP_PATH eval-file wp-content/plugins/scriptorium-ai-provider-for-codex/scripts/verify.php`
+Run: `wp --path=$WP_PATH eval-file wp-content/plugins/ai-provider-for-codex/scripts/verify.php`
 Expected: FAIL — either the page-load probe makes an HTTP call (`$codex_provider_http_calls` > 0) or the button marker is absent.
 
 - [ ] **Step 3: Make page load passive**
@@ -1296,7 +1296,7 @@ Replace with:
 
 ```php
 		$runtime_status  = HealthMonitor::get_status();
-		$last_diagnostic = get_transient( 'codex_provider_last_diagnostics' );
+		$last_diagnostic = get_transient( 'htperkins_aipfc_last_diagnostics' );
 ```
 
 - [ ] **Step 4: Add the module ID constant and enqueue the diagnostics module**
@@ -1304,7 +1304,7 @@ Replace with:
 In `src/Admin/SiteSettings.php`, add the constant near `STYLE_HANDLE`:
 
 ```php
-	private const SCRIPT_MODULE_ID = 'scriptorium-ai-provider-for-codex/diagnostics';
+	private const SCRIPT_MODULE_ID = 'htperkins-ai-provider-for-codex/diagnostics';
 ```
 
 In `enqueue_assets()`, before the `wp_register_style(...)` call, add:
@@ -1312,9 +1312,9 @@ In `enqueue_assets()`, before the `wp_register_style(...)` call, add:
 ```php
 		wp_register_script_module(
 			self::SCRIPT_MODULE_ID,
-			plugins_url( 'assets/diagnostics.js', \AIProviderForCodex\PLUGIN_FILE ),
+			plugins_url( 'assets/diagnostics.js', \Htperkins\AIProviderForCodex\PLUGIN_FILE ),
 			[],
-			\AIProviderForCodex\VERSION
+			\Htperkins\AIProviderForCodex\VERSION
 		);
 		wp_enqueue_script_module( self::SCRIPT_MODULE_ID );
 ```
@@ -1334,14 +1334,14 @@ In `src/Admin/SiteSettings.php`, add this method (e.g. after `enqueue_assets`):
 		return array_merge(
 			$data,
 			[
-				'diagnosticsUrl' => rest_url( 'codex-provider/v1/diagnostics' ),
+				'diagnosticsUrl' => rest_url( 'htperkins-aipfc/v1/diagnostics' ),
 				'restNonce'      => wp_create_nonce( 'wp_rest' ),
 				'labels'         => [
-					'run'     => __( 'Check runtime', 'scriptorium-ai-provider-for-codex' ),
-					'running' => __( 'Checking…', 'scriptorium-ai-provider-for-codex' ),
-					'healthy' => __( 'All checks passed.', 'scriptorium-ai-provider-for-codex' ),
-					'issues'  => __( 'Some checks failed.', 'scriptorium-ai-provider-for-codex' ),
-					'failed'  => __( 'The diagnostic request failed.', 'scriptorium-ai-provider-for-codex' ),
+					'run'     => __( 'Check runtime', 'ai-provider-for-codex' ),
+					'running' => __( 'Checking…', 'ai-provider-for-codex' ),
+					'healthy' => __( 'All checks passed.', 'ai-provider-for-codex' ),
+					'issues'  => __( 'Some checks failed.', 'ai-provider-for-codex' ),
+					'failed'  => __( 'The diagnostic request failed.', 'ai-provider-for-codex' ),
 				],
 			]
 		);
@@ -1370,7 +1370,7 @@ After this step, `render_setup_guide()` holds the original Quick-setup markup ve
 In `src/Admin/SiteSettings.php` `render_page()`, find the closing of the form and the wrap:
 
 ```php
-				<?php submit_button( __( 'Save settings', 'scriptorium-ai-provider-for-codex' ) ); ?>
+				<?php submit_button( __( 'Save settings', 'ai-provider-for-codex' ) ); ?>
 				</form>
 			</div>
 			<?php
@@ -1379,24 +1379,24 @@ In `src/Admin/SiteSettings.php` `render_page()`, find the closing of the form an
 Replace with:
 
 ```php
-				<?php submit_button( __( 'Save settings', 'scriptorium-ai-provider-for-codex' ) ); ?>
+				<?php submit_button( __( 'Save settings', 'ai-provider-for-codex' ) ); ?>
 				</form>
 
-				<h2><?php esc_html_e( 'Runtime diagnostics', 'scriptorium-ai-provider-for-codex' ); ?></h2>
+				<h2><?php esc_html_e( 'Runtime diagnostics', 'ai-provider-for-codex' ); ?></h2>
 				<?php if ( is_array( $last_diagnostic ) ) : ?>
 					<p class="description">
 						<?php
 						echo esc_html(
 							SafeFormat::sprintf(
 								/* translators: 1: pass/fail summary, 2: relative time. */
-								__( 'Last check: %1$s (%2$s).', 'scriptorium-ai-provider-for-codex' ),
+								__( 'Last check: %1$s (%2$s).', 'ai-provider-for-codex' ),
 								empty( $last_diagnostic['ok'] )
 									? sprintf(
 										/* translators: %d: number of failed checks. */
-										_n( '%d issue', '%d issues', count( (array) ( $last_diagnostic['failed'] ?? [] ) ), 'scriptorium-ai-provider-for-codex' ),
+										_n( '%d issue', '%d issues', count( (array) ( $last_diagnostic['failed'] ?? [] ) ), 'ai-provider-for-codex' ),
 										count( (array) ( $last_diagnostic['failed'] ?? [] ) )
 									)
-									: __( 'healthy', 'scriptorium-ai-provider-for-codex' ),
+									: __( 'healthy', 'ai-provider-for-codex' ),
 								StatusLabels::relative_time( (string) ( $last_diagnostic['checked_at'] ?? '' ) )
 							)
 						);
@@ -1405,18 +1405,18 @@ Replace with:
 				<?php endif; ?>
 				<p>
 					<button type="button" class="button button-secondary" data-codex-diagnostics-run>
-						<?php esc_html_e( 'Check runtime', 'scriptorium-ai-provider-for-codex' ); ?>
+						<?php esc_html_e( 'Check runtime', 'ai-provider-for-codex' ); ?>
 					</button>
 				</p>
 				<div data-codex-diagnostics-results aria-live="polite"></div>
 
-				<h2><?php esc_html_e( 'Setup', 'scriptorium-ai-provider-for-codex' ); ?></h2>
+				<h2><?php esc_html_e( 'Setup', 'ai-provider-for-codex' ); ?></h2>
 				<?php self::render_setup_guide(); ?>
 
-				<h3><?php esc_html_e( 'systemd unit (/etc/systemd/system/codex-wp-sidecar.service)', 'scriptorium-ai-provider-for-codex' ); ?></h3>
+				<h3><?php esc_html_e( 'systemd unit (/etc/systemd/system/codex-wp-sidecar.service)', 'ai-provider-for-codex' ); ?></h3>
 				<textarea class="large-text code" rows="12" readonly><?php echo esc_textarea( SetupSnippets::systemd_unit() ); ?></textarea>
 
-				<h3><?php esc_html_e( 'Environment file (/etc/codex-wp-sidecar.env)', 'scriptorium-ai-provider-for-codex' ); ?></h3>
+				<h3><?php esc_html_e( 'Environment file (/etc/codex-wp-sidecar.env)', 'ai-provider-for-codex' ); ?></h3>
 				<textarea class="large-text code" rows="10" readonly><?php echo esc_textarea( SetupSnippets::env_file() ); ?></textarea>
 			</div>
 			<?php
@@ -1427,18 +1427,18 @@ Replace with:
 In `src/Plugin.php`, find:
 
 ```php
-		add_filter( 'script_module_data_scriptorium-ai-provider-for-codex/user-connection', [ UserConnectionPage::class, 'script_module_data' ] );
+		add_filter( 'script_module_data_htperkins-ai-provider-for-codex/user-connection', [ UserConnectionPage::class, 'script_module_data' ] );
 ```
 
 Add immediately after it:
 
 ```php
-		add_filter( 'script_module_data_scriptorium-ai-provider-for-codex/diagnostics', [ SiteSettings::class, 'script_module_data' ] );
+		add_filter( 'script_module_data_htperkins-ai-provider-for-codex/diagnostics', [ SiteSettings::class, 'script_module_data' ] );
 ```
 
 - [ ] **Step 9: Run the test to verify it passes**
 
-Run: `wp --path=$WP_PATH eval-file wp-content/plugins/scriptorium-ai-provider-for-codex/scripts/verify.php`
+Run: `wp --path=$WP_PATH eval-file wp-content/plugins/ai-provider-for-codex/scripts/verify.php`
 Expected: runs to completion with no exception.
 
 - [ ] **Step 10: Lint**
@@ -1543,7 +1543,7 @@ export function mapDiagnosticsView( result, labels = {} ) {
 	};
 }
 
-const MODULE_ID = 'scriptorium-ai-provider-for-codex/diagnostics';
+const MODULE_ID = 'htperkins-ai-provider-for-codex/diagnostics';
 const configElement = document.getElementById( `wp-script-module-data-${ MODULE_ID }` );
 const runButton = document.querySelector( '[data-codex-diagnostics-run]' );
 const resultsRoot = document.querySelector( '[data-codex-diagnostics-results]' );

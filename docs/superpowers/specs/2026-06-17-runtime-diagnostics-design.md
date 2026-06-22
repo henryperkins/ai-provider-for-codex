@@ -40,7 +40,7 @@ One new sidecar endpoint, one new WordPress REST proxy, one new admin asset. No 
 
 ```
 Settings > Codex Provider        WordPress REST (new)              Sidecar (new)
-  "Check runtime" button --fetch--> POST codex-provider/v1/      --Runtime\Client--> GET /v1/diagnostics
+  "Check runtime" button --fetch--> POST htperkins-aipfc/v1/      --Runtime\Client--> GET /v1/diagnostics
   + results panel        <--JSON--  diagnostics                     (Bearer auth)     (authenticated)
                                     (manage_options)                                       |
                                          |                                          runs server-side checks
@@ -108,11 +108,11 @@ Defaulting to `REQUEST_TIMEOUT` preserves every existing caller (`app_server_ses
 
 ## Component 3: WordPress REST Proxy And Client
 
-**`REST/DiagnosticsController`** — registers `POST /codex-provider/v1/diagnostics` in namespace `codex-provider/v1`.
+**`REST/DiagnosticsController`** — registers `POST /htperkins-aipfc/v1/diagnostics` in namespace `htperkins-aipfc/v1`.
 
 - `permission_callback` = `current_user_can( 'manage_options' )`. This is stricter than the existing connect/status routes (logged-in + `read`) because the diagnostic exposes host paths and binary versions and spawns a process. POST (not GET) signals a non-idempotent action and avoids caching.
 - Calls a new `Runtime\Client::diagnostics()`, then composes the final row list: the PHP-derived rows (reachability, bearer-match, resolved configuration) followed by the sidecar `checks`.
-- Records the run's verdict in a **dedicated transient `codex_provider_last_diagnostics`** — compact (`checked_at`, `ok`, labels of any failed checks), short TTL, always shown with its timestamp — on **every** run: success, an authenticated `200` whose `ok` is `false` (a critical check failed), and transport/`401` failures alike. It does **not** write the shared `HealthMonitor` reachability transient.
+- Records the run's verdict in a **dedicated transient `htperkins_aipfc_last_diagnostics`** — compact (`checked_at`, `ok`, labels of any failed checks), short TTL, always shown with its timestamp — on **every** run: success, an authenticated `200` whose `ok` is `false` (a critical check failed), and transport/`401` failures alike. It does **not** write the shared `HealthMonitor` reachability transient.
 
 This decoupling is deliberate. `HealthMonitor::probe()` records success on any sub-`400` response (`src/Runtime/HealthMonitor.php:146-162`) and is still invoked by `SupportChecks::current_user_status()` (`src/Provider/SupportChecks.php:48`) for `/status`, the Connectors card, and the user page. If the diagnostic wrote its verdict into the same transient, the next passive unauthenticated `/healthz` probe — which returns `200` even with a wrong bearer or a broken `codex` binary — would erase it. Keeping the authoritative verdict in its own store means a passive reachability probe can never overwrite it, and a sidecar `ok:false` (HTTP `200`, failing checks) is still recorded as a failure instead of leaving the card green.
 
@@ -130,7 +130,7 @@ The diagnostics path uses the standard 20s control-plane timeout (it is not a `/
 
 This change is **deliberately limited to `render_page()`**. `SupportChecks::current_user_status()` still calls `HealthMonitor::probe()` (`src/Provider/SupportChecks.php:48`), and that path remains unchanged — `/status`, the Connectors card, and the user connection page keep their existing cheap `/healthz` probe. This design does not claim that all status reads become passive; only the settings page stops blocking.
 
-The card shows **two distinct signals**: reachability from `HealthMonitor::get_status()` (passive), and — when present — the last full diagnostic verdict and timestamp from `codex_provider_last_diagnostics`. They are shown separately so a green reachability probe never masks a failed deep check (e.g. a missing `codex` binary while `/healthz` still answers `200`).
+The card shows **two distinct signals**: reachability from `HealthMonitor::get_status()` (passive), and — when present — the last full diagnostic verdict and timestamp from `htperkins_aipfc_last_diagnostics`. They are shown separately so a green reachability probe never masks a failed deep check (e.g. a missing `codex` binary while `/healthz` still answers `200`).
 
 **Check runtime button + results panel.** A new hand-written `assets/diagnostics.js` (matching the existing no-build `connection-flow.js` pattern) is enqueued only on this screen. On click it POSTs to the REST route with the `wp_rest` nonce, shows a spinner, and renders the returned rows with pass/warn/fail indicators reusing the existing `.codex-indicator` CSS classes. A `node --test assets/diagnostics.test.mjs` covers the row-rendering logic. The flow is JS-driven for parity with the existing connect flow; with JS disabled the panel shows a short "enable JavaScript to run diagnostics" note.
 
@@ -142,7 +142,7 @@ The card shows **two distinct signals**: reachability from `HealthMonitor::get_s
 
 A new `Admin\SetupSnippets` builds two read-only, copy-paste blocks rendered in the settings body. Purely display — no writing, no exec.
 
-- **systemd unit** — reads the bundled template `sidecar/systemd/codex-wp-sidecar.service` and substitutes the real installed plugin directory (`\AIProviderForCodex\PLUGIN_DIR`) for the placeholder path. Rendering from the template keeps the snippet in lockstep with what ships.
+- **systemd unit** — reads the bundled template `sidecar/systemd/codex-wp-sidecar.service` and substitutes the real installed plugin directory (`\Htperkins\AIProviderForCodex\PLUGIN_DIR`) for the placeholder path. Rendering from the template keeps the snippet in lockstep with what ships.
 - **env file** (`/etc/codex-wp-sidecar.env`) — emits `CODEX_BIN`, `CODEX_WP_STORAGE_ROOT`, `CODEX_WP_HOST`, `CODEX_WP_PORT`, `CODEX_WP_RUNTIME_BASE_URL` (detected values where available, else the documented defaults), and `CODEX_WP_BEARER_TOKEN` set to a stable suggested token (Component 6).
 
 Both blocks render as read-only fields with a copy affordance. The env path mirrors `Settings`'s shared-env-file default so auto-detection works when PHP can read the file.
@@ -152,12 +152,12 @@ Both blocks render as read-only fields with a copy affordance. The env path mirr
 The snippet needs a bearer value that is stable across reloads (a value regenerated every render would be unusable). Resolution order:
 
 1. If a bearer token is already configured (option/env/file), use it — the env snippet then matches what WordPress already expects.
-2. Otherwise, lazily generate one with `wp_generate_password( 64, false )` and cache it in a new option `codex_runtime_suggested_bearer_token`.
+2. Otherwise, lazily generate one with `wp_generate_password( 64, false )` and cache it in a new option `htperkins_aipfc_suggested_bearer_token`.
 
 Option lifecycle, per review:
 
-- **`autoload = false`** — written via `add_option( 'codex_runtime_suggested_bearer_token', $value, '', false )`.
-- **Uninstall cleanup** — add `'codex_runtime_suggested_bearer_token'` to the option array in `uninstall.php` (lines 16-22).
+- **`autoload = false`** — written via `add_option( 'htperkins_aipfc_suggested_bearer_token', $value, '', false )`.
+- **Uninstall cleanup** — add `'htperkins_aipfc_suggested_bearer_token'` to the option array in `uninstall.php` (lines 16-22).
 - **Privacy** — the value is a locally generated suggestion, not transmitted anywhere. Reuse the existing shared-bearer-token framing in `readme.txt` (the "Privacy" section, `readme.txt:102-108`); extend that list to mention the cached suggestion is stored locally and removed on uninstall. No schema change.
 
 ## Component 7: Documentation Fix
@@ -192,7 +192,7 @@ The literal `"version": "0.1.5"` then appears exactly twice in the file — once
 
 ## Testing Plan
 
-- **`scripts/verify.php`** (mocked sidecar via `pre_http_request`): assert the `manage_options` gate on the new route; the row mapping for success, a `200` with `ok:false` (failing sidecar checks), `401` (bearer-fail, keyed off `get_status_code()`/`unauthorized`, **not** `is_auth_required()`), and connection-refused; that `codex_provider_last_diagnostics` is written on each of those outcomes while the `HealthMonitor` reachability transient is left untouched by the diagnostic (a subsequent `probe()` is unaffected); and that `render_page()` makes no HTTP request on load.
+- **`scripts/verify.php`** (mocked sidecar via `pre_http_request`): assert the `manage_options` gate on the new route; the row mapping for success, a `200` with `ok:false` (failing sidecar checks), `401` (bearer-fail, keyed off `get_status_code()`/`unauthorized`, **not** `is_auth_required()`), and connection-refused; that `htperkins_aipfc_last_diagnostics` is written on each of those outcomes while the `HealthMonitor` reachability transient is left untouched by the diagnostic (a subsequent `probe()` is unaffected); and that `render_page()` makes no HTTP request on load.
 - **`assets/diagnostics.test.mjs`** via `node --test`: row rendering for pass/warn/fail and the empty/error states.
 - **Sidecar checks**: validated by a manual run plus a standalone invocation of `run_diagnostics()`; the repository has no Python test harness today, and `verify.php` exercises the PHP side against a mocked sidecar.
 - **`scripts/verify.sh`** must continue to pass unchanged (the liveness-helper refactor keeps the version-literal count at two).
@@ -200,13 +200,13 @@ The literal `"version": "0.1.5"` then appears exactly twice in the file — once
 ## File-By-File Change Summary
 
 - `sidecar/app/main.py` — add `import sys`; `_server_identity()` helper; `DIAGNOSTIC_HANDSHAKE_TIMEOUT`; `JsonRpcSession.start(initialize_timeout=None)`; `run_diagnostics()`; route `GET /v1/diagnostics` after auth; reuse helper in `/ping` and `/healthz`.
-- `src/REST/DiagnosticsController.php` — new controller, `manage_options` gate, exception→row mapping (incl. the `401`/`unauthorized` bearer-fail predicate), writes the `codex_provider_last_diagnostics` verdict transient; does **not** write `HealthMonitor`.
+- `src/REST/DiagnosticsController.php` — new controller, `manage_options` gate, exception→row mapping (incl. the `401`/`unauthorized` bearer-fail predicate), writes the `htperkins_aipfc_last_diagnostics` verdict transient; does **not** write `HealthMonitor`.
 - `src/Runtime/Client.php` — new `diagnostics()` method.
 - `src/Admin/SiteSettings.php` — drop the page-load probe; extract `render_setup_guide()`; render guide, resolved-config block, Check-runtime button, results panel, and snippets in the body; enqueue `diagnostics.js`.
 - `src/Admin/SetupSnippets.php` — new snippet generator and suggested-token resolution.
 - `assets/diagnostics.js`, `assets/diagnostics.test.mjs` — new admin asset and test.
-- `uninstall.php` — add `codex_runtime_suggested_bearer_token` to the option cleanup array and `delete_transient( 'codex_provider_last_diagnostics' )` alongside the existing transient cleanup.
+- `uninstall.php` — add `htperkins_aipfc_suggested_bearer_token` to the option cleanup array and `delete_transient( 'htperkins_aipfc_last_diagnostics' )` alongside the existing transient cleanup.
 - `readme.txt` — extend the Privacy section for the cached suggested token.
 - `sidecar/README.md` — fix the truncated sentence at line 65.
 - `scripts/verify.php` — new assertions described above.
-- Plugin bootstrap (`scriptorium-ai-provider-for-codex.php` / `Plugin`) — register the new REST controller and the settings-screen asset enqueue.
+- Plugin bootstrap (`ai-provider-for-codex.php` / `Plugin`) — register the new REST controller and the settings-screen asset enqueue.

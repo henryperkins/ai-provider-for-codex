@@ -2,20 +2,21 @@
 /**
  * Local-runtime-backed Codex text model.
  *
- * @package AIProviderForCodex
+ * @package HtperkinsAIProviderForCodex
  */
 
 declare( strict_types=1 );
 
-namespace AIProviderForCodex\Models;
+namespace Htperkins\AIProviderForCodex\Models;
 
-use AIProviderForCodex\Auth\ConnectionRepository;
-use AIProviderForCodex\Auth\ConnectionService;
-use AIProviderForCodex\Logging\RequestLogWriter;
-use AIProviderForCodex\Provider\ModelCatalogState;
-use AIProviderForCodex\Runtime\Client;
-use AIProviderForCodex\Runtime\ResponseMapper;
-use AIProviderForCodex\Runtime\RuntimeRequestException;
+use Htperkins\AIProviderForCodex\Auth\ConnectionRepository;
+use Htperkins\AIProviderForCodex\Auth\ConnectionService;
+use Htperkins\AIProviderForCodex\Logging\RequestLogWriter;
+use Htperkins\AIProviderForCodex\Provider\ModelCatalogState;
+use Htperkins\AIProviderForCodex\Runtime\Client;
+use Htperkins\AIProviderForCodex\Runtime\ResponseMapper;
+use Htperkins\AIProviderForCodex\Runtime\RuntimeRequestException;
+use Htperkins\AIProviderForCodex\Runtime\Settings;
 use WordPress\AiClient\Messages\DTO\Message;
 use WordPress\AiClient\Providers\ApiBasedImplementation\AbstractApiBasedModel;
 use WordPress\AiClient\Providers\Models\TextGeneration\Contracts\TextGenerationModelInterface;
@@ -44,13 +45,14 @@ final class CodexTextGenerationModel extends AbstractApiBasedModel implements Te
 		$wp_user_id = get_current_user_id();
 
 		if ( $wp_user_id <= 0 ) {
-			throw self::runtime_exception( esc_html__( 'Codex generation requires a logged-in WordPress user.', 'scriptorium-ai-provider-for-codex' ) );
+			throw self::runtime_exception( esc_html__( 'Codex generation requires a logged-in WordPress user.', 'ai-provider-for-codex' ) );
 		}
 
-		$connection = ConnectionRepository::get_for_user( $wp_user_id );
+		$is_site_level_app_server = Settings::is_app_server_endpoint();
+		$connection               = ConnectionRepository::get_for_user( $wp_user_id );
 
-		if ( ! $connection ) {
-			throw self::runtime_exception( esc_html__( 'Connect a Codex account before requesting text generation.', 'scriptorium-ai-provider-for-codex' ) );
+		if ( ! $is_site_level_app_server && ( ! $connection || ConnectionRepository::is_expired( $connection ) ) ) {
+			throw self::runtime_exception( esc_html__( 'Connect a Codex account before requesting text generation.', 'ai-provider-for-codex' ) );
 		}
 
 		$catalog  = ModelCatalogState::get_effective_catalog( $wp_user_id );
@@ -62,7 +64,7 @@ final class CodexTextGenerationModel extends AbstractApiBasedModel implements Te
 					/* translators: 1: requested model ID, 2: comma-separated available models */
 					esc_html__(
 						'The model "%1$s" is not available for your Codex account. Available models: %2$s.',
-						'scriptorium-ai-provider-for-codex'
+						'ai-provider-for-codex'
 					),
 					esc_html( $model_id ),
 					esc_html( implode( ', ', ModelCatalogState::labels_from_catalog( $catalog ) ) )
@@ -70,11 +72,11 @@ final class CodexTextGenerationModel extends AbstractApiBasedModel implements Te
 			);
 		}
 
-		$client     = new Client();
-		$config     = $this->getConfig();
-		$input_text = $this->flatten_prompt( $prompt );
+		$client       = new Client();
+		$config       = $this->getConfig();
+		$input_text   = $this->flatten_prompt( $prompt );
 		$input_images = $this->extract_image_inputs( $prompt );
-		$started_at = hrtime( true );
+		$started_at   = hrtime( true );
 
 		try {
 			$response = $client->post(
@@ -92,7 +94,7 @@ final class CodexTextGenerationModel extends AbstractApiBasedModel implements Te
 						'responseFormat'    => $this->build_response_format(),
 						'context'           => [
 							'surface'    => 'wordpress-ai-client',
-							'pluginSlug' => 'scriptorium-ai-provider-for-codex',
+							'pluginSlug' => 'ai-provider-for-codex',
 						],
 					],
 					static function ( $value ): bool {
@@ -114,7 +116,7 @@ final class CodexTextGenerationModel extends AbstractApiBasedModel implements Te
 				)
 			);
 
-			if ( $exception->is_auth_required() ) {
+			if ( ! $is_site_level_app_server && $exception->is_auth_required() ) {
 				ConnectionService::invalidate_local_connection( $wp_user_id );
 			}
 
@@ -179,7 +181,7 @@ final class CodexTextGenerationModel extends AbstractApiBasedModel implements Te
 	}
 
 	/**
-	 * Extracts image file parts for the sidecar text input contract.
+	 * Extracts image file parts for the local runtime text input contract.
 	 *
 	 * @param array<int,Message> $prompt Prompt messages.
 	 * @return list<array{url:string}>
@@ -199,7 +201,7 @@ final class CodexTextGenerationModel extends AbstractApiBasedModel implements Te
 					throw self::runtime_exception(
 						sprintf(
 							/* translators: %s: MIME type. */
-							esc_html__( 'Codex text generation only supports image file inputs, not "%s".', 'scriptorium-ai-provider-for-codex' ),
+							esc_html__( 'Codex text generation only supports image file inputs, not "%s".', 'ai-provider-for-codex' ),
 							esc_html( $file->getMimeType() )
 						)
 					);
@@ -208,7 +210,7 @@ final class CodexTextGenerationModel extends AbstractApiBasedModel implements Te
 				$url = $file->isRemote() ? $file->getUrl() : $file->getDataUri();
 
 				if ( ! is_string( $url ) || '' === $url ) {
-					throw self::runtime_exception( esc_html__( 'Codex text generation could not read the image input.', 'scriptorium-ai-provider-for-codex' ) );
+					throw self::runtime_exception( esc_html__( 'Codex text generation could not read the image input.', 'ai-provider-for-codex' ) );
 				}
 
 				$images[] = [ 'url' => $url ];

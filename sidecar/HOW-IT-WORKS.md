@@ -423,8 +423,8 @@ The plugin owns WordPress application state:
 
 - runtime URL and bearer token settings
 - temporary pending login metadata in user meta
-- connection rows in `{$wpdb->prefix}codex_provider_connections`
-- snapshot rows in `{$wpdb->prefix}codex_provider_connection_snapshots`
+- connection rows in `{$wpdb->prefix}htperkins_aipfc_connections`
+- snapshot rows in `{$wpdb->prefix}htperkins_aipfc_connection_snapshots`
 
 That means:
 
@@ -457,13 +457,13 @@ If PHP can read that file, the plugin auto-detects the runtime URL and bearer to
 
 ## systemd Installation
 
-Use [sidecar/systemd/codex-wp-sidecar.service](./systemd/codex-wp-sidecar.service) as a template and replace the placeholder plugin path with the real installed plugin directory. The service runs:
+The WordPress plugin's settings page renders a systemd unit snippet for an externally installed sidecar command. The service runs:
 
 ```text
-python3 <plugin-dir>/sidecar/app/main.py
+/usr/local/bin/codex-wp-sidecar
 ```
 
-Create the storage root if needed, write `/etc/codex-wp-sidecar.env`, then enable and start the service. The static unit template includes placeholder paths and must be edited before use.
+Create the storage root if needed, write `/etc/codex-wp-sidecar.env`, then enable and start the service.
 
 ## Failure Modes And Their Effects
 

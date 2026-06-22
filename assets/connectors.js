@@ -8,7 +8,7 @@ import {
 	__experimentalRegisterConnector as registerConnector,
 } from '@wordpress/connectors';
 
-const MODULE_ID = 'scriptorium-ai-provider-for-codex/connectors';
+const MODULE_ID = 'htperkins-ai-provider-for-codex/connectors';
 const MAX_BOOT_ATTEMPTS = 40;
 const BOOT_DELAY_MS = 50;
 const RENDER_ASSERTION_ATTEMPTS = 20;
@@ -153,16 +153,16 @@ function buildConnector( config, wpPackages ) {
 							window.navigator?.clipboard?.writeText( nextState.userCode )?.catch( () => {} );
 						},
 					},
-					__( 'Copy', 'scriptorium-ai-provider-for-codex' )
+					__( 'Copy', 'ai-provider-for-codex' )
 				)
 			);
 
 		const renderPendingFlow = ( nextState ) => {
 			const pendingSupportText = getCodexConnectionPendingSupportText( nextState, {
-				copied: __( 'Code copied.', 'scriptorium-ai-provider-for-codex' ),
-				copyFailed: __( 'Copy did not work in this browser. Select the code below.', 'scriptorium-ai-provider-for-codex' ),
-				popupBlocked: __( 'Your browser blocked the verification tab. Open it manually.', 'scriptorium-ai-provider-for-codex' ),
-				defaultText: __( 'Return to this tab after approving.', 'scriptorium-ai-provider-for-codex' ),
+				copied: __( 'Code copied.', 'ai-provider-for-codex' ),
+				copyFailed: __( 'Copy did not work in this browser. Select the code below.', 'ai-provider-for-codex' ),
+				popupBlocked: __( 'Your browser blocked the verification tab. Open it manually.', 'ai-provider-for-codex' ),
+				defaultText: __( 'Return to this tab after approving.', 'ai-provider-for-codex' ),
 			} );
 
 			return createElement(
@@ -176,7 +176,7 @@ function buildConnector( config, wpPackages ) {
 				createElement(
 					'strong',
 					null,
-					__( 'Waiting for ChatGPT approval...', 'scriptorium-ai-provider-for-codex' )
+					__( 'Waiting for ChatGPT approval...', 'ai-provider-for-codex' )
 				),
 				renderCodeLine( nextState ),
 				createElement(
@@ -196,7 +196,7 @@ function buildConnector( config, wpPackages ) {
 								target: '_blank',
 								rel: 'noopener noreferrer',
 							},
-							__( 'Open verification page', 'scriptorium-ai-provider-for-codex' )
+							__( 'Open verification page', 'ai-provider-for-codex' )
 					  )
 					: null
 			);
@@ -212,17 +212,17 @@ function buildConnector( config, wpPackages ) {
 					nextState.status === 'sync_retry'
 						? __(
 								'Your login was approved, but WordPress could not sync your Codex account yet.',
-								'scriptorium-ai-provider-for-codex'
+								'ai-provider-for-codex'
 						  )
 						: nextState.status === 'missing'
 						? __(
 								'The local runtime no longer has this login session. Start again to get a fresh code.',
-								'scriptorium-ai-provider-for-codex'
+								'ai-provider-for-codex'
 						  )
 						: nextState.status === 'timed_out'
-						? __( 'Still waiting. You can check again or start over.', 'scriptorium-ai-provider-for-codex' )
+						? __( 'Still waiting. You can check again or start over.', 'ai-provider-for-codex' )
 						: nextState.error ||
-						  __( 'The local Codex runtime request failed.', 'scriptorium-ai-provider-for-codex' )
+						  __( 'The local Codex runtime request failed.', 'ai-provider-for-codex' )
 				),
 				createElement(
 					Button,
@@ -231,16 +231,16 @@ function buildConnector( config, wpPackages ) {
 						href: config.userConnectionUrl,
 					},
 					nextState.status === 'sync_retry'
-						? __( 'Retry account sync', 'scriptorium-ai-provider-for-codex' )
-						: __( 'Review error', 'scriptorium-ai-provider-for-codex' )
+						? __( 'Retry account sync', 'ai-provider-for-codex' )
+						: __( 'Review error', 'ai-provider-for-codex' )
 				)
 			);
 
 		let actionArea;
-		let setupLabel = __( 'Set up Codex runtime', 'scriptorium-ai-provider-for-codex' );
+		let setupLabel = __( 'Set up Codex runtime', 'ai-provider-for-codex' );
 
 		if ( status?.reason === 'runtime_unreachable' ) {
-			setupLabel = __( 'Check Codex runtime', 'scriptorium-ai-provider-for-codex' );
+			setupLabel = __( 'Check Codex runtime', 'ai-provider-for-codex' );
 		}
 
 		if ( flowState?.status === 'starting' ) {
@@ -284,7 +284,7 @@ function buildConnector( config, wpPackages ) {
 					status.runtime?.error ||
 						__(
 							'WordPress AI Connector Approval is blocking Codex runtime requests.',
-							'scriptorium-ai-provider-for-codex'
+							'ai-provider-for-codex'
 						)
 				),
 				createElement(
@@ -293,7 +293,7 @@ function buildConnector( config, wpPackages ) {
 						variant: 'secondary',
 						href: config.connectorApprovalsUrl || config.siteSettingsUrl,
 					},
-					__( 'Review approvals', 'scriptorium-ai-provider-for-codex' )
+					__( 'Review approvals', 'ai-provider-for-codex' )
 				)
 			);
 		} else if ( status.reason === 'login_pending' && pendingStatus === 'completed' ) {
@@ -303,7 +303,7 @@ function buildConnector( config, wpPackages ) {
 					variant: 'primary',
 					href: config.userConnectionUrl,
 				},
-				__( 'Retry account sync', 'scriptorium-ai-provider-for-codex' )
+				__( 'Retry account sync', 'ai-provider-for-codex' )
 			);
 		} else if ( status.reason === 'login_pending' ) {
 			actionArea = createElement(
@@ -312,7 +312,7 @@ function buildConnector( config, wpPackages ) {
 					variant: 'primary',
 					href: config.userConnectionUrl,
 				},
-				__( 'Continue connecting', 'scriptorium-ai-provider-for-codex' )
+				__( 'Continue connecting', 'ai-provider-for-codex' )
 			);
 		} else if ( status.reason === 'login_failed' ) {
 			actionArea = createElement(
@@ -321,12 +321,12 @@ function buildConnector( config, wpPackages ) {
 					variant: 'secondary',
 					href: config.userConnectionUrl,
 				},
-				__( 'Review error', 'scriptorium-ai-provider-for-codex' )
+				__( 'Review error', 'ai-provider-for-codex' )
 			);
-		} else if ( ! status.connection || status.reason === 'connection_expired' ) {
-			actionArea = createElement(
-				Fragment,
-				null,
+			} else if ( status.reason === 'user_unlinked' || status.reason === 'connection_expired' ) {
+				actionArea = createElement(
+					Fragment,
+					null,
 				createElement(
 					Button,
 					{
@@ -335,8 +335,8 @@ function buildConnector( config, wpPackages ) {
 						disabled: isBusy,
 					},
 					status.reason === 'connection_expired'
-						? __( 'Reconnect', 'scriptorium-ai-provider-for-codex' )
-						: __( 'Connect', 'scriptorium-ai-provider-for-codex' )
+						? __( 'Reconnect', 'ai-provider-for-codex' )
+						: __( 'Connect', 'ai-provider-for-codex' )
 				)
 			);
 		} else {
@@ -355,15 +355,15 @@ function buildConnector( config, wpPackages ) {
 							color: '#1e1e1e',
 						},
 					},
-					__( 'Connected', 'scriptorium-ai-provider-for-codex' )
+					__( 'Connected', 'ai-provider-for-codex' )
 				),
 				createElement(
 					Button,
-					{
-						variant: 'secondary',
-						href: config.userConnectionUrl,
-					},
-					__( 'Manage', 'scriptorium-ai-provider-for-codex' )
+						{
+							variant: 'secondary',
+							href: status.connection ? config.userConnectionUrl : config.siteSettingsUrl,
+						},
+						__( 'Manage', 'ai-provider-for-codex' )
 				)
 			);
 		}

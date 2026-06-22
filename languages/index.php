@@ -2,7 +2,7 @@
 /**
  * Silence is golden.
  *
- * @package AIProviderForCodex
+ * @package HtperkinsAIProviderForCodex
  */
 
 if ( ! defined( 'ABSPATH' ) ) {

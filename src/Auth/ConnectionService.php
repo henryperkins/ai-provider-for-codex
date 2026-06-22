@@ -2,18 +2,18 @@
 /**
  * Local runtime-backed connection workflows.
  *
- * @package AIProviderForCodex
+ * @package HtperkinsAIProviderForCodex
  */
 
 declare( strict_types=1 );
 
-namespace AIProviderForCodex\Auth;
+namespace Htperkins\AIProviderForCodex\Auth;
 
-use AIProviderForCodex\Provider\ModelCatalogState;
-use AIProviderForCodex\Runtime\Client;
-use AIProviderForCodex\Runtime\ResponseMapper;
-use AIProviderForCodex\Runtime\RuntimeRequestException;
-use AIProviderForCodex\Runtime\Settings;
+use Htperkins\AIProviderForCodex\Provider\ModelCatalogState;
+use Htperkins\AIProviderForCodex\Runtime\Client;
+use Htperkins\AIProviderForCodex\Runtime\ResponseMapper;
+use Htperkins\AIProviderForCodex\Runtime\RuntimeRequestException;
+use Htperkins\AIProviderForCodex\Runtime\Settings;
 use RuntimeException;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -33,13 +33,13 @@ final class ConnectionService {
 	 */
 	public function start_connect( int $wp_user_id ): array {
 		if ( ! Settings::has_required_configuration() ) {
-			throw self::runtime_exception( esc_html__( 'The local Codex runtime settings are incomplete.', 'scriptorium-ai-provider-for-codex' ) );
+			throw self::runtime_exception( esc_html__( 'The local Codex runtime settings are incomplete.', 'ai-provider-for-codex' ) );
 		}
 
 		$user = get_userdata( $wp_user_id );
 
 		if ( ! $user ) {
-			throw self::runtime_exception( esc_html__( 'The current user could not be loaded.', 'scriptorium-ai-provider-for-codex' ) );
+			throw self::runtime_exception( esc_html__( 'The current user could not be loaded.', 'ai-provider-for-codex' ) );
 		}
 
 		$existing_connection = $this->reuse_stored_auth( $wp_user_id );
@@ -61,7 +61,7 @@ final class ConnectionService {
 		);
 
 		if ( empty( $response['authSessionId'] ) || empty( $response['verificationUrl'] ) || empty( $response['userCode'] ) ) {
-			throw self::runtime_exception( esc_html__( 'The local Codex runtime returned an incomplete login response.', 'scriptorium-ai-provider-for-codex' ) );
+			throw self::runtime_exception( esc_html__( 'The local Codex runtime returned an incomplete login response.', 'ai-provider-for-codex' ) );
 		}
 
 		PendingConnectionRepository::upsert( $wp_user_id, $response );
@@ -110,7 +110,7 @@ final class ConnectionService {
 		if ( 'completed' !== $status ) {
 			PendingConnectionRepository::delete_for_user( $wp_user_id );
 			return self::connect_error_response(
-				esc_html__( 'The local Codex runtime returned an unexpected login status.', 'scriptorium-ai-provider-for-codex' )
+				esc_html__( 'The local Codex runtime returned an unexpected login status.', 'ai-provider-for-codex' )
 			);
 		}
 
@@ -152,7 +152,7 @@ final class ConnectionService {
 	 */
 	public function refresh_snapshot( int $wp_user_id, ?string $connection_id = null ): array {
 		if ( ! Settings::has_required_configuration() ) {
-			throw self::runtime_exception( esc_html__( 'The local Codex runtime settings are incomplete.', 'scriptorium-ai-provider-for-codex' ) );
+			throw self::runtime_exception( esc_html__( 'The local Codex runtime settings are incomplete.', 'ai-provider-for-codex' ) );
 		}
 
 		$connection    = ConnectionRepository::get_for_user( $wp_user_id );
@@ -184,7 +184,7 @@ final class ConnectionService {
 	}
 
 	/**
-	 * Disconnects the current user locally and from the sidecar runtime.
+	 * Disconnects the current user locally and from the legacy runtime.
 	 *
 	 * @param int $wp_user_id User ID.
 	 * @return void
@@ -253,7 +253,7 @@ final class ConnectionService {
 	}
 
 	/**
-	 * Reuses a valid stored sidecar auth file before requesting a new device code.
+	 * Reuses a valid stored runtime auth file before requesting a new verification code.
 	 *
 	 * @param int $wp_user_id User ID.
 	 * @return array<string,mixed>|null
@@ -290,10 +290,10 @@ final class ConnectionService {
 	}
 
 	/**
-	 * Attempts to recover after the sidecar lost an in-memory login session.
+	 * Attempts to recover after the runtime lost an in-memory login session.
 	 *
 	 * @param int                 $wp_user_id User ID.
-	 * @param array<string,mixed> $response Sidecar status response.
+	 * @param array<string,mixed> $response Runtime status response.
 	 * @return array<string,mixed>
 	 */
 	private function recover_missing_connect_session( int $wp_user_id, array $pending, array $response ): array {
@@ -394,7 +394,7 @@ final class ConnectionService {
 			'verificationUrl' => null,
 			'userCode'        => null,
 			'error'           => sanitize_text_field(
-				(string) ( $payload['error'] ?? __( 'Login session was not found in the local runtime.', 'scriptorium-ai-provider-for-codex' ) )
+				(string) ( $payload['error'] ?? __( 'Login session was not found in the local runtime.', 'ai-provider-for-codex' ) )
 			),
 		];
 	}

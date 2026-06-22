@@ -2,20 +2,21 @@
 /**
  * Local-runtime-backed Codex image model.
  *
- * @package AIProviderForCodex
+ * @package HtperkinsAIProviderForCodex
  */
 
 declare( strict_types=1 );
 
-namespace AIProviderForCodex\Models;
+namespace Htperkins\AIProviderForCodex\Models;
 
-use AIProviderForCodex\Auth\ConnectionRepository;
-use AIProviderForCodex\Auth\ConnectionService;
-use AIProviderForCodex\Logging\RequestLogWriter;
-use AIProviderForCodex\Provider\ModelCatalogState;
-use AIProviderForCodex\Runtime\Client;
-use AIProviderForCodex\Runtime\ResponseMapper;
-use AIProviderForCodex\Runtime\RuntimeRequestException;
+use Htperkins\AIProviderForCodex\Auth\ConnectionRepository;
+use Htperkins\AIProviderForCodex\Auth\ConnectionService;
+use Htperkins\AIProviderForCodex\Logging\RequestLogWriter;
+use Htperkins\AIProviderForCodex\Provider\ModelCatalogState;
+use Htperkins\AIProviderForCodex\Runtime\Client;
+use Htperkins\AIProviderForCodex\Runtime\ResponseMapper;
+use Htperkins\AIProviderForCodex\Runtime\RuntimeRequestException;
+use Htperkins\AIProviderForCodex\Runtime\Settings;
 use WordPress\AiClient\Messages\DTO\Message;
 use WordPress\AiClient\Providers\ApiBasedImplementation\AbstractApiBasedModel;
 use WordPress\AiClient\Providers\Models\ImageGeneration\Contracts\ImageGenerationModelInterface;
@@ -42,13 +43,14 @@ final class CodexImageGenerationModel extends AbstractApiBasedModel implements I
 		$wp_user_id = get_current_user_id();
 
 		if ( $wp_user_id <= 0 ) {
-			throw self::runtime_exception( esc_html__( 'Codex image generation requires a logged-in WordPress user.', 'scriptorium-ai-provider-for-codex' ) );
+			throw self::runtime_exception( esc_html__( 'Codex image generation requires a logged-in WordPress user.', 'ai-provider-for-codex' ) );
 		}
 
-		$connection = ConnectionRepository::get_for_user( $wp_user_id );
+		$is_site_level_app_server = Settings::is_app_server_endpoint();
+		$connection               = ConnectionRepository::get_for_user( $wp_user_id );
 
-		if ( ! $connection || ConnectionRepository::is_expired( $connection ) ) {
-			throw self::runtime_exception( esc_html__( 'Connect a Codex account before requesting image generation.', 'scriptorium-ai-provider-for-codex' ) );
+		if ( ! $is_site_level_app_server && ( ! $connection || ConnectionRepository::is_expired( $connection ) ) ) {
+			throw self::runtime_exception( esc_html__( 'Connect a Codex account before requesting image generation.', 'ai-provider-for-codex' ) );
 		}
 
 		$catalog  = ModelCatalogState::get_effective_catalog( $wp_user_id );
@@ -58,7 +60,7 @@ final class CodexImageGenerationModel extends AbstractApiBasedModel implements I
 			ModelCatalogState::IMAGE_MODEL_ID !== $model_id
 			|| ! in_array( $model_id, $catalog['image_model_ids'], true )
 		) {
-			throw self::runtime_exception( esc_html__( 'Your linked Codex account does not currently report image generation support.', 'scriptorium-ai-provider-for-codex' ) );
+			throw self::runtime_exception( esc_html__( 'Your linked Codex account does not currently report image generation support.', 'ai-provider-for-codex' ) );
 		}
 
 		$client     = new Client();
@@ -72,7 +74,7 @@ final class CodexImageGenerationModel extends AbstractApiBasedModel implements I
 			'systemInstruction' => $config->getSystemInstruction(),
 			'context'           => [
 				'surface'    => 'wordpress-ai-client',
-				'pluginSlug' => 'scriptorium-ai-provider-for-codex',
+				'pluginSlug' => 'ai-provider-for-codex',
 			],
 		];
 
@@ -101,7 +103,7 @@ final class CodexImageGenerationModel extends AbstractApiBasedModel implements I
 				)
 			);
 
-			if ( $exception->is_auth_required() ) {
+			if ( ! $is_site_level_app_server && $exception->is_auth_required() ) {
 				ConnectionService::invalidate_local_connection( $wp_user_id );
 			}
 
@@ -170,11 +172,11 @@ final class CodexImageGenerationModel extends AbstractApiBasedModel implements I
 
 			foreach ( $message->getParts() as $part ) {
 				if ( null !== $part->getFile() ) {
-					throw self::runtime_exception( esc_html__( 'Reference images are not supported yet by the Codex image provider.', 'scriptorium-ai-provider-for-codex' ) );
+					throw self::runtime_exception( esc_html__( 'Reference images are not supported yet by the Codex image provider.', 'ai-provider-for-codex' ) );
 				}
 
 				if ( null !== $part->getFunctionCall() || null !== $part->getFunctionResponse() ) {
-					throw self::runtime_exception( esc_html__( 'Tool-call message parts are not supported for Codex image generation.', 'scriptorium-ai-provider-for-codex' ) );
+					throw self::runtime_exception( esc_html__( 'Tool-call message parts are not supported for Codex image generation.', 'ai-provider-for-codex' ) );
 				}
 
 				if ( null !== $part->getText() ) {
@@ -192,7 +194,7 @@ final class CodexImageGenerationModel extends AbstractApiBasedModel implements I
 		$input_text = trim( implode( "\n\n", $lines ) );
 
 		if ( '' === $input_text ) {
-			throw self::runtime_exception( esc_html__( 'Codex image generation requires a text prompt.', 'scriptorium-ai-provider-for-codex' ) );
+			throw self::runtime_exception( esc_html__( 'Codex image generation requires a text prompt.', 'ai-provider-for-codex' ) );
 		}
 
 		return $input_text;
@@ -210,14 +212,14 @@ final class CodexImageGenerationModel extends AbstractApiBasedModel implements I
 			: 'image/png';
 		$preview   = sprintf(
 			/* translators: %s: image MIME type */
-			__( 'Generated %s image.', 'scriptorium-ai-provider-for-codex' ),
+			__( 'Generated %s image.', 'ai-provider-for-codex' ),
 			$mime_type
 		);
 
 		if ( isset( $response['revisedPrompt'] ) && '' !== (string) $response['revisedPrompt'] ) {
 			$preview .= ' ' . sprintf(
 				/* translators: %s: revised image prompt */
-				__( 'Revised prompt: %s', 'scriptorium-ai-provider-for-codex' ),
+				__( 'Revised prompt: %s', 'ai-provider-for-codex' ),
 				(string) $response['revisedPrompt']
 			);
 		}

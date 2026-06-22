@@ -2,12 +2,12 @@
 /**
  * WordPress AI Connector Approval integration.
  *
- * @package AIProviderForCodex
+ * @package HtperkinsAIProviderForCodex
  */
 
 declare( strict_types=1 );
 
-namespace AIProviderForCodex\Admin;
+namespace Htperkins\AIProviderForCodex\Admin;
 
 use WordPress\AI\Connector_Approval\Approvals_Store;
 use WordPress\AI\Experiments\Connector_Approval\Connector_Approval as ConnectorApprovalExperiment;
@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 final class ConnectorApprovalIntegration {
 
-	public const OPTION_SELF_APPROVAL_SEEDED = 'codex_provider_connector_self_approval_seeded';
+	public const OPTION_SELF_APPROVAL_SEEDED = 'htperkins_aipfc_connector_self_approval_seeded';
 
 	private const CONNECTOR_ID = 'codex';
 
@@ -43,7 +43,7 @@ final class ConnectorApprovalIntegration {
 	 * @return void
 	 */
 	public static function maybe_self_approve(): void {
-		$plugin_basename = plugin_basename( \AIProviderForCodex\PLUGIN_FILE );
+		$plugin_basename = plugin_basename( \Htperkins\AIProviderForCodex\PLUGIN_FILE );
 
 		// The seed marker records the basename last reconciled. Once it matches
 		// the current basename there is nothing to do.

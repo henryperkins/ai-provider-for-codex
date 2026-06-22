@@ -2,15 +2,15 @@
 /**
  * Local runtime connection REST endpoints.
  *
- * @package AIProviderForCodex
+ * @package HtperkinsAIProviderForCodex
  */
 
 declare( strict_types=1 );
 
-namespace AIProviderForCodex\REST;
+namespace Htperkins\AIProviderForCodex\REST;
 
-use AIProviderForCodex\Auth\ConnectionService;
-use AIProviderForCodex\Provider\ModelCatalogState;
+use Htperkins\AIProviderForCodex\Auth\ConnectionService;
+use Htperkins\AIProviderForCodex\Provider\ModelCatalogState;
 use RuntimeException;
 use WP_REST_Response;
 
@@ -26,7 +26,7 @@ final class ConnectController {
 	 */
 	public static function register_routes(): void {
 		register_rest_route(
-			'codex-provider/v1',
+			'htperkins-aipfc/v1',
 			'/connect/start',
 			[
 				'methods'             => 'POST',
@@ -36,7 +36,7 @@ final class ConnectController {
 		);
 
 		register_rest_route(
-			'codex-provider/v1',
+			'htperkins-aipfc/v1',
 			'/connect/status',
 			[
 				'methods'             => 'GET',
@@ -46,7 +46,7 @@ final class ConnectController {
 		);
 
 		register_rest_route(
-			'codex-provider/v1',
+			'htperkins-aipfc/v1',
 			'/connect/disconnect',
 			[
 				'methods'             => 'POST',
@@ -56,7 +56,7 @@ final class ConnectController {
 		);
 
 		register_rest_route(
-			'codex-provider/v1',
+			'htperkins-aipfc/v1',
 			'/connect/refresh',
 			[
 				'methods'             => 'POST',

@@ -2,7 +2,7 @@
 /**
  * Simple PSR-4 autoloader for the plugin scaffold.
  *
- * @package AIProviderForCodex
+ * @package HtperkinsAIProviderForCodex
  */
 
 declare( strict_types=1 );
@@ -13,7 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 spl_autoload_register(
 	static function ( string $class ): void {
-		$prefix = 'AIProviderForCodex\\';
+		$prefix = 'Htperkins\AIProviderForCodex\\';
 
 		if ( 0 !== strpos( $class, $prefix ) ) {
 			return;

@@ -2,16 +2,16 @@
 /**
  * Database setup.
  *
- * @package AIProviderForCodex
+ * @package HtperkinsAIProviderForCodex
  */
 
 declare( strict_types=1 );
 
-namespace AIProviderForCodex\Database;
+namespace Htperkins\AIProviderForCodex\Database;
 
-use AIProviderForCodex\Auth\ConnectionRepository;
-use AIProviderForCodex\Auth\ConnectionSnapshotRepository;
-use AIProviderForCodex\Runtime\Settings;
+use Htperkins\AIProviderForCodex\Auth\ConnectionRepository;
+use Htperkins\AIProviderForCodex\Auth\ConnectionSnapshotRepository;
+use Htperkins\AIProviderForCodex\Runtime\Settings;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -22,9 +22,9 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 final class Installer {
 
-	private const SCHEMA_VERSION_OPTION = 'codex_provider_schema_version';
+	private const SCHEMA_VERSION_OPTION = 'htperkins_aipfc_schema_version';
 	private const SCHEMA_VERSION        = '6';
-	private const LEGACY_DEFAULT_MODEL  = 'codex_runtime_default_model';
+	private const LEGACY_DEFAULT_MODEL  = 'htperkins_aipfc_legacy_default_model';
 
 	/**
 	 * Runs on plugin activation.
@@ -130,12 +130,21 @@ final class Installer {
 			);
 		}
 
-		$legacy_auth_states = $wpdb->prefix . 'codex_provider_auth_states';
+		// Drop the removed auth-state table plus the pre-rename data tables that
+		// the renamed schema abandons (no migration runs into the new tables).
+		$legacy_tables = [
+			$wpdb->prefix . 'htperkins_aipfc_auth_states',
+			$wpdb->prefix . 'codex_provider_auth_states',
+			$wpdb->prefix . 'codex_provider_connections',
+			$wpdb->prefix . 'codex_provider_connection_snapshots',
+		];
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Schema cleanup during upgrade must run directly.
-		$wpdb->query(
-			$wpdb->prepare( 'DROP TABLE IF EXISTS %i', $legacy_auth_states ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery.SchemaChange -- Schema cleanup during upgrade must run directly.
-		);
+		foreach ( $legacy_tables as $legacy_table ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Schema cleanup during upgrade must run directly.
+			$wpdb->query(
+				$wpdb->prepare( 'DROP TABLE IF EXISTS %i', $legacy_table ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery.SchemaChange -- Schema cleanup during upgrade must run directly.
+			);
+		}
 	}
 
 	/**
@@ -167,6 +176,20 @@ final class Installer {
 	 * @return void
 	 */
 	private static function cleanup_legacy_options(): void {
-		delete_option( self::LEGACY_DEFAULT_MODEL );
+		$legacy_options = [
+			self::LEGACY_DEFAULT_MODEL,
+			// Pre-rename option keys from releases before the htperkins_aipfc_* prefix.
+			'codex_runtime_base_url',
+			'codex_runtime_bearer_token',
+			'codex_runtime_allowed_models',
+			'codex_runtime_suggested_bearer_token',
+			'codex_runtime_default_model',
+			'codex_provider_schema_version',
+			'codex_provider_connector_self_approval_seeded',
+		];
+
+		foreach ( $legacy_options as $legacy_option ) {
+			delete_option( $legacy_option );
+		}
 	}
 }

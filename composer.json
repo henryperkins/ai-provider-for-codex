@@ -1,5 +1,5 @@
 {
-	"name": "htperkins/scriptorium-ai-provider-for-codex",
+	"name": "htperkins/ai-provider-for-codex",
 	"description": "Broker-backed Codex provider scaffold for the WordPress AI Client.",
 	"type": "wordpress-plugin",
 	"license": "GPL-2.0-or-later",
@@ -13,7 +13,7 @@
 	},
 	"autoload": {
 		"psr-4": {
-			"AIProviderForCodex\\": "src/"
+			"Htperkins\\AIProviderForCodex\\": "src/"
 		}
 	},
 	"suggest": {

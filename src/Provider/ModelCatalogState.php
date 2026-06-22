@@ -2,16 +2,16 @@
 /**
  * Effective model catalog helpers.
  *
- * @package AIProviderForCodex
+ * @package HtperkinsAIProviderForCodex
  */
 
 declare( strict_types=1 );
 
-namespace AIProviderForCodex\Provider;
+namespace Htperkins\AIProviderForCodex\Provider;
 
-use AIProviderForCodex\Auth\ConnectionRepository;
-use AIProviderForCodex\Auth\ConnectionSnapshotRepository;
-use AIProviderForCodex\Runtime\Settings;
+use Htperkins\AIProviderForCodex\Auth\ConnectionRepository;
+use Htperkins\AIProviderForCodex\Auth\ConnectionSnapshotRepository;
+use Htperkins\AIProviderForCodex\Runtime\Settings;
 
 /**
  * Resolves the model list and selected model for the current user.
@@ -26,7 +26,7 @@ final class ModelCatalogState {
 
 	public const IMAGE_MODEL_ID = 'codex-image';
 
-	private const USER_META_PREFERRED_MODEL = 'codex_provider_preferred_model';
+	private const USER_META_PREFERRED_MODEL = 'htperkins_aipfc_preferred_model';
 
 	/**
 	 * Returns the current user's effective model catalog.
@@ -94,7 +94,7 @@ final class ModelCatalogState {
 		if ( self::supports_image_generation( $snapshot['capabilities'] ?? [] ) ) {
 			$models[] = [
 				'id'    => self::IMAGE_MODEL_ID,
-				'label' => __( 'Codex Image', 'scriptorium-ai-provider-for-codex' ),
+				'label' => __( 'Codex Image', 'ai-provider-for-codex' ),
 				'kind'  => 'image',
 			];
 		}

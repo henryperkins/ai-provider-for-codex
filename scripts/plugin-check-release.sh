@@ -14,14 +14,14 @@ set -euo pipefail
 # is a literal name that lands in a developer's working tree.
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SLUG="scriptorium-ai-provider-for-codex"
+SLUG="ai-provider-for-codex"
 
 if [[ -z "${WP_PATH:-}" ]]; then
 	echo "Set WP_PATH=/path/to/wordpress and retry." >&2
 	exit 1
 fi
 
-EXCLUDE_DIRECTORIES="docs,scripts,sidecar/scripts"
+EXCLUDE_DIRECTORIES="docs,scripts,sidecar"
 EXCLUDE_FILES=".gitignore,IDEATION-ARTIFACT.md,leadership-lesson-side-convo.md,plato-leadership-lesson.md,.distignore,CLAUDE.md,phpstan-stubs.php,LOCAL-SIDECAR-SPEC.md,PLUGIN-SUBMISSION-READINESS-CHECKLIST.md,README.md,codex-app.err,composer.json,composer.lock,package.json,package-lock.json,phpstan.neon,phpstan-baseline.neon"
 
 if ! command -v wp >/dev/null 2>&1; then

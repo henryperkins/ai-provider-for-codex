@@ -2,12 +2,12 @@
 /**
  * Local snapshot persistence.
  *
- * @package AIProviderForCodex
+ * @package HtperkinsAIProviderForCodex
  */
 
 declare( strict_types=1 );
 
-namespace AIProviderForCodex\Auth;
+namespace Htperkins\AIProviderForCodex\Auth;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -18,7 +18,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 final class ConnectionSnapshotRepository {
 
-	private const TABLE_SUFFIX = 'codex_provider_connection_snapshots';
+	private const TABLE_SUFFIX = 'htperkins_aipfc_connection_snapshots';
 
 	/**
 	 * Returns the table name.

@@ -2,12 +2,12 @@
 /**
  * Shared Connectors-like admin page styles.
  *
- * @package AIProviderForCodex
+ * @package HtperkinsAIProviderForCodex
  */
 
 declare( strict_types=1 );
 
-namespace AIProviderForCodex\Admin;
+namespace Htperkins\AIProviderForCodex\Admin;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -25,30 +25,30 @@ final class AdminPageStyle {
 	 */
 	public static function css(): string {
 		return '
-		body.settings_page_scriptorium-ai-provider-for-codex,
-		body.users_page_scriptorium-ai-provider-for-codex,
-		body.profile_page_scriptorium-ai-provider-for-codex,
-		body.settings_page_scriptorium-ai-provider-for-codex #wpcontent,
-		body.users_page_scriptorium-ai-provider-for-codex #wpcontent,
-		body.profile_page_scriptorium-ai-provider-for-codex #wpcontent,
-		body.settings_page_scriptorium-ai-provider-for-codex #wpbody,
-		body.users_page_scriptorium-ai-provider-for-codex #wpbody,
-		body.profile_page_scriptorium-ai-provider-for-codex #wpbody,
-		body.settings_page_scriptorium-ai-provider-for-codex #wpbody-content,
-		body.users_page_scriptorium-ai-provider-for-codex #wpbody-content,
-		body.profile_page_scriptorium-ai-provider-for-codex #wpbody-content { background: #fff; }
-		body.settings_page_scriptorium-ai-provider-for-codex #wpwrap,
-		body.users_page_scriptorium-ai-provider-for-codex #wpwrap,
-		body.profile_page_scriptorium-ai-provider-for-codex #wpwrap { background: #fff; }
-		body.settings_page_scriptorium-ai-provider-for-codex #wpcontent,
-		body.users_page_scriptorium-ai-provider-for-codex #wpcontent,
-		body.profile_page_scriptorium-ai-provider-for-codex #wpcontent { padding-inline-start: 0; }
-		body.settings_page_scriptorium-ai-provider-for-codex #wpbody-content,
-		body.users_page_scriptorium-ai-provider-for-codex #wpbody-content,
-		body.profile_page_scriptorium-ai-provider-for-codex #wpbody-content { padding-bottom: 0; }
-		body.settings_page_scriptorium-ai-provider-for-codex #wpfooter,
-		body.users_page_scriptorium-ai-provider-for-codex #wpfooter,
-		body.profile_page_scriptorium-ai-provider-for-codex #wpfooter { display: none; }
+		body.settings_page_ai-provider-for-codex,
+		body.users_page_ai-provider-for-codex,
+		body.profile_page_ai-provider-for-codex,
+		body.settings_page_ai-provider-for-codex #wpcontent,
+		body.users_page_ai-provider-for-codex #wpcontent,
+		body.profile_page_ai-provider-for-codex #wpcontent,
+		body.settings_page_ai-provider-for-codex #wpbody,
+		body.users_page_ai-provider-for-codex #wpbody,
+		body.profile_page_ai-provider-for-codex #wpbody,
+		body.settings_page_ai-provider-for-codex #wpbody-content,
+		body.users_page_ai-provider-for-codex #wpbody-content,
+		body.profile_page_ai-provider-for-codex #wpbody-content { background: #fff; }
+		body.settings_page_ai-provider-for-codex #wpwrap,
+		body.users_page_ai-provider-for-codex #wpwrap,
+		body.profile_page_ai-provider-for-codex #wpwrap { background: #fff; }
+		body.settings_page_ai-provider-for-codex #wpcontent,
+		body.users_page_ai-provider-for-codex #wpcontent,
+		body.profile_page_ai-provider-for-codex #wpcontent { padding-inline-start: 0; }
+		body.settings_page_ai-provider-for-codex #wpbody-content,
+		body.users_page_ai-provider-for-codex #wpbody-content,
+		body.profile_page_ai-provider-for-codex #wpbody-content { padding-bottom: 0; }
+		body.settings_page_ai-provider-for-codex #wpfooter,
+		body.users_page_ai-provider-for-codex #wpfooter,
+		body.profile_page_ai-provider-for-codex #wpfooter { display: none; }
 
 		.codex-provider-admin-page { color: var(--wpds-color-fg-content-neutral, #1e1e1e); margin: 0; }
 		.codex-provider-admin-page [hidden] { display: none !important; }

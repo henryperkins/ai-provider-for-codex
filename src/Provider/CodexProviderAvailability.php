@@ -2,15 +2,15 @@
 /**
  * Provider availability.
  *
- * @package AIProviderForCodex
+ * @package HtperkinsAIProviderForCodex
  */
 
 declare( strict_types=1 );
 
-namespace AIProviderForCodex\Provider;
+namespace Htperkins\AIProviderForCodex\Provider;
 
-use AIProviderForCodex\Runtime\HealthMonitor;
-use AIProviderForCodex\Runtime\Settings;
+use Htperkins\AIProviderForCodex\Runtime\HealthMonitor;
+use Htperkins\AIProviderForCodex\Runtime\Settings;
 use WordPress\AiClient\Providers\Contracts\ProviderAvailabilityInterface;
 
 /**

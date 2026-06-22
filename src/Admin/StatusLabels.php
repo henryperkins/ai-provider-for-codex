@@ -2,12 +2,12 @@
 /**
  * Human-readable labels for status codes.
  *
- * @package AIProviderForCodex
+ * @package HtperkinsAIProviderForCodex
  */
 
 declare( strict_types=1 );
 
-namespace AIProviderForCodex\Admin;
+namespace Htperkins\AIProviderForCodex\Admin;
 
 /**
  * Maps machine-readable status and reason codes to user-friendly labels.
@@ -23,21 +23,21 @@ final class StatusLabels {
 	public static function readiness_label( string $reason ): string {
 		switch ( $reason ) {
 			case 'ready':
-				return __( 'Connected and ready', 'scriptorium-ai-provider-for-codex' );
+				return __( 'Connected and ready', 'ai-provider-for-codex' );
 			case 'runtime_unconfigured':
-				return __( 'Runtime not configured', 'scriptorium-ai-provider-for-codex' );
+				return __( 'Runtime not configured', 'ai-provider-for-codex' );
 			case 'runtime_unreachable':
-				return __( 'Runtime unreachable', 'scriptorium-ai-provider-for-codex' );
+				return __( 'Runtime unreachable', 'ai-provider-for-codex' );
 			case 'connector_unapproved':
-				return __( 'Connector approval required', 'scriptorium-ai-provider-for-codex' );
+				return __( 'Connector approval required', 'ai-provider-for-codex' );
 			case 'user_unlinked':
-				return __( 'Account not linked', 'scriptorium-ai-provider-for-codex' );
+				return __( 'Account not linked', 'ai-provider-for-codex' );
 			case 'connection_expired':
-				return __( 'Connection expired', 'scriptorium-ai-provider-for-codex' );
+				return __( 'Connection expired', 'ai-provider-for-codex' );
 			case 'login_pending':
-				return __( 'Login pending', 'scriptorium-ai-provider-for-codex' );
+				return __( 'Login pending', 'ai-provider-for-codex' );
 			case 'login_failed':
-				return __( 'Login failed', 'scriptorium-ai-provider-for-codex' );
+				return __( 'Login failed', 'ai-provider-for-codex' );
 			default:
 				return $reason;
 		}
@@ -50,21 +50,21 @@ final class StatusLabels {
 	 * @return string
 	 */
 	public static function readiness_guidance( string $reason ): string {
-			switch ( $reason ) {
+		switch ( $reason ) {
 			case 'runtime_unconfigured':
-				return __( 'Create and start the local sidecar service on the WordPress host, then enter the runtime URL and bearer token or make /etc/codex-wp-sidecar.env readable by PHP.', 'scriptorium-ai-provider-for-codex' );
+				return __( 'Create and start codex app-server on the WordPress host, then enter the WebSocket runtime URL or make /etc/codex-app-server.env readable by PHP.', 'ai-provider-for-codex' );
 			case 'runtime_unreachable':
-				return __( 'The sidecar should be running on the same host as WordPress and answering the configured `/healthz` URL.', 'scriptorium-ai-provider-for-codex' );
+				return __( 'Codex app-server should be running on the same host as WordPress and accepting the configured WebSocket endpoint.', 'ai-provider-for-codex' );
 			case 'connector_unapproved':
-				return __( 'Open Tools > Connector Approvals and approve the pending caller for the Codex connector, or disable the Connector Approval experiment.', 'scriptorium-ai-provider-for-codex' );
+				return __( 'Open Tools > Connector Approvals and approve the pending caller for the Codex connector, or disable the Connector Approval experiment.', 'ai-provider-for-codex' );
 			case 'user_unlinked':
-				return __( 'Once the shared runtime is healthy, connect your Codex account to start using AI features.', 'scriptorium-ai-provider-for-codex' );
+				return __( 'Once the site-level app-server runtime is healthy, WordPress AI features can use the Codex connector.', 'ai-provider-for-codex' );
 			case 'connection_expired':
-				return __( 'Reconnect to restore access.', 'scriptorium-ai-provider-for-codex' );
+				return __( 'Refresh the local Codex runtime connection to restore access.', 'ai-provider-for-codex' );
 			case 'login_pending':
-				return __( 'Open the verification page, enter your device code, then refresh this page.', 'scriptorium-ai-provider-for-codex' );
+				return __( 'The legacy account-linking flow is pending. Complete the verification step, then refresh this page.', 'ai-provider-for-codex' );
 			case 'login_failed':
-				return __( 'The previous device-code login failed. Start the connection again to request a new device code.', 'scriptorium-ai-provider-for-codex' );
+				return __( 'The previous legacy account-linking attempt failed. Start the connection again from the account page if this site still uses that runtime mode.', 'ai-provider-for-codex' );
 			default:
 				return '';
 		}
@@ -79,14 +79,14 @@ final class StatusLabels {
 	public static function runtime_health_label( string $status ): string {
 		switch ( $status ) {
 			case 'healthy':
-				return __( 'Healthy', 'scriptorium-ai-provider-for-codex' );
+				return __( 'Healthy', 'ai-provider-for-codex' );
 			case 'unreachable':
-				return __( 'Unreachable', 'scriptorium-ai-provider-for-codex' );
+				return __( 'Unreachable', 'ai-provider-for-codex' );
 			case 'connector_unapproved':
-				return __( 'Connector approval required', 'scriptorium-ai-provider-for-codex' );
+				return __( 'Connector approval required', 'ai-provider-for-codex' );
 			case 'unknown':
 			default:
-				return __( 'Not yet checked', 'scriptorium-ai-provider-for-codex' );
+				return __( 'Not yet checked', 'ai-provider-for-codex' );
 		}
 	}
 
@@ -99,10 +99,10 @@ final class StatusLabels {
 	public static function catalog_source_label( string $source ): string {
 		switch ( $source ) {
 			case 'user_snapshot':
-				return __( 'From your Codex account', 'scriptorium-ai-provider-for-codex' );
+				return __( 'From runtime catalog', 'ai-provider-for-codex' );
 			case 'settings_fallback':
 			default:
-				return __( 'Configured defaults', 'scriptorium-ai-provider-for-codex' );
+				return __( 'Configured defaults', 'ai-provider-for-codex' );
 		}
 	}
 
@@ -137,7 +137,7 @@ final class StatusLabels {
 	 */
 	public static function relative_time( string $utc_timestamp ): string {
 		if ( '' === $utc_timestamp ) {
-			return __( 'Never', 'scriptorium-ai-provider-for-codex' );
+			return __( 'Never', 'ai-provider-for-codex' );
 		}
 
 		$timestamp = strtotime( $utc_timestamp );
@@ -146,6 +146,6 @@ final class StatusLabels {
 			return $utc_timestamp;
 		}
 
-		return human_time_diff( $timestamp, time() ) . ' ' . __( 'ago', 'scriptorium-ai-provider-for-codex' );
+		return human_time_diff( $timestamp, time() ) . ' ' . __( 'ago', 'ai-provider-for-codex' );
 	}
 }

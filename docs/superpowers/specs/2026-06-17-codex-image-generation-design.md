@@ -165,7 +165,7 @@ Normalize the result to:
 
 If the method fails because an older Codex CLI does not support it, the sidecar must return all capability booleans as `false` and include no hard failure in the snapshot. The provider should not advertise image generation from an unknown capability state.
 
-Store capabilities in a dedicated `capabilities_json` column on `{prefix}codex_provider_connection_snapshots`. Capabilities are connection snapshot state, not model metadata, and should not be hidden inside `models_json` or `rate_limits_json`.
+Store capabilities in a dedicated `capabilities_json` column on `{prefix}htperkins_aipfc_connection_snapshots`. Capabilities are connection snapshot state, not model metadata, and should not be hidden inside `models_json` or `rate_limits_json`.
 
 Schema mechanics:
 
@@ -190,7 +190,7 @@ Required behavior:
 - `normalize_models()` remains text-only for runtime `model/list` entries. Append the synthetic image entry after normalization only when snapshot capabilities allow it.
 - `model_ids` must include `codex-image` only when image generation is available for the current user.
 - `getModelMetadata( 'codex-image' )` must be capability-gated through the same catalog path as `listModelMetadata()`. Direct lookup must not synthesize image metadata for a user whose current snapshot lacks `imageGeneration: true`.
-- Keep existing text-model preference behavior text-only. The current admin "Choose model" form stores `codex_provider_preferred_model`, and `Plugin::filter_preferred_text_models()` prepends the selected model to `wpai_preferred_text_models`; neither path may accept or emit `codex-image`.
+- Keep existing text-model preference behavior text-only. The current admin "Choose model" form stores `htperkins_aipfc_preferred_model`, and `Plugin::filter_preferred_text_models()` prepends the selected model to `wpai_preferred_text_models`; neither path may accept or emit `codex-image`.
 - Add kind-specific catalog helpers or payload fields, for example `text_model_ids`, `image_model_ids`, and `selected_text_model`, so text generation and the admin text-model selector never derive their selected model from an image entry. If the UI mentions `codex-image`, present it as image-generation availability rather than as the model "used for all Codex requests."
 
 Image model metadata:
@@ -264,7 +264,7 @@ Request body:
   "systemInstruction": "Optional style guidance",
   "context": {
     "surface": "wordpress-ai-client",
-    "pluginSlug": "scriptorium-ai-provider-for-codex"
+    "pluginSlug": "ai-provider-for-codex"
   }
 }
 ```

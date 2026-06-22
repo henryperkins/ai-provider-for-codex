@@ -6,7 +6,7 @@
  *
  *   php scripts/test-request-log-writer.php
  *
- * @package AIProviderForCodex
+ * @package HtperkinsAIProviderForCodex
  */
 
 declare( strict_types=1 );
@@ -35,7 +35,7 @@ $codex_assert = static function ( bool $condition, string $message ) use ( &$cod
 	}
 };
 
-$writer = '\\AIProviderForCodex\\Logging\\RequestLogWriter';
+$writer = '\\Htperkins\AIProviderForCodex\\Logging\\RequestLogWriter';
 
 // --- build_entry(): success shape ---------------------------------------
 $entry = $writer::build_entry(

@@ -19,4 +19,5 @@ phpstan.neon
 phpstan-stubs.php
 README.md
 scripts
+/sidecar
 vendor

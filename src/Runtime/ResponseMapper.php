@@ -2,15 +2,15 @@
 /**
  * Local runtime response normalization helpers.
  *
- * @package AIProviderForCodex
+ * @package HtperkinsAIProviderForCodex
  */
 
 declare( strict_types=1 );
 
-namespace AIProviderForCodex\Runtime;
+namespace Htperkins\AIProviderForCodex\Runtime;
 
-use AIProviderForCodex\Auth\ConnectionRepository;
-use AIProviderForCodex\Auth\ConnectionSnapshotRepository;
+use Htperkins\AIProviderForCodex\Auth\ConnectionRepository;
+use Htperkins\AIProviderForCodex\Auth\ConnectionSnapshotRepository;
 use RuntimeException;
 use WordPress\AiClient\Files\DTO\File;
 use WordPress\AiClient\Messages\DTO\MessagePart;
@@ -105,13 +105,13 @@ final class ResponseMapper {
 		$image_base64 = (string) preg_replace( '/\s+/', '', $image_base64 );
 
 		if ( '' === $image_base64 ) {
-			throw self::runtime_exception( esc_html__( 'The local Codex runtime response did not include image data.', 'scriptorium-ai-provider-for-codex' ) );
+			throw self::runtime_exception( esc_html__( 'The local Codex runtime response did not include image data.', 'ai-provider-for-codex' ) );
 		}
 
 		$mime_type = isset( $payload['mimeType'] ) && '' !== (string) $payload['mimeType'] ? (string) $payload['mimeType'] : 'image/png';
 
 		if ( 'image/png' !== $mime_type ) {
-			throw self::runtime_exception( esc_html__( 'The local Codex runtime returned an unsupported image MIME type.', 'scriptorium-ai-provider-for-codex' ) );
+			throw self::runtime_exception( esc_html__( 'The local Codex runtime returned an unsupported image MIME type.', 'ai-provider-for-codex' ) );
 		}
 
 		$usage_input      = (int) ( $payload['usage']['inputTokens'] ?? 0 );
@@ -172,7 +172,7 @@ final class ResponseMapper {
 			}
 		}
 
-		throw self::runtime_exception( esc_html__( 'The local Codex runtime response did not include text output.', 'scriptorium-ai-provider-for-codex' ) );
+		throw self::runtime_exception( esc_html__( 'The local Codex runtime response did not include text output.', 'ai-provider-for-codex' ) );
 	}
 
 	/**

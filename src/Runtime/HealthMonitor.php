@@ -2,19 +2,19 @@
 /**
  * Local runtime health cache.
  *
- * @package AIProviderForCodex
+ * @package HtperkinsAIProviderForCodex
  */
 
 declare( strict_types=1 );
 
-namespace AIProviderForCodex\Runtime;
+namespace Htperkins\AIProviderForCodex\Runtime;
 
 /**
  * Stores the last-known local runtime health state.
  */
 final class HealthMonitor {
 
-	private const TRANSIENT_KEY = 'codex_provider_runtime_health';
+	private const TRANSIENT_KEY = 'htperkins_aipfc_runtime_health';
 	private const SUCCESS_TTL   = 10 * MINUTE_IN_SECONDS;
 	private const FAILURE_TTL   = 5 * MINUTE_IN_SECONDS;
 	private const PROBE_TIMEOUT = 5;
@@ -55,7 +55,7 @@ final class HealthMonitor {
 	}
 
 	/**
-	 * Records a Connector Approval block without marking the sidecar unreachable.
+	 * Records a Connector Approval block without marking the local runtime unreachable.
 	 *
 	 * @param string $message Approval guidance message.
 	 * @return void
@@ -100,7 +100,7 @@ final class HealthMonitor {
 	 *
 	 * Unknown is treated as available so first-run sites are not blocked before
 	 * the plugin has made any runtime requests.
-	 * Connector Approval blocks are not sidecar reachability failures, so callers
+	 * Connector Approval blocks are not runtime reachability failures, so callers
 	 * should inspect the status reason instead of treating credentials as missing.
 	 *
 	 * @return bool
@@ -119,6 +119,12 @@ final class HealthMonitor {
 
 		if ( '' === $base_url ) {
 			return self::get_status();
+		}
+
+		// A ws/wss app-server endpoint has no HTTP /healthz route, so probe it
+		// with a real WebSocket handshake instead of wp_remote_get().
+		if ( Settings::is_app_server_url( $base_url ) ) {
+			return self::probe_app_server();
 		}
 
 		$response = wp_remote_get(
@@ -149,7 +155,7 @@ final class HealthMonitor {
 			self::record_failure(
 				sprintf(
 					/* translators: %d: HTTP status code. */
-					__( 'The local Codex runtime health check returned HTTP %d.', 'scriptorium-ai-provider-for-codex' ),
+					__( 'The local Codex runtime health check returned HTTP %d.', 'ai-provider-for-codex' ),
 					$status_code
 				)
 			);
@@ -158,6 +164,22 @@ final class HealthMonitor {
 		}
 
 		self::record_success();
+
+		return self::get_status();
+	}
+
+	/**
+	 * Probes a Codex app-server endpoint with a cheap WebSocket handshake.
+	 *
+	 * @return array{status:string,checked_at:?string,error:string}
+	 */
+	private static function probe_app_server(): array {
+		try {
+			( new AppServerClient() )->health();
+			self::record_success();
+		} catch ( \Throwable $exception ) {
+			self::record_failure( $exception->getMessage() );
+		}
 
 		return self::get_status();
 	}

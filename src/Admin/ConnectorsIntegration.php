@@ -2,25 +2,25 @@
 /**
  * Connectors screen integration.
  *
- * @package AIProviderForCodex
+ * @package HtperkinsAIProviderForCodex
  */
 
 declare( strict_types=1 );
 
-namespace AIProviderForCodex\Admin;
+namespace Htperkins\AIProviderForCodex\Admin;
 
-use AIProviderForCodex\Auth\ConnectionService;
-use AIProviderForCodex\Provider\ModelCatalogState;
-use AIProviderForCodex\Runtime\HealthMonitor;
-use AIProviderForCodex\Runtime\Settings;
+use Htperkins\AIProviderForCodex\Auth\ConnectionService;
+use Htperkins\AIProviderForCodex\Provider\ModelCatalogState;
+use Htperkins\AIProviderForCodex\Runtime\HealthMonitor;
+use Htperkins\AIProviderForCodex\Runtime\Settings;
 
 /**
  * Makes the provider visible and actionable in Settings > Connectors.
  */
 final class ConnectorsIntegration {
 
-	private const MODULE_ID     = 'scriptorium-ai-provider-for-codex/connectors';
-	private const SCRIPT_HANDLE = 'scriptorium-ai-provider-for-codex-connectors';
+	private const MODULE_ID     = 'htperkins-ai-provider-for-codex/connectors';
+	private const SCRIPT_HANDLE = 'htperkins-aipfc-connectors';
 	private const CONNECTOR_ID  = 'codex';
 	private const AI_IMAGE_GENERATION_SCRIPT_HANDLE = 'ai_image_generation';
 
@@ -32,14 +32,14 @@ final class ConnectorsIntegration {
 	private static function connector_config(): array {
 		return [
 			'connectorId'           => self::CONNECTOR_ID,
-			'statusUrl'             => rest_url( 'codex-provider/v1/status' ),
-			'statusPath'            => '/codex-provider/v1/status',
-			'providerStatusUrl'     => rest_url( 'codex-provider/v1/status' ),
-			'providerStatusPath'    => '/codex-provider/v1/status',
-			'startConnectUrl'       => rest_url( 'codex-provider/v1/connect/start' ),
-			'startConnectPath'      => '/codex-provider/v1/connect/start',
-			'connectStatusUrl'      => rest_url( 'codex-provider/v1/connect/status' ),
-			'connectStatusPath'     => '/codex-provider/v1/connect/status',
+			'statusUrl'             => rest_url( 'htperkins-aipfc/v1/status' ),
+			'statusPath'            => '/htperkins-aipfc/v1/status',
+			'providerStatusUrl'     => rest_url( 'htperkins-aipfc/v1/status' ),
+			'providerStatusPath'    => '/htperkins-aipfc/v1/status',
+			'startConnectUrl'       => rest_url( 'htperkins-aipfc/v1/connect/start' ),
+			'startConnectPath'      => '/htperkins-aipfc/v1/connect/start',
+			'connectStatusUrl'      => rest_url( 'htperkins-aipfc/v1/connect/status' ),
+			'connectStatusPath'     => '/htperkins-aipfc/v1/connect/status',
 			'connectorApprovalsUrl' => admin_url( 'tools.php?page=ai-connector-approval' ),
 			'siteSettingsUrl'       => SiteSettings::page_url(),
 			'userConnectionUrl'     => UserConnectionPage::page_url(),
@@ -68,7 +68,7 @@ final class ConnectorsIntegration {
 		}
 
 		$plugin                      = isset( $connector['plugin'] ) && is_array( $connector['plugin'] ) ? $connector['plugin'] : [];
-		$plugin['file']              = plugin_basename( \AIProviderForCodex\PLUGIN_FILE );
+		$plugin['file']              = plugin_basename( \Htperkins\AIProviderForCodex\PLUGIN_FILE );
 		$connector['plugin']         = $plugin;
 
 		$registry->register( self::CONNECTOR_ID, $connector );
@@ -78,7 +78,7 @@ final class ConnectorsIntegration {
 	 * Lets the AI plugin recognize Codex's local-runtime connector as configured.
 	 *
 	 * The AI plugin's default check only detects API-key connectors with stored
-	 * settings. Codex uses a local sidecar and per-user account links instead.
+	 * settings. Codex uses a local app-server endpoint instead.
 	 *
 	 * @param bool                $has_credentials Whether AI credentials are already available.
 	 * @param array<string,mixed> $connectors Registered connectors from WordPress core.
@@ -128,8 +128,8 @@ final class ConnectorsIntegration {
 	 * Lets WordPress AI's image-generation UI recognize Codex's non-API-key connector.
 	 *
 	 * The AI plugin's page-load support helper only considers API-key connectors.
-	 * Codex uses per-user local runtime auth, so patch the already-localized script
-	 * data when the current user's Codex snapshot exposes the image model.
+	 * Codex uses local app-server auth, so patch the already-localized script
+	 * data when the effective catalog exposes the image model.
 	 *
 	 * @return void
 	 */
@@ -152,7 +152,7 @@ final class ConnectorsIntegration {
 	}
 
 	/**
-	 * Returns the current catalog, recovering a stored sidecar auth snapshot when possible.
+	 * Returns the current catalog, recovering a stored runtime snapshot when possible.
 	 *
 	 * @return array<string,mixed>
 	 */
@@ -189,14 +189,14 @@ final class ConnectorsIntegration {
 	private static function register_connectors_module(): void {
 		wp_register_script_module(
 			self::MODULE_ID,
-			plugins_url( 'assets/connectors.js', \AIProviderForCodex\PLUGIN_FILE ),
+			plugins_url( 'assets/connectors.js', \Htperkins\AIProviderForCodex\PLUGIN_FILE ),
 			[
 				[
 					'id'     => '@wordpress/connectors',
 					'import' => 'static',
 				],
 			],
-			\AIProviderForCodex\VERSION
+			\Htperkins\AIProviderForCodex\VERSION
 		);
 	}
 
@@ -220,7 +220,7 @@ final class ConnectorsIntegration {
 				'wp-private-apis',
 				'wp-url',
 			],
-			\AIProviderForCodex\VERSION,
+			\Htperkins\AIProviderForCodex\VERSION,
 			false
 		);
 	}
@@ -280,12 +280,12 @@ final class ConnectorsIntegration {
 			sprintf(
 				'<a href="%s">%s</a>',
 				esc_url( admin_url( 'options-connectors.php' ) ),
-				esc_html__( 'Connectors', 'scriptorium-ai-provider-for-codex' )
+				esc_html__( 'Connectors', 'ai-provider-for-codex' )
 			),
 			sprintf(
 				'<a href="%s">%s</a>',
 				esc_url( SiteSettings::page_url() ),
-				esc_html__( 'Settings', 'scriptorium-ai-provider-for-codex' )
+				esc_html__( 'Settings', 'ai-provider-for-codex' )
 			)
 		);
 
@@ -304,7 +304,7 @@ final class ConnectorsIntegration {
 
 		$current_screen = get_current_screen();
 
-		if ( $current_screen && in_array( $current_screen->id, [ 'options-connectors', 'settings_page_' . \AIProviderForCodex\SLUG ], true ) ) {
+		if ( $current_screen && in_array( $current_screen->id, [ 'options-connectors', 'settings_page_' . \Htperkins\AIProviderForCodex\SLUG ], true ) ) {
 			return;
 		}
 
@@ -314,8 +314,8 @@ final class ConnectorsIntegration {
 				SafeFormat::sprintf(
 					/* translators: 1: Settings URL, 2: Connectors URL. */
 					__(
-						'Scriptorium AI Provider for Codex is active, but it will not work until the local runtime sidecar is configured and running on this server. Open <a href="%1$s">plugin settings</a> for the systemd and environment-file setup guide, then confirm the result on <a href="%2$s">Connectors</a>.',
-						'scriptorium-ai-provider-for-codex'
+						'Scriptorium AI Provider for Codex is active, but it will not work until codex app-server is configured and running on this server. Open <a href="%1$s">plugin settings</a> for the systemd and environment-file setup guide, then confirm the result on <a href="%2$s">Connectors</a>.',
+						'ai-provider-for-codex'
 					),
 					esc_url( SiteSettings::page_url() ),
 					esc_url( admin_url( 'options-connectors.php' ) )
@@ -330,17 +330,17 @@ final class ConnectorsIntegration {
 	 * @return void
 	 */
 	public static function maybe_render_unlinked_notice(): void {
-		if ( ! is_user_logged_in() || ! Settings::has_required_configuration() ) {
+		if ( ! is_user_logged_in() || ! Settings::has_required_configuration() || Settings::is_app_server_endpoint() ) {
 			return;
 		}
 
 		$user_id = get_current_user_id();
 
-		if ( get_user_meta( $user_id, 'codex_provider_dismiss_link_notice', true ) ) {
+		if ( get_user_meta( $user_id, 'htperkins_aipfc_dismiss_link_notice', true ) ) {
 			return;
 		}
 
-		$connection = \AIProviderForCodex\Auth\ConnectionRepository::get_for_user( $user_id );
+		$connection = \Htperkins\AIProviderForCodex\Auth\ConnectionRepository::get_for_user( $user_id );
 
 		if ( null !== $connection ) {
 			return;
@@ -348,7 +348,7 @@ final class ConnectorsIntegration {
 
 		$current_screen = get_current_screen();
 
-		if ( $current_screen && in_array( $current_screen->id, [ 'options-connectors', 'users_page_' . \AIProviderForCodex\SLUG, 'profile_page_' . \AIProviderForCodex\SLUG, 'settings_page_' . \AIProviderForCodex\SLUG ], true ) ) {
+		if ( $current_screen && in_array( $current_screen->id, [ 'options-connectors', 'users_page_' . \Htperkins\AIProviderForCodex\SLUG, 'profile_page_' . \Htperkins\AIProviderForCodex\SLUG, 'settings_page_' . \Htperkins\AIProviderForCodex\SLUG ], true ) ) {
 			return;
 		}
 
@@ -359,7 +359,7 @@ final class ConnectorsIntegration {
 					/* translators: %s: user connection URL. */
 					__(
 						'Codex AI is available on this site. <a href="%s">Connect your Codex account</a> to start using AI features.',
-						'scriptorium-ai-provider-for-codex'
+						'ai-provider-for-codex'
 					),
 					esc_url( UserConnectionPage::page_url() )
 				)
@@ -378,13 +378,13 @@ final class ConnectorsIntegration {
 		if ( ! current_user_can( 'read' ) ) {
 			wp_send_json_error(
 				[
-					'message' => __( 'You are not allowed to dismiss this notice.', 'scriptorium-ai-provider-for-codex' ),
+					'message' => __( 'You are not allowed to dismiss this notice.', 'ai-provider-for-codex' ),
 				],
 				403
 			);
 		}
 
-		update_user_meta( get_current_user_id(), 'codex_provider_dismiss_link_notice', '1' );
+		update_user_meta( get_current_user_id(), 'htperkins_aipfc_dismiss_link_notice', '1' );
 		wp_send_json_success();
 	}
 
@@ -394,17 +394,17 @@ final class ConnectorsIntegration {
 	 * @return void
 	 */
 	public static function maybe_enqueue_dismiss_script(): void {
-		if ( ! is_user_logged_in() || ! Settings::has_required_configuration() ) {
+		if ( ! is_user_logged_in() || ! Settings::has_required_configuration() || Settings::is_app_server_endpoint() ) {
 			return;
 		}
 
 		$user_id = get_current_user_id();
 
-		if ( get_user_meta( $user_id, 'codex_provider_dismiss_link_notice', true ) ) {
+		if ( get_user_meta( $user_id, 'htperkins_aipfc_dismiss_link_notice', true ) ) {
 			return;
 		}
 
-		$connection = \AIProviderForCodex\Auth\ConnectionRepository::get_for_user( $user_id );
+		$connection = \Htperkins\AIProviderForCodex\Auth\ConnectionRepository::get_for_user( $user_id );
 
 		if ( null !== $connection ) {
 			return;
@@ -413,7 +413,7 @@ final class ConnectorsIntegration {
 		wp_add_inline_script(
 			'common',
 			sprintf(
-				'jQuery(function($){$(document).on("click",".notice[data-codex-dismiss-notice] .notice-dismiss",function(){$.post(ajaxurl,{action:"codex_provider_dismiss_notice",nonce:"%s"});});});',
+				'jQuery(function($){$(document).on("click",".notice[data-codex-dismiss-notice] .notice-dismiss",function(){$.post(ajaxurl,{action:"htperkins_aipfc_dismiss_notice",nonce:"%s"});});});',
 				esc_js( wp_create_nonce( 'codex-provider-dismiss-notice' ) )
 			)
 		);
