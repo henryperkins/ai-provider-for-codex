@@ -1,4 +1,4 @@
-# Scriptorium AI Provider for Codex
+# AI Provider for Codex
 
 WordPress AI Client provider plugin for Codex text models and capability-gated Codex image generation using a local sidecar runtime and ChatGPT-managed authentication and billing.
 
