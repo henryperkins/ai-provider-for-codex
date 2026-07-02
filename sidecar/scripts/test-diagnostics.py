@@ -11,7 +11,7 @@ class ServerIdentityTest(unittest.TestCase):
     def test_returns_service_and_version_only(self):
         self.assertEqual(
             main._server_identity(),
-            {"service": "codex-wp-sidecar", "version": "2.0"},
+            {"service": "codex-wp-sidecar", "version": "2.1"},
         )
 
 
