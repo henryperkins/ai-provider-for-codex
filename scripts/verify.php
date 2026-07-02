@@ -842,6 +842,18 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 			false !== strpos( $codex_provider_image_generation_inline_scripts, 'hasImageGenerationSupport = true' ),
 			'Codex should override the AI plugin image-generation page flag when the current user has codex-image.'
 		);
+		$codex_provider_assert(
+			true === apply_filters( 'wpai_has_image_generation_support', false, $codex_provider_connectors ),
+			'AI plugin image-generation support filter should recognize codex-image from the current user stored snapshot.'
+		);
+		$codex_provider_assert(
+			false === apply_filters( 'wpai_has_image_generation_support', false, [] ),
+			'AI plugin image-generation support filter should not claim support when Codex is not registered.'
+		);
+		$codex_provider_assert(
+			true === apply_filters( 'wpai_has_image_generation_support', true, [] ),
+			'AI plugin image-generation support filter should preserve an existing true result.'
+		);
 		$codex_provider_recover_user_id = 0;
 		$codex_provider_recover_login   = 'codexrecover' . strtolower( wp_generate_password( 10, false, false ) );
 		$codex_provider_recover_user    = wp_insert_user(
@@ -912,7 +924,15 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 					]
 				);
 			},
-			static function () use ( $codex_provider_assert, $codex_provider_recover_user_id, $codex_provider_recover_connection_id, &$codex_provider_recover_snapshot_requests ) {
+			static function () use ( $codex_provider_assert, $codex_provider_connectors, $codex_provider_recover_user_id, $codex_provider_recover_connection_id, &$codex_provider_recover_snapshot_requests ) {
+				$codex_provider_assert(
+					false === apply_filters( 'wpai_has_image_generation_support', false, $codex_provider_connectors ),
+					'AI plugin image-generation support filter should stay false while the current user has no stored snapshot.'
+				);
+				$codex_provider_assert(
+					0 === $codex_provider_recover_snapshot_requests,
+					'AI plugin image-generation support filter must stay passive and never trigger live snapshot requests.'
+				);
 				ConnectorsIntegration::maybe_override_ai_image_generation_support();
 				$codex_provider_recovered_catalog = ModelCatalogState::get_effective_catalog( $codex_provider_recover_user_id );
 				$codex_provider_recovered_scripts = wp_scripts()->get_data( 'ai_image_generation', 'after' );

@@ -56,6 +56,7 @@ final class Plugin {
 		add_filter( 'wpai_has_ai_credentials', [ ConnectorsIntegration::class, 'filter_ai_plugin_has_credentials' ], 10, 2 );
 		add_filter( 'wpai_pre_has_valid_credentials_check', [ ConnectorsIntegration::class, 'filter_ai_plugin_has_valid_credentials' ] );
 		add_filter( 'wpai_is_codex_connector_configured', [ ConnectorsIntegration::class, 'filter_ai_plugin_is_codex_connector_configured' ] );
+		add_filter( 'wpai_has_image_generation_support', [ ConnectorsIntegration::class, 'filter_ai_plugin_has_image_generation_support' ], 10, 2 );
 		add_filter( 'wpai_preferred_text_models', [ $this, 'filter_preferred_text_models' ] );
 		add_filter( 'wpai_preferred_image_models', [ $this, 'filter_preferred_image_models' ] );
 		add_filter( 'wpai_preferred_vision_models', [ $this, 'filter_preferred_vision_models' ] );

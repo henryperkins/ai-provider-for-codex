@@ -125,6 +125,29 @@ final class ConnectorsIntegration {
 	}
 
 	/**
+	 * Lets the AI plugin's server-side image-generation support helper recognize Codex.
+	 *
+	 * Fires inside `has_image_generation_support()` (AI plugin 1.1.0+), whose default
+	 * check only considers API-key connectors. Must stay passive: it reads the current
+	 * user's stored snapshot only and never triggers a live runtime call. The
+	 * inline-script override below still covers AI plugin <= 1.0.2 and the
+	 * snapshot-refresh recovery path.
+	 *
+	 * @param bool                $has_support Whether image generation support was already detected.
+	 * @param array<string,mixed> $connectors Registered connectors from WordPress core.
+	 * @return bool
+	 */
+	public static function filter_ai_plugin_has_image_generation_support( bool $has_support, array $connectors ): bool {
+		if ( $has_support || ! self::has_codex_connector( $connectors ) || ! Settings::has_required_configuration() ) {
+			return $has_support;
+		}
+
+		$catalog = ModelCatalogState::get_effective_catalog( get_current_user_id() );
+
+		return in_array( ModelCatalogState::IMAGE_MODEL_ID, $catalog['image_model_ids'], true );
+	}
+
+	/**
 	 * Lets WordPress AI's image-generation UI recognize Codex's non-API-key connector.
 	 *
 	 * The AI plugin's page-load support helper only considers API-key connectors.
