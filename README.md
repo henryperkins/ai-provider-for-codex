@@ -49,8 +49,8 @@ WordPress AI Client provider plugin for Codex text models and capability-gated C
 
 GitHub Actions runs `.github/workflows/verify.yml` for pull requests, pushes to
 `main`, release tags (`v*`), and manual dispatches. It runs the full verification
-script against disposable WordPress 7.0 / MySQL 8.4 installations on PHP 7.4 and
-8.3, plus Composer validation and PHPStan. Text-generation regressions cover HTTP
+script against disposable WordPress 7.0 and 7.1 / MySQL 8.4 installations on PHP
+7.4 and 8.3, plus Composer validation and PHPStan. Text-generation regressions cover HTTP
 200 responses with missing text or an invalid finish reason: one error log, the
 original exception type and message, and a preserved account connection.
 

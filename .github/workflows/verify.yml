@@ -20,12 +20,13 @@ concurrency:
 
 jobs:
   wordpress:
-    name: WordPress 7.0 / PHP ${{ matrix.php }}
+    name: WordPress ${{ matrix.wordpress }} / PHP ${{ matrix.php }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
+        wordpress: ['7.0', '7.1']
         php: ['7.4', '8.3']
     services:
       mysql:
@@ -74,7 +75,7 @@ jobs:
             node --version
             python3 --version
           } | tee "$EVIDENCE_PATH/environment.txt"
-          printf 'Tested revision: `%s`\n\nWordPress: `7.0`; PHP: `%s`\n' "$(git rev-parse HEAD)" "${{ matrix.php }}" >> "$GITHUB_STEP_SUMMARY"
+          printf 'Tested revision: `%s`\n\nWordPress: `%s`; PHP: `%s`\n' "$(git rev-parse HEAD)" "${{ matrix.wordpress }}" "${{ matrix.php }}" >> "$GITHUB_STEP_SUMMARY"
       - name: Install locked PHP dependencies
         run: |
           composer validate --strict
@@ -83,7 +84,7 @@ jobs:
         run: composer phpstan 2>&1 | tee "$EVIDENCE_PATH/phpstan.log"
       - name: Install disposable WordPress
         run: |
-          wp core download --version=7.0 --skip-content --path="$WP_PATH"
+          wp core download --version=${{ matrix.wordpress }} --skip-content --path="$WP_PATH"
           wp config create --path="$WP_PATH" --dbname=codex_ci --dbuser=codex_ci --dbpass=codex-ci-password --dbhost=127.0.0.1:3306
           wp config set DISABLE_WP_CRON true --raw --path="$WP_PATH"
           wp core install --path="$WP_PATH" --url=http://codex-provider-ci.test --title='Codex provider CI' --admin_user=codex-ci --admin_password=disposable-ci-password --admin_email=codex-ci@example.test --skip-email
@@ -97,7 +98,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: wordpress-7.0-php-${{ matrix.php }}-${{ github.sha }}
+          name: wordpress-${{ matrix.wordpress }}-php-${{ matrix.php }}-${{ github.sha }}
           path: ${{ runner.temp }}/verification-evidence
           if-no-files-found: warn
           retention-days: 30

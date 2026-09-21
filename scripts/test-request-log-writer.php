@@ -52,7 +52,8 @@ $entry = $writer::build_entry(
 	)
 );
 
-$codex_assert( ( $entry['type'] ?? null ) === 'text', 'success: type is text' );
+$codex_assert( ( $entry['type'] ?? null ) === 'ai_client', 'success: type is ai_client (the AI plugin only accepts ai_client|mcp_tool|ability)' );
+$codex_assert( ( $entry['context']['request_kind'] ?? null ) === 'text', 'success: request_kind defaults to text inside context' );
 $codex_assert( ( $entry['operation'] ?? null ) === 'codex:responses/text', 'success: operation' );
 $codex_assert( ( $entry['provider'] ?? null ) === 'codex', 'success: provider is codex' );
 $codex_assert( ( $entry['status'] ?? null ) === 'success', 'success: status' );
@@ -72,7 +73,7 @@ $codex_assert( ! array_key_exists( 'error_message', $entry ), 'success: omits er
 $image_base64 = str_repeat( 'a', 120 );
 $image        = $writer::build_entry(
 	array(
-		'type'           => 'image',
+		'request_kind'   => 'image',
 		'operation'      => 'codex:responses/image',
 		'model'          => 'codex-image',
 		'status'         => 'success',
@@ -88,7 +89,8 @@ $image        = $writer::build_entry(
 	)
 );
 
-$codex_assert( ( $image['type'] ?? null ) === 'image', 'image: type is image' );
+$codex_assert( ( $image['type'] ?? null ) === 'ai_client', 'image: type stays ai_client' );
+$codex_assert( ( $image['context']['request_kind'] ?? null ) === 'image', 'image: request_kind is image inside context' );
 $codex_assert( ( $image['operation'] ?? null ) === 'codex:responses/image', 'image: operation' );
 $codex_assert( ( $image['model'] ?? null ) === 'codex-image', 'image: model' );
 $codex_assert( ( $image['context']['output_preview'] ?? null ) === 'Generated image/png image. Revised prompt: A small blue circle.', 'image: output preview is safe text' );
@@ -124,6 +126,21 @@ $codex_assert( ! array_key_exists( 'model', $min ), 'min: omits model' );
 $codex_assert( ! array_key_exists( 'duration_ms', $min ), 'min: omits duration_ms' );
 $codex_assert( ! array_key_exists( 'tokens_input', $min ), 'min: omits tokens_input' );
 $codex_assert( ! array_key_exists( 'user_id', $min ), 'min: omits user_id' );
+
+// --- build_entry(): type is always within the AI plugin's accepted set --
+// Mirrors AI_Request_Log_Manager::get_types() in the WordPress AI plugin
+// (1.3.0+), which rejects any other value with _doing_it_wrong() and drops the
+// entry without throwing, so the bridge would fail silently.
+$codex_ai_plugin_log_types = array( 'ai_client', 'mcp_tool', 'ability' );
+
+$legacy = $writer::build_entry( array( 'status' => 'success', 'type' => 'image' ) );
+
+$codex_assert( ( $legacy['type'] ?? null ) === 'ai_client', 'whitelist: a caller-supplied type never overrides ai_client' );
+$codex_assert( ( $legacy['context']['request_kind'] ?? null ) === 'text', 'whitelist: a caller-supplied type is not treated as request_kind' );
+
+foreach ( array( 'success' => $entry, 'image' => $image, 'error' => $err, 'min' => $min, 'legacy' => $legacy ) as $shape => $shape_entry ) {
+	$codex_assert( in_array( $shape_entry['type'] ?? null, $codex_ai_plugin_log_types, true ), "whitelist: {$shape} entry type is accepted by the AI plugin" );
+}
 
 // --- build_entry(): truncates oversized previews ------------------------
 $big = $writer::build_entry(

@@ -18,7 +18,7 @@ Version and requirement references refreshed: 2026-07-02
 - `[pass]` A standalone GPL-2.0-or-later LICENSE file is present in the project root
 - `[pass]` The release zip includes `sidecar/` so the readme installation instructions work from the installed plugin directory
 - `[pass]` The plugin was renamed to lead with `Scriptorium` so the display name no longer leads with `Codex`; `Codex` now appears only as a descriptive reference. The slug intentionally keeps the `codex` token for continuity. Confirm the residual descriptive use is acceptable at submission time.
-- `[verify at submission time]` `Tested up to: 7.0` is reasonable right now, but it must be re-checked against the current stable or release-candidate WordPress version on submission day
+- `[verify at submission time]` `Tested up to: 7.1` is reasonable right now, but it must be re-checked against the current stable or release-candidate WordPress version on submission day
 
 ## 1. WordPress.org Account And Ownership
 
@@ -62,7 +62,7 @@ Repo notes:
 - `Text Domain: scriptorium-ai-provider-for-codex` in [`scriptorium-ai-provider-for-codex.php`](./scriptorium-ai-provider-for-codex.php)
 - `Requires at least: 7.0` in [`scriptorium-ai-provider-for-codex.php`](./scriptorium-ai-provider-for-codex.php)
 - `Requires PHP: 7.4` in [`scriptorium-ai-provider-for-codex.php`](./scriptorium-ai-provider-for-codex.php)
-- `Tested up to: 7.0` in [`readme.txt`](./readme.txt)
+- `Tested up to: 7.1` in [`readme.txt`](./readme.txt)
 
 ## 4. Public Documentation Quality
 

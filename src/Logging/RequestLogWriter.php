@@ -29,8 +29,20 @@ final class RequestLogWriter {
 
 	/**
 	 * Request-log "type" column value.
+	 *
+	 * The AI plugin only stores the values returned by its
+	 * AI_Request_Log_Manager::get_types() (`ai_client`, `mcp_tool`, `ability` as
+	 * of 1.3.0) and silently drops anything else, so every codex entry is
+	 * recorded as an AI Client generation. Text versus image is carried in
+	 * `context.request_kind`, which is where the AI plugin's own transporter and
+	 * its Request Log UI keep it.
 	 */
-	private const TYPE = 'text';
+	private const TYPE = 'ai_client';
+
+	/**
+	 * Default `context.request_kind` value.
+	 */
+	private const REQUEST_KIND = 'text';
 
 	/**
 	 * Request-log "operation" column value.
@@ -61,7 +73,7 @@ final class RequestLogWriter {
 	 *
 	 * @param array{
 	 *     status: string,
-	 *     type?: string,
+	 *     request_kind?: string,
 	 *     operation?: string,
 	 *     model?: string,
 	 *     duration_ms?: int,
@@ -76,11 +88,14 @@ final class RequestLogWriter {
 	 * @return array<string,mixed> Payload accepted by AI_Request_Log_Manager::log().
 	 */
 	public static function build_entry( array $args ): array {
-		$status    = $args['status'];
-		$type      = isset( $args['type'] ) && '' !== (string) $args['type'] ? (string) $args['type'] : self::TYPE;
-		$operation = isset( $args['operation'] ) && '' !== (string) $args['operation'] ? (string) $args['operation'] : self::OPERATION;
+		$status       = $args['status'];
+		$operation    = isset( $args['operation'] ) && '' !== (string) $args['operation'] ? (string) $args['operation'] : self::OPERATION;
+		$request_kind = isset( $args['request_kind'] ) && '' !== (string) $args['request_kind'] ? (string) $args['request_kind'] : self::REQUEST_KIND;
 
-		$context = array( 'surface' => 'wordpress-ai-client' );
+		$context = array(
+			'surface'      => 'wordpress-ai-client',
+			'request_kind' => $request_kind,
+		);
 
 		if ( isset( $args['request_id'] ) && '' !== (string) $args['request_id'] ) {
 			$context['request_id'] = (string) $args['request_id'];
@@ -95,7 +110,7 @@ final class RequestLogWriter {
 		}
 
 		$entry = array(
-			'type'      => $type,
+			'type'      => self::TYPE,
 			'operation' => $operation,
 			'provider'  => self::PROVIDER,
 			'status'    => $status,

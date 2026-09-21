@@ -2,7 +2,7 @@
 Contributors: htperkins
 Tags: ai, codex, wordpress-ai-client
 Requires at least: 7.0
-Tested up to: 7.0
+Tested up to: 7.1
 Requires PHP: 7.4
 Stable tag: 2.1
 License: GPL-2.0-or-later
