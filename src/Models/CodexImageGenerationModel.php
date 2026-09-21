@@ -90,7 +90,7 @@ final class CodexImageGenerationModel extends AbstractApiBasedModel implements I
 				RequestLogWriter::build_entry(
 					[
 						'status'        => 'error',
-						'type'          => 'image',
+						'request_kind'  => 'image',
 						'operation'     => 'codex:responses/image',
 						'model'         => $model_id,
 						'duration_ms'   => self::elapsed_ms( $started_at ),
@@ -120,7 +120,7 @@ final class CodexImageGenerationModel extends AbstractApiBasedModel implements I
 				RequestLogWriter::build_entry(
 					[
 						'status'        => 'error',
-						'type'          => 'image',
+						'request_kind'  => 'image',
 						'operation'     => 'codex:responses/image',
 						'model'         => $model_id,
 						'duration_ms'   => self::elapsed_ms( $started_at ),
@@ -139,7 +139,7 @@ final class CodexImageGenerationModel extends AbstractApiBasedModel implements I
 			RequestLogWriter::build_entry(
 				[
 					'status'         => 'success',
-					'type'           => 'image',
+					'request_kind'   => 'image',
 					'operation'      => 'codex:responses/image',
 					'model'          => $model_id,
 					'duration_ms'    => self::elapsed_ms( $started_at ),

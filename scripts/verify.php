@@ -1512,8 +1512,20 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 
 			// Codex generations are mirrored into the AI plugin Request Log via the bridge sink.
 		$codex_provider_log_entries = [];
-		$codex_provider_log_sink    = static function ( array $entry ) use ( &$codex_provider_log_entries ): void {
-			$codex_provider_log_entries[] = $entry;
+		// The AI plugin's log manager (1.3.0+) only stores the types returned by its
+		// get_types() and silently drops anything else, so every captured entry is
+		// checked below against the live class when the AI plugin is installed and
+		// against the known values otherwise. The check runs after the scenarios,
+		// outside the sink, because the writer swallows sink exceptions.
+		$codex_provider_accepted_log_types = [ 'ai_client', 'mcp_tool', 'ability' ];
+		$codex_provider_log_manager_class  = 'WordPress\AI\Logging\AI_Request_Log_Manager';
+		if ( class_exists( $codex_provider_log_manager_class ) && method_exists( $codex_provider_log_manager_class, 'get_types' ) ) {
+			$codex_provider_accepted_log_types = (array) call_user_func( [ $codex_provider_log_manager_class, 'get_types' ] );
+		}
+		$codex_provider_all_log_entries = [];
+		$codex_provider_log_sink        = static function ( array $entry ) use ( &$codex_provider_log_entries, &$codex_provider_all_log_entries ): void {
+			$codex_provider_log_entries[]     = $entry;
+			$codex_provider_all_log_entries[] = $entry;
 		};
 		add_filter(
 			'codex_provider_request_log_sink',
@@ -1569,6 +1581,11 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 				$codex_provider_assert(
 					'codex' === ( $codex_provider_log_entry['provider'] ?? null ),
 					'Codex request-log entries should attribute the codex provider.'
+				);
+				$codex_provider_assert(
+					'ai_client' === ( $codex_provider_log_entry['type'] ?? null )
+					&& 'text' === ( $codex_provider_log_entry['context']['request_kind'] ?? null ),
+					'Codex text request-log entries should use type=ai_client with request_kind=text in context.'
 				);
 				$codex_provider_assert(
 					'success' === ( $codex_provider_log_entry['status'] ?? null ),
@@ -1652,8 +1669,9 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 				$codex_provider_log_json  = (string) wp_json_encode( $codex_provider_log_entry );
 
 				$codex_provider_assert(
-					'image' === ( $codex_provider_log_entry['type'] ?? null ),
-					'Codex image request-log entries should use type=image.'
+					'ai_client' === ( $codex_provider_log_entry['type'] ?? null )
+					&& 'image' === ( $codex_provider_log_entry['context']['request_kind'] ?? null ),
+					'Codex image request-log entries should use type=ai_client with request_kind=image in context.'
 				);
 				$codex_provider_assert(
 					'codex:responses/image' === ( $codex_provider_log_entry['operation'] ?? null ),
@@ -1805,7 +1823,8 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 					$codex_provider_log_entry = $codex_provider_log_entries[0] ?? [];
 					$codex_provider_assert(
 						'error' === ( $codex_provider_log_entry['status'] ?? null )
-						&& 'text' === ( $codex_provider_log_entry['type'] ?? null )
+						&& 'ai_client' === ( $codex_provider_log_entry['type'] ?? null )
+						&& 'text' === ( $codex_provider_log_entry['context']['request_kind'] ?? null )
 						&& 'codex:responses/text' === ( $codex_provider_log_entry['operation'] ?? null )
 						&& 'codex' === ( $codex_provider_log_entry['provider'] ?? null ),
 						'Codex text mapper errors should be attributed to the text generation operation.'
@@ -1880,8 +1899,9 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 
 				$codex_provider_log_entry = $codex_provider_log_entries[0] ?? [];
 				$codex_provider_assert(
-					'image' === ( $codex_provider_log_entry['type'] ?? null ),
-					'A failed Codex image generation log should use type=image.'
+					'ai_client' === ( $codex_provider_log_entry['type'] ?? null )
+					&& 'image' === ( $codex_provider_log_entry['context']['request_kind'] ?? null ),
+					'A failed Codex image generation log should use type=ai_client with request_kind=image in context.'
 				);
 				$codex_provider_assert(
 					'codex:responses/image' === ( $codex_provider_log_entry['operation'] ?? null ),
@@ -1954,8 +1974,9 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 					'Codex image mapper errors should be logged with status=error.'
 				);
 				$codex_provider_assert(
-					'image' === ( $codex_provider_log_entry['type'] ?? null ),
-					'Codex image mapper error logs should use type=image.'
+					'ai_client' === ( $codex_provider_log_entry['type'] ?? null )
+					&& 'image' === ( $codex_provider_log_entry['context']['request_kind'] ?? null ),
+					'Codex image mapper error logs should use type=ai_client with request_kind=image in context.'
 				);
 				$codex_provider_assert(
 					false !== strpos( (string) ( $codex_provider_log_entry['error_message'] ?? '' ), 'unsupported image MIME type' ),
@@ -1963,6 +1984,18 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 				);
 			}
 		);
+		// Every Codex entry captured above must use a type the AI plugin's log manager
+		// actually stores; anything outside get_types() is dropped without an exception.
+		$codex_provider_assert(
+			[] !== $codex_provider_all_log_entries,
+			'The request-log scenarios should have captured at least one Codex entry.'
+		);
+		foreach ( $codex_provider_all_log_entries as $codex_provider_captured_entry ) {
+			$codex_provider_assert(
+				in_array( $codex_provider_captured_entry['type'] ?? null, $codex_provider_accepted_log_types, true ),
+				'Codex request-log entries must use a type the AI plugin log manager accepts (' . implode( '|', $codex_provider_accepted_log_types ) . '); got ' . var_export( $codex_provider_captured_entry['type'] ?? null, true ) . ' for operation ' . var_export( $codex_provider_captured_entry['operation'] ?? null, true ) . '.'
+			);
+		}
 		remove_all_filters( 'codex_provider_request_log_sink' );
 		$codex_provider_with_mock_runtime(
 			static function ( $preempt, array $args, string $url ) use ( $codex_provider_base_url, $codex_provider_http_json_response ) {
