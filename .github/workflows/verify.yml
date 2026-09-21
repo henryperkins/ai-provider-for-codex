@@ -1,0 +1,141 @@
+name: Verify
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  wordpress:
+    name: WordPress 7.0 / PHP ${{ matrix.php }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['7.4', '8.3']
+    services:
+      mysql:
+        image: mysql:8.4@sha256:85b9bf2e29cf836ecb8c2a15a935d4ba0c606631dff1dd79531a11983c638f2a
+        env:
+          MYSQL_ROOT_PASSWORD: codex-ci-root
+          MYSQL_DATABASE: codex_ci
+          MYSQL_USER: codex_ci
+          MYSQL_PASSWORD: codex-ci-password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 --password=codex-ci-root --silent"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Set disposable paths
+        run: |
+          echo "WP_PATH=$RUNNER_TEMP/wordpress" >> "$GITHUB_ENV"
+          echo "EVIDENCE_PATH=$RUNNER_TEMP/verification-evidence" >> "$GITHUB_ENV"
+      - uses: shivammathur/setup-php@b604ade2a87db23f8871b7182e69ec5e75effb45 # v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: curl, dom, fileinfo, mbstring, mysqli, zip
+          coverage: none
+          tools: composer:v2, wp-cli:2.12.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.11'
+      - name: Record tested revision and tools
+        run: |
+          mkdir -p "$EVIDENCE_PATH"
+          {
+            git rev-parse HEAD
+            sha256sum composer.lock
+            php --version
+            composer --version
+            wp --version
+            node --version
+            python3 --version
+          } | tee "$EVIDENCE_PATH/environment.txt"
+          printf 'Tested revision: `%s`\n\nWordPress: `7.0`; PHP: `%s`\n' "$(git rev-parse HEAD)" "${{ matrix.php }}" >> "$GITHUB_STEP_SUMMARY"
+      - name: Install locked PHP dependencies
+        run: |
+          composer validate --strict
+          composer install --no-interaction --prefer-dist --no-progress
+      - name: Static analysis
+        run: composer phpstan 2>&1 | tee "$EVIDENCE_PATH/phpstan.log"
+      - name: Install disposable WordPress
+        run: |
+          wp core download --version=7.0 --skip-content --path="$WP_PATH"
+          wp config create --path="$WP_PATH" --dbname=codex_ci --dbuser=codex_ci --dbpass=codex-ci-password --dbhost=127.0.0.1:3306
+          wp config set DISABLE_WP_CRON true --raw --path="$WP_PATH"
+          wp core install --path="$WP_PATH" --url=http://codex-provider-ci.test --title='Codex provider CI' --admin_user=codex-ci --admin_password=disposable-ci-password --admin_email=codex-ci@example.test --skip-email
+          mkdir -p "$WP_PATH/wp-content/plugins"
+          ln -s "$GITHUB_WORKSPACE" "$WP_PATH/wp-content/plugins/scriptorium-ai-provider-for-codex"
+          wp plugin activate scriptorium-ai-provider-for-codex --path="$WP_PATH"
+          wp core version --path="$WP_PATH" | tee -a "$EVIDENCE_PATH/environment.txt"
+      - name: Full verification, including mapping-error regression
+        run: bash scripts/verify.sh 2>&1 | tee "$EVIDENCE_PATH/verify.log"
+      - name: Save verification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: wordpress-7.0-php-${{ matrix.php }}-${{ github.sha }}
+          path: ${{ runner.temp }}/verification-evidence
+          if-no-files-found: warn
+          retention-days: 30
+
+  codex:
+    name: Codex 0.155.1 compatibility (no login or generation)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Set disposable paths
+        run: |
+          echo "CODEX_BIN=$RUNNER_TEMP/codex/codex-x86_64-unknown-linux-musl" >> "$GITHUB_ENV"
+          echo "EVIDENCE_PATH=$RUNNER_TEMP/verification-evidence" >> "$GITHUB_ENV"
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.11'
+      - name: Install exact Codex release
+        run: |
+          mkdir -p "$RUNNER_TEMP/codex" "$EVIDENCE_PATH"
+          curl --fail --silent --show-error --location --retry 3 https://github.com/openai/codex/releases/download/rust-v0.155.1/codex-x86_64-unknown-linux-musl.tar.gz --output "$RUNNER_TEMP/codex/codex.tar.gz"
+          printf '%s  %s\n' a0ef8b2debc3bf747e07b1a039354de31300ac0dcc2276498ba281470b5d9115 "$RUNNER_TEMP/codex/codex.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/codex/codex.tar.gz" -C "$RUNNER_TEMP/codex"
+          {
+            git rev-parse HEAD
+            "$CODEX_BIN" --version
+            python3 --version
+          } | tee "$EVIDENCE_PATH/environment.txt"
+          printf 'Tested revision: `%s`\n\nCodex: `0.155.1`. This job does not log in or generate content.\n' "$(git rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
+      - name: Real app-server compatibility smoke test
+        run: python3 sidecar/scripts/test-codex-compatibility.py --version 0.155.1 2>&1 | tee "$EVIDENCE_PATH/codex-compatibility.log"
+      - name: Save compatibility evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: codex-0.155.1-${{ github.sha }}
+          path: ${{ runner.temp }}/verification-evidence
+          if-no-files-found: warn
+          retention-days: 30

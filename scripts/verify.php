@@ -1745,6 +1745,92 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 				);
 			}
 		);
+		foreach (
+			[
+				[
+					'payload'   => [ 'outputText' => '' ],
+					'exception' => \RuntimeException::class,
+					'message'   => 'did not include text output',
+				],
+				[
+					'payload'   => [ 'outputText' => 'Valid output.', 'finishReason' => [] ],
+					'exception' => \TypeError::class,
+					'message'   => 'finish_reason',
+				],
+			] as $codex_provider_mapping_case
+		) {
+			$codex_provider_with_mock_runtime(
+				static function ( $preempt, array $args, string $url ) use ( $codex_provider_base_url, $codex_provider_http_json_response, $codex_provider_mapping_case ) {
+					if ( 0 !== strpos( $url, $codex_provider_base_url ) || '/v1/responses/text' !== (string) wp_parse_url( $url, PHP_URL_PATH ) ) {
+						return $preempt;
+					}
+
+					// A successful HTTP response can still fail while mapping its body.
+					return $codex_provider_http_json_response(
+						200,
+						array_merge(
+							[
+								'requestId'    => 'codex-verify-text-map-error',
+								'finishReason' => 'stop',
+								'usage'        => [],
+								'account'      => [],
+								'rateLimits'   => [],
+							],
+							$codex_provider_mapping_case['payload']
+						)
+					);
+				},
+				static function () use ( $codex_provider_assert, $codex_provider_temporary_model_a, $codex_provider_temporary_user_id, $codex_provider_mapping_case, &$codex_provider_log_entries ) {
+					$codex_provider_log_entries       = [];
+					$codex_provider_mapping_error     = null;
+					$codex_provider_connection_before = ConnectionRepository::get_for_user( $codex_provider_temporary_user_id );
+					$model                           = AiClient::defaultRegistry()->getProviderModel( 'codex', $codex_provider_temporary_model_a );
+
+					try {
+						$model->generateTextResult( [ new UserMessage( [ new MessagePart( 'This text response is malformed.' ) ] ) ] );
+					} catch ( \Throwable $exception ) {
+						$codex_provider_mapping_error = $exception;
+					}
+
+					$codex_provider_assert(
+						is_a( $codex_provider_mapping_error, $codex_provider_mapping_case['exception'] )
+						&& false !== strpos( $codex_provider_mapping_error->getMessage(), $codex_provider_mapping_case['message'] ),
+						'Codex text mapper errors should preserve the original exception type and message.'
+					);
+					$codex_provider_assert(
+						1 === count( $codex_provider_log_entries ),
+						'Codex text mapper errors should emit exactly one request-log entry: ' . $codex_provider_mapping_case['exception']
+					);
+
+					$codex_provider_log_entry = $codex_provider_log_entries[0] ?? [];
+					$codex_provider_assert(
+						'error' === ( $codex_provider_log_entry['status'] ?? null )
+						&& 'text' === ( $codex_provider_log_entry['type'] ?? null )
+						&& 'codex:responses/text' === ( $codex_provider_log_entry['operation'] ?? null )
+						&& 'codex' === ( $codex_provider_log_entry['provider'] ?? null ),
+						'Codex text mapper errors should be attributed to the text generation operation.'
+					);
+					$codex_provider_assert(
+						$codex_provider_temporary_model_a === ( $codex_provider_log_entry['model'] ?? null )
+						&& $codex_provider_temporary_user_id === ( $codex_provider_log_entry['user_id'] ?? null )
+						&& isset( $codex_provider_log_entry['duration_ms'] )
+						&& $codex_provider_log_entry['duration_ms'] >= 0,
+						'Codex text mapper error logs should preserve model, user, and elapsed time.'
+					);
+					$codex_provider_assert(
+						$codex_provider_mapping_error->getMessage() === ( $codex_provider_log_entry['error_message'] ?? null )
+						&& false !== strpos( (string) ( $codex_provider_log_entry['context']['input_preview'] ?? '' ), 'This text response is malformed.' )
+						&& ! isset( $codex_provider_log_entry['context']['output_preview'] ),
+						'Codex text mapper error logs should include the failure and prompt without a success preview.'
+					);
+					$codex_provider_assert(
+						null !== $codex_provider_connection_before
+						&& $codex_provider_connection_before === ConnectionRepository::get_for_user( $codex_provider_temporary_user_id ),
+						'Codex text mapper errors must not invalidate a linked account.'
+					);
+				}
+			);
+		}
 		$codex_provider_with_mock_runtime(
 			static function ( $preempt, array $args, string $url ) use ( $codex_provider_base_url, $codex_provider_http_json_response ) {
 				if ( 0 !== strpos( $url, $codex_provider_base_url ) ) {

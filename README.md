@@ -47,6 +47,29 @@ WordPress AI Client provider plugin for Codex text models and capability-gated C
 - `wp --path=/path/to/site eval-file wp-content/plugins/scriptorium-ai-provider-for-codex/scripts/verify.php`
 - `python3 sidecar/scripts/test-image-generation.py`
 
+GitHub Actions runs `.github/workflows/verify.yml` for pull requests, pushes to
+`main`, release tags (`v*`), and manual dispatches. It runs the full verification
+script against disposable WordPress 7.0 / MySQL 8.4 installations on PHP 7.4 and
+8.3, plus Composer validation and PHPStan. Text-generation regressions cover HTTP
+200 responses with missing text or an invalid finish reason: one error log, the
+original exception type and message, and a preserved account connection.
+
+A separate Linux job verifies the checksum of the pinned Codex **0.155.1** release
+and exercises the real sidecar JSON-RPC transport with an isolated, unauthenticated
+`CODEX_HOME`: initialization, capability probing, and process restart. It also
+checks the binary's generated protocol for device-code login support. To run that
+check locally on Linux:
+
+```sh
+CODEX_BIN=/path/to/codex python3 sidecar/scripts/test-codex-compatibility.py --version 0.155.1
+```
+
+Each job records the exact checked-out commit and tool versions and uploads its
+logs as an artifact, including on failure. Pull-request runs normally test GitHub's
+merge commit; pushes and tags test their own commit. These checks do not perform
+login or billable generation, and are not deployment or authenticated-runtime
+proof. Adding this workflow does not retroactively attach checks to older releases.
+
 ## Automated Sidecar Setup
 
 - `sidecar/systemd/codex-wp-sidecar.service` provides a systemd template for running the sidecar.

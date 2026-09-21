@@ -106,6 +106,8 @@ if [[ -f "$sidecar_main" ]]; then
 	fi
 fi
 
+php "$ROOT_DIR/scripts/test-request-log-writer.php"
+
 node --input-type=module --check < "$ROOT_DIR/assets/connection-flow.js" >/dev/null
 node --input-type=module --check < "$ROOT_DIR/assets/connectors.js" >/dev/null
 node --input-type=module --check < "$ROOT_DIR/assets/user-connection.js" >/dev/null

@@ -122,11 +122,29 @@ final class CodexTextGenerationModel extends AbstractApiBasedModel implements Te
 			throw self::runtime_exception( $exception->getMessage() );
 		}
 
-		$result = ResponseMapper::to_generative_ai_result(
-			$response,
-			$this->providerMetadata(),
-			$this->metadata()
-		);
+		try {
+			$result = ResponseMapper::to_generative_ai_result(
+				$response,
+				$this->providerMetadata(),
+				$this->metadata()
+			);
+		} catch ( \Throwable $exception ) {
+			RequestLogWriter::record(
+				RequestLogWriter::build_entry(
+					[
+						'status'        => 'error',
+						'model'         => $model_id,
+						'duration_ms'   => self::elapsed_ms( $started_at ),
+						'error_message' => $exception->getMessage(),
+						'input_preview' => $input_text,
+						'user_id'       => $wp_user_id,
+					]
+				)
+			);
+
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception messages are escaped at the render boundary.
+			throw $exception;
+		}
 
 		RequestLogWriter::record(
 			RequestLogWriter::build_entry(
