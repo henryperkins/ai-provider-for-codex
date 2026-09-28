@@ -175,6 +175,8 @@ class GenerateImageTest(unittest.TestCase):
             )
 
         self.assertEqual(result["outputText"], "A tiny transparent image.")
+        account_reads = [params for method, params, _ in fake.requests if method == "account/read"]
+        self.assertEqual(account_reads, [{"refreshToken": False}])
         turn_start = next(params for method, params, _ in fake.requests if method == "turn/start")
         self.assertEqual(
             turn_start["input"],
@@ -308,6 +310,8 @@ class GenerateImageTest(unittest.TestCase):
         self.assertEqual(result["mimeType"], "image/png")
         self.assertEqual(result["imageBase64"], PNG_BASE64)
         self.assertEqual(result["revisedPrompt"], "A tiny blue square.")
+        account_reads = [params for method, params, _ in fake.requests if method == "account/read"]
+        self.assertEqual(account_reads, [{"refreshToken": False}])
         self.assertEqual(
             result["usage"],
             {"inputTokens": 7, "outputTokens": 0, "reasoningOutputTokens": 0},

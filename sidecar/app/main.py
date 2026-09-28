@@ -462,7 +462,7 @@ class RuntimeState:
             )
 
         with app_server_session(codex_home) as session:
-            account = session.request("account/read", {"refresh": True}, timeout=REQUEST_TIMEOUT)
+            account = session.request("account/read", {"refreshToken": True}, timeout=REQUEST_TIMEOUT)
             rate_limits = session.request("account/rateLimits/read", timeout=REQUEST_TIMEOUT)
             models = session.request("model/list", {"includeHidden": False}, timeout=REQUEST_TIMEOUT)
             try:
@@ -589,7 +589,7 @@ class RuntimeState:
                 output_text = self._read_final_agent_message(session, thread_id, turn_id)
 
             rate_limits = session.request("account/rateLimits/read", timeout=REQUEST_TIMEOUT)
-            account = session.request("account/read", {"refresh": False}, timeout=REQUEST_TIMEOUT)
+            account = session.request("account/read", {"refreshToken": False}, timeout=REQUEST_TIMEOUT)
 
         structured_output = None
         if response_format and output_text:
@@ -706,7 +706,7 @@ class RuntimeState:
                 )
 
             rate_limits = session.request("account/rateLimits/read", timeout=REQUEST_TIMEOUT)
-            account = session.request("account/read", {"refresh": False}, timeout=REQUEST_TIMEOUT)
+            account = session.request("account/read", {"refreshToken": False}, timeout=REQUEST_TIMEOUT)
 
         response = {
             "account": normalize_account_payload(account),

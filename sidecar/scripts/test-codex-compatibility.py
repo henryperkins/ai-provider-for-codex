@@ -63,6 +63,11 @@ def run(expected_version: str) -> None:
                 any("chatgptDeviceCode" in variant["properties"]["type"].get("enum", []) for variant in login_schema["oneOf"]),
                 "device-code login remains in the generated protocol (no login attempted)",
             )
+            account_schema = json.loads((schema_root / "v2" / "GetAccountParams.json").read_text(encoding="utf-8"))
+            check(
+                account_schema.get("properties", {}).get("refreshToken", {}).get("type") == "boolean",
+                "account/read accepts the refreshToken boolean used for managed-auth refresh",
+            )
 
             session = main.JsonRpcSession(codex_home)
             try:
