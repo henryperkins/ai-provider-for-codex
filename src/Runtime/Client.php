@@ -161,8 +161,8 @@ final class Client {
 	 * Parses the runtime response body and converts non-2xx responses into structured exceptions.
 	 *
 	 * The sidecar answers every request with JSON and reports its own failures in an
-	 * `error` envelope. A non-JSON error body, or a 5xx without that envelope, was
-	 * therefore produced by a proxy, tunnel, or gateway in front of the sidecar.
+	 * `error` envelope. An empty or non-JSON error body, or a 5xx without that envelope,
+	 * was therefore produced by a proxy, tunnel, or gateway in front of the sidecar.
 	 *
 	 * @param int    $status_code HTTP status code.
 	 * @param string $raw_body Raw response body.
@@ -195,6 +195,8 @@ final class Client {
 					json_last_error_msg()
 				);
 			}
+		} elseif ( $status_code >= 400 ) {
+			throw self::proxy_response_exception( $status_code, $fallback_status_message, $url, $record_health );
 		}
 
 		if ( $status_code >= 400 ) {
@@ -301,9 +303,18 @@ final class Client {
 			);
 		}
 
+		if ( in_array( $status_code, [ 401, 403 ], true ) ) {
+			return sprintf(
+				/* translators: 1: runtime host and port, 2: HTTP status code and reason phrase. */
+				__( 'A proxy, tunnel, or gateway in front of the Codex runtime at %1$s refused the request with HTTP %2$s before it reached the sidecar. If that gateway checks the bearer token, make sure it accepts the Runtime bearer token from Settings > Codex Provider.', 'scriptorium-ai-provider-for-codex' ),
+				$target,
+				$status
+			);
+		}
+
 		return sprintf(
 			/* translators: 1: runtime host and port, 2: HTTP status code and reason phrase. */
-			__( 'The Codex runtime URL at %1$s returned HTTP %2$s with a non-JSON body, so something other than the sidecar answered. Check that the Runtime URL points at the sidecar and that any proxy or gateway in front of it allows the request.', 'scriptorium-ai-provider-for-codex' ),
+			__( 'The Codex runtime URL at %1$s returned HTTP %2$s with an empty or non-JSON body, so something other than the sidecar answered. Check that the Runtime URL points at the sidecar and that any proxy or gateway in front of it allows the request.', 'scriptorium-ai-provider-for-codex' ),
 			$target,
 			$status
 		);

@@ -115,6 +115,9 @@ $codex_proxy_cases = array(
 	'Cloudflare 524 page'    => array( '<!DOCTYPE html><title>A timeout occurred sensitive-test-marker</title>', 524, '', 'HTTP 524', '125 seconds' ),
 	'gateway 504 page'       => array( '<html>504 Gateway Time-out sensitive-test-marker</html>', 504, 'Gateway Timeout', 'HTTP 504 Gateway Timeout', 'timed out' ),
 	'web server 404 page'    => array( '<html>Not Found sensitive-test-marker</html>', 404, 'Not Found', 'HTTP 404 Not Found', 'points at the sidecar' ),
+	'empty gateway 404'      => array( '', 404, 'Not Found', 'HTTP 404 Not Found', 'points at the sidecar' ),
+	'empty gateway 401'      => array( '', 401, 'Unauthorized', 'HTTP 401 Unauthorized', 'bearer token' ),
+	'access 403 page'        => array( '<html>Forbidden sensitive-test-marker</html>', 403, 'Forbidden', 'HTTP 403 Forbidden', 'bearer token' ),
 );
 foreach ( $codex_proxy_cases as $label => $case ) {
 	Codex_Runtime_Health_Fixture::$status = '';
@@ -190,7 +193,7 @@ $diagnostics = AIProviderForCodex\REST\DiagnosticsController::run()->get_data();
 $codex_assert( 'pass' === $diagnostics['rows'][0]['status'], 'diagnostics: malformed JSON with HTTP 200 still proves reachability' );
 
 // A tunnel or gateway answering in place of the sidecar must not pass reachability.
-foreach ( array( array( '', 502, 'Bad Gateway' ), array( '<html>A timeout occurred</html>', 524, '' ) ) as $case ) {
+foreach ( array( array( '', 502, 'Bad Gateway' ), array( '<html>A timeout occurred</html>', 524, '' ), array( '', 404, 'Not Found' ), array( '', 401, 'Unauthorized' ) ) as $case ) {
 	$codex_reply = array( 'body' => $case[0], 'response' => array( 'code' => $case[1], 'message' => $case[2] ) );
 	$diagnostics = AIProviderForCodex\REST\DiagnosticsController::run()->get_data();
 	$codex_assert( false === $diagnostics['ok'], "diagnostics: proxy HTTP {$case[1]} fails the verdict" );
