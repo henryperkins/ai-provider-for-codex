@@ -29,6 +29,8 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 final class Plugin {
 
+	private const AI_IMAGE_GENERATION_TIMEOUT = 360;
+
 	/**
 	 * Registers hooks.
 	 *
@@ -60,6 +62,7 @@ final class Plugin {
 		add_filter( 'wpai_preferred_text_models', [ $this, 'filter_preferred_text_models' ] );
 		add_filter( 'wpai_preferred_image_models', [ $this, 'filter_preferred_image_models' ] );
 		add_filter( 'wpai_preferred_vision_models', [ $this, 'filter_preferred_vision_models' ] );
+		add_filter( 'wpai_default_request_timeout', [ $this, 'filter_ai_plugin_default_request_timeout' ], 10, 2 );
 
 		add_action( 'rest_api_init', [ ConnectController::class, 'register_routes' ] );
 		add_action( 'rest_api_init', [ StatusController::class, 'register_routes' ] );
@@ -106,6 +109,33 @@ final class Plugin {
 		}
 
 		return $models;
+	}
+
+	/**
+	 * Gives WordPress AI's default Codex image request time to finish a turn.
+	 *
+	 * Nondefault feature budgets and explicit SDK request options stay unchanged.
+	 *
+	 * @param int    $timeout Current feature timeout in seconds.
+	 * @param string $feature_id WordPress AI feature ID.
+	 * @return int
+	 */
+	public function filter_ai_plugin_default_request_timeout( int $timeout, string $feature_id ): int {
+		if (
+			'image-generation' !== $feature_id
+			|| 90 !== $timeout
+			|| ! function_exists( 'WordPress\\AI\\get_preferred_image_models' )
+		) {
+			return $timeout;
+		}
+
+		$models = \WordPress\AI\get_preferred_image_models();
+
+		if ( [ 'codex', ModelCatalogState::IMAGE_MODEL_ID ] !== ( $models[0] ?? null ) ) {
+			return $timeout;
+		}
+
+		return self::AI_IMAGE_GENERATION_TIMEOUT;
 	}
 
 	/**

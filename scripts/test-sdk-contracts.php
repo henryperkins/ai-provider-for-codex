@@ -30,6 +30,7 @@ namespace AIProviderForCodex\Provider {
 
 	final class ModelCatalogState {
 		public const IMAGE_MODEL_ID = 'codex-image';
+		public static $image_available = true;
 		public static function get_effective_catalog( ?int $user_id = null ): array {
 			return [
 				'models'          => [
@@ -38,7 +39,7 @@ namespace AIProviderForCodex\Provider {
 				],
 				'model_ids'       => [ 'gpt-6.1-sol', 'codex-image' ],
 				'text_model_ids'  => [ 'gpt-6.1-sol' ],
-				'image_model_ids' => [ 'codex-image' ],
+				'image_model_ids' => self::$image_available ? [ 'codex-image' ] : [],
 			];
 		}
 	}
@@ -67,6 +68,17 @@ namespace AIProviderForCodex\Logging {
 	}
 }
 
+namespace WordPress\AI {
+	// Consumer fixtures mirror AI 1.4's public helpers; the hooks, provider, SDK
+	// request options and image transport below exercise the production code.
+	function get_preferred_image_models(): array {
+		return (array) \apply_filters( 'wpai_preferred_image_models', [ [ 'google', 'fixture-image' ] ] );
+	}
+	function get_default_request_timeout( string $feature_id, int $timeout = 30 ): int {
+		return (int) \apply_filters( 'wpai_default_request_timeout', $timeout, $feature_id );
+	}
+}
+
 namespace {
 
 	use AIProviderForCodex\Provider\CodexProvider;
@@ -87,7 +99,25 @@ namespace {
 	function get_current_user_id(): int { return 123; }
 	function wp_generate_uuid4(): string { return '00000000-0000-4000-a000-000000000000'; }
 	function wp_json_encode( $value ) { return json_encode( $value ); }
-	function apply_filters( string $tag, $value, ...$args ) { return $value; }
+	function add_filter( string $tag, $callback, int $priority = 10, int $accepted_args = 1 ): bool {
+		$GLOBALS['codex_sdk_filters'][ $tag ][ $priority ][] = [ $callback, $accepted_args ];
+		return true;
+	}
+	function add_action( string $tag, $callback, int $priority = 10, int $accepted_args = 1 ): bool { return true; }
+	function remove_filter( string $tag, $callback, int $priority = 10 ): bool {
+		foreach ( $GLOBALS['codex_sdk_filters'][ $tag ][ $priority ] ?? [] as $index => $entry ) {
+			if ( $callback === $entry[0] ) { unset( $GLOBALS['codex_sdk_filters'][ $tag ][ $priority ][ $index ] ); }
+		}
+		return true;
+	}
+	function apply_filters( string $tag, $value, ...$args ) {
+		$filters = $GLOBALS['codex_sdk_filters'][ $tag ] ?? [];
+		ksort( $filters );
+		foreach ( $filters as $callbacks ) {
+			foreach ( $callbacks as $entry ) { $value = call_user_func_array( $entry[0], array_slice( [ $value, ...$args ], 0, $entry[1] ) ); }
+		}
+		return $value;
+	}
 	function sanitize_key( string $text ): string { return strtolower( (string) preg_replace( '/[^a-zA-Z0-9_\-]/', '', $text ) ); }
 	function sanitize_text_field( string $text ): string { return $text; }
 	function is_wp_error( $value ): bool { return false; }
@@ -170,6 +200,45 @@ namespace {
 		}
 	} );
 	$registry->registerProvider( CodexProvider::class );
+	( new \AIProviderForCodex\Plugin() )->init();
+
+	codex_case( 'WordPress AI default image budget reaches Codex image HTTP', static function (): void {
+		$options = new RequestOptions();
+		$options->setTimeout( \WordPress\AI\get_default_request_timeout( 'image-generation', 90 ) );
+		AiClient::prompt( 'fixture' )
+			->usingModelPreference( ...\WordPress\AI\get_preferred_image_models() )
+			->usingRequestOptions( $options )
+			->generateImageResult();
+		codex_assert( 360.0 === codex_capture()['args']['timeout'], 'WordPress AI default image budget still cuts off Codex at 90 seconds' );
+	} );
+	codex_case( 'unavailable Codex images retain the consuming feature timeout', static function (): void {
+		\AIProviderForCodex\Provider\ModelCatalogState::$image_available = false;
+		try {
+			codex_assert( 90 === \WordPress\AI\get_default_request_timeout( 'image-generation', 90 ), 'user without Codex images acquired an extended timeout' );
+		} finally { \AIProviderForCodex\Provider\ModelCatalogState::$image_available = true; }
+	} );
+	codex_case( 'another preferred image provider retains the consuming feature timeout', static function (): void {
+		$prefer_other = static function ( array $models ): array { array_unshift( $models, [ 'openai', 'fixture-image' ] ); return $models; };
+		add_filter( 'wpai_preferred_image_models', $prefer_other, 20 );
+		try {
+			codex_assert( 90 === \WordPress\AI\get_default_request_timeout( 'image-generation', 90 ), 'another preferred image provider acquired a Codex timeout' );
+		} finally { remove_filter( 'wpai_preferred_image_models', $prefer_other, 20 ); }
+	} );
+	codex_case( 'custom feature budgets and other feature defaults remain unchanged', static function (): void {
+		foreach ( [ 0, 30, 120, 180, 600 ] as $timeout ) {
+			codex_assert( $timeout === \WordPress\AI\get_default_request_timeout( 'image-generation', $timeout ), 'custom image budget changed' );
+		}
+		codex_assert( 90 === \WordPress\AI\get_default_request_timeout( 'summarization', 90 ), 'text feature default changed' );
+	} );
+	codex_case( 'site policy can override the WordPress AI image default', static function (): void {
+		foreach ( [ 60, 90, 600 ] as $budget ) {
+			$site_timeout = static function ( int $timeout, string $feature ) use ( $budget ): int { return 'image-generation' === $feature ? $budget : $timeout; };
+			add_filter( 'wpai_default_request_timeout', $site_timeout, 20, 2 );
+			try {
+				codex_assert( $budget === \WordPress\AI\get_default_request_timeout( 'image-generation', 90 ), 'site image timeout policy was ignored' );
+			} finally { remove_filter( 'wpai_default_request_timeout', $site_timeout, 20 ); }
+		}
+	} );
 
 	codex_case( 'plain text retains generation timeout without JSON constraints', static function (): void {
 		$result = AiClient::prompt( 'fixture' )->usingProvider( 'codex' )->generateTextResult();
@@ -228,6 +297,13 @@ namespace {
 		codex_rejects_before_http( static function () use ( $config ): void { AiClient::prompt( 'fixture' )->usingProvider( 'codex' )->usingModelConfig( $config )->generateTextResult(); }, 'reasoning effort' );
 	} );
 	foreach ( [ 'text', 'image' ] as $kind ) {
+		codex_case( $kind . ' preserves a directly supplied 90-second SDK budget', static function () use ( $kind ): void {
+			$options = new RequestOptions();
+			$options->setTimeout( 90 );
+			$prompt = AiClient::prompt( 'fixture' )->usingProvider( 'codex' )->usingRequestOptions( $options );
+			if ( 'image' === $kind ) { $prompt->generateImageResult(); } else { $prompt->generateTextResult(); }
+			codex_assert( 90.0 === codex_capture()['args']['timeout'], 'explicit caller budget was extended' );
+		} );
 		codex_case( $kind . ' preserves SDK timeout precision and zero redirects', static function () use ( $kind ): void {
 			$options = new RequestOptions();
 			$options->setTimeout( 4.5 );

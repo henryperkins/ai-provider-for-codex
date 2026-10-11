@@ -421,6 +421,30 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 				[ 'codex', $codex_provider_image_model ] === ( $codex_provider_filtered_image_models[0] ?? null ),
 				'The registered wpai_preferred_image_models filter should put codex-image before other image providers.'
 			);
+			if ( function_exists( 'WordPress\\AI\\get_default_request_timeout' ) ) {
+				$codex_provider_assert(
+					360 === \WordPress\AI\get_default_request_timeout( 'image-generation', 90 ),
+					'WordPress AI should extend its standard image budget when Codex images are preferred.'
+				);
+				$codex_provider_assert(
+					120 === \WordPress\AI\get_default_request_timeout( 'image-generation', 120 )
+					&& 90 === \WordPress\AI\get_default_request_timeout( 'summarization', 90 ),
+					'WordPress AI should preserve custom image budgets and other feature defaults.'
+				);
+				$codex_provider_other_image_preference = static function ( array $models ): array {
+					array_unshift( $models, [ 'openai', 'fixture-other-image' ] );
+					return $models;
+				};
+				add_filter( 'wpai_preferred_image_models', $codex_provider_other_image_preference, 20 );
+				try {
+					$codex_provider_assert(
+						90 === \WordPress\AI\get_default_request_timeout( 'image-generation', 90 ),
+						'WordPress AI should retain its image budget when another provider is preferred.'
+					);
+				} finally {
+					remove_filter( 'wpai_preferred_image_models', $codex_provider_other_image_preference, 20 );
+				}
+			}
 			$codex_provider_filtered_vision_models = apply_filters( 'wpai_preferred_vision_models', [] );
 			$codex_provider_assert(
 				[ 'codex', $codex_provider_temporary_model_a ] === ( $codex_provider_filtered_vision_models[0] ?? null ),
@@ -1425,6 +1449,11 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 				},
 				static function () use ( $codex_provider_assert, &$codex_provider_image_requests, $codex_provider_image_model, $codex_provider_temporary_user_id ) {
 					$model  = AiClient::defaultRegistry()->getProviderModel( 'codex', $codex_provider_image_model );
+					if ( function_exists( 'WordPress\\AI\\get_default_request_timeout' ) ) {
+						$options = new \WordPress\AiClient\Providers\Http\DTO\RequestOptions();
+						$options->setTimeout( \WordPress\AI\get_default_request_timeout( 'image-generation', 90 ) );
+						$model->setRequestOptions( $options );
+					}
 					$result = $model->generateImageResult(
 						[
 							new UserMessage(
@@ -1447,6 +1476,10 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 
 					$request_args = $codex_provider_image_requests[0]['args'] ?? [];
 					$request_body = json_decode( (string) ( $request_args['body'] ?? '' ), true );
+					$codex_provider_assert(
+						360.0 === (float) ( $request_args['timeout'] ?? 0 ),
+						'Codex image HTTP should retain its extended budget through SDK request options.'
+					);
 
 					$codex_provider_assert(
 						is_array( $request_body ) && $codex_provider_temporary_user_id === (int) ( $request_body['wpUserId'] ?? 0 ),

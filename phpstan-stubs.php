@@ -79,6 +79,15 @@ namespace WordPress\AI\Logging {
 }
 
 namespace WordPress\AI {
+	if ( ! function_exists( 'WordPress\\AI\\get_preferred_image_models' ) ) {
+		/**
+		 * Preferred provider/model pairs supplied by the optional WordPress AI plugin.
+		 *
+		 * @return array<int,array{string,string}>
+		 */
+		function get_preferred_image_models(): array {}
+	}
+
 	if ( ! function_exists( 'WordPress\\AI\\log_ai_request' ) ) {
 		/**
 		 * Public request-log helper provided by AI plugin 1.3+.

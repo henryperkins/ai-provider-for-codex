@@ -4,7 +4,7 @@ Tags: ai, codex, wordpress-ai-client
 Requires at least: 7.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.1.2
+Stable tag: 2.1.3
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -67,6 +67,10 @@ Architecture notes for reviewers:
 
 Developers can filter `codex_provider_runtime_request_timeout` to change local runtime HTTP timeouts.
 
+When `codex-image` is the first preferred image model for the connected user, the WordPress AI image-generation feature's standard 90-second budget is extended to 360 seconds. Nondefault feature budgets, other preferred providers, and explicit SDK request options retain their existing limits. Site administrators can override this feature budget, including retaining 90 seconds, with `wpai_default_request_timeout` at priority 20 or later. The runtime timeout filter applies only when the caller does not supply a timeout.
+
+Generation remains synchronous. A longer WordPress request budget does not extend a hosting or reverse-proxy deadline; remote deployments need to account for every timeout between WordPress and the sidecar.
+
 == Frequently Asked Questions ==
 
 = Does this plugin work without a local runtime? =
@@ -127,6 +131,11 @@ The sidecar is designed for localhost-only communication between WordPress and t
 Support is limited to documented, self-managed environments that can run the local sidecar runtime and the `codex` CLI on the same host as WordPress.
 
 == Changelog ==
+
+= 2.1.3 =
+* Extend WordPress AI's standard image-generation timeout from 90 to 360 seconds when Codex is the first preferred image model.
+* Preserve nondefault feature budgets, other preferred providers, and explicit SDK timeout and redirect options.
+* Document site timeout overrides and separate hosting/reverse-proxy deadlines.
 
 = 2.1.2 =
 * Correct forced account refresh using the current Codex app-server protocol.
