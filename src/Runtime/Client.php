@@ -153,6 +153,7 @@ final class Client {
 			(string) wp_remote_retrieve_body( $response ),
 			(string) wp_remote_retrieve_response_message( $response ),
 			$url,
+			$path,
 			$record_health
 		);
 	}
@@ -169,10 +170,11 @@ final class Client {
 	 * @param string $raw_body Raw response body.
 	 * @param string $fallback_status_message Reason phrase to fall back to when the runtime returns no error message.
 	 * @param string $url Request URL.
+	 * @param string $path Relative runtime path beginning with `/`.
 	 * @param bool   $record_health Whether to update the health cache.
 	 * @return array<string,mixed>
 	 */
-	private function process_response( int $status_code, string $raw_body, string $fallback_status_message, string $url, bool $record_health = true ): array {
+	private function process_response( int $status_code, string $raw_body, string $fallback_status_message, string $url, string $path, bool $record_health = true ): array {
 		$payload = [];
 
 		if ( '' !== $raw_body ) {
@@ -203,7 +205,7 @@ final class Client {
 		if ( $status_code >= 400 ) {
 			$runtime_error = is_array( $payload ) && is_array( $payload['error'] ?? null ) ? $payload['error'] : [];
 			// Older sidecars report a missing login session as an envelope-less 404 that ConnectionService still recovers from.
-			$legacy_login_miss = 404 === $status_code && 'missing' === ( $payload['status'] ?? null );
+			$legacy_login_miss = 404 === $status_code && '/v1/login/status' === $path && 'missing' === ( $payload['status'] ?? null );
 
 			if ( ! isset( $runtime_error['code'] ) && ! isset( $runtime_error['message'] ) && ! $legacy_login_miss ) {
 				throw self::proxy_response_exception( $status_code, $fallback_status_message, $url, $record_health, is_array( $payload ) ? $payload : [] );

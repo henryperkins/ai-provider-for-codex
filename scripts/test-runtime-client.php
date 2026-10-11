@@ -154,6 +154,9 @@ if ( $caught instanceof $exception_class ) {
 	$codex_assert( 404 === $caught->get_status_code() && 'missing' === ( $caught->get_payload()['status'] ?? null ), 'legacy: missing-login 404 keeps the status and payload ConnectionService recovers from' );
 }
 $codex_assert( '' === Codex_Runtime_Health_Fixture::$status, 'legacy: missing-login 404 does not mark the runtime unhealthy' );
+$caught = null;
+try { $client->diagnostics(); } catch ( Throwable $error ) { $caught = $error; }
+$codex_assert( $caught instanceof $exception_class && $caught->is_proxy_response(), 'legacy: the missing-login exemption applies only to login status' );
 
 foreach ( array(
 	'sidecar 502 envelope' => array( 502, '{"error":{"code":"image_generation_failed","message":"Codex completed the image turn without returning image data."}}', 'image_generation_failed', 'Codex completed the image turn without returning image data.' ),
