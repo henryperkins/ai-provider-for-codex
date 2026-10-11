@@ -21,6 +21,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 final class RuntimeRequestException extends RuntimeException {
 
 	/**
+	 * Error code for an HTTP error answered by a proxy, tunnel, or gateway instead of the sidecar.
+	 */
+	public const PROXY_RESPONSE = 'proxy_response';
+
+	/**
 	 * Runtime HTTP status code.
 	 *
 	 * @var int
@@ -109,5 +114,14 @@ final class RuntimeRequestException extends RuntimeException {
 	 */
 	public function is_auth_required(): bool {
 		return 'auth_required' === $this->runtime_error_code;
+	}
+
+	/**
+	 * Returns whether something in front of the sidecar answered instead of the sidecar.
+	 *
+	 * @return bool
+	 */
+	public function is_proxy_response(): bool {
+		return self::PROXY_RESPONSE === $this->runtime_error_code;
 	}
 }

@@ -152,6 +152,7 @@ final class Client {
 			(int) wp_remote_retrieve_response_code( $response ),
 			(string) wp_remote_retrieve_body( $response ),
 			(string) wp_remote_retrieve_response_message( $response ),
+			$url,
 			$record_health
 		);
 	}
@@ -159,18 +160,28 @@ final class Client {
 	/**
 	 * Parses the runtime response body and converts non-2xx responses into structured exceptions.
 	 *
+	 * The sidecar answers every request with JSON and reports its own failures in an
+	 * `error` envelope. A non-JSON error body, or a 5xx without that envelope, was
+	 * therefore produced by a proxy, tunnel, or gateway in front of the sidecar.
+	 *
 	 * @param int    $status_code HTTP status code.
 	 * @param string $raw_body Raw response body.
 	 * @param string $fallback_status_message Reason phrase to fall back to when the runtime returns no error message.
+	 * @param string $url Request URL.
+	 * @param bool   $record_health Whether to update the health cache.
 	 * @return array<string,mixed>
 	 */
-	private function process_response( int $status_code, string $raw_body, string $fallback_status_message, bool $record_health = true ): array {
+	private function process_response( int $status_code, string $raw_body, string $fallback_status_message, string $url, bool $record_health = true ): array {
 		$payload = [];
 
 		if ( '' !== $raw_body ) {
 			$payload = json_decode( $raw_body, true );
 
 			if ( JSON_ERROR_NONE !== json_last_error() ) {
+				if ( $status_code >= 400 ) {
+					throw self::proxy_response_exception( $status_code, $fallback_status_message, $url, $record_health );
+				}
+
 				if ( $record_health ) {
 					HealthMonitor::record_failure( __( 'The local Codex runtime returned invalid JSON.', 'scriptorium-ai-provider-for-codex' ) );
 				}
@@ -187,6 +198,12 @@ final class Client {
 		}
 
 		if ( $status_code >= 400 ) {
+			$runtime_error = is_array( $payload ) && is_array( $payload['error'] ?? null ) ? $payload['error'] : [];
+
+			if ( $status_code >= 500 && ! isset( $runtime_error['code'] ) && ! isset( $runtime_error['message'] ) ) {
+				throw self::proxy_response_exception( $status_code, $fallback_status_message, $url, $record_health, is_array( $payload ) ? $payload : [] );
+			}
+
 			$runtime_error_code = sanitize_key( (string) ( $payload['error']['code'] ?? '' ) );
 			$runtime_message    = (string) ( $payload['error']['message'] ?? $fallback_status_message );
 			$message            = self::normalize_runtime_error_message(
@@ -215,6 +232,99 @@ final class Client {
 		}
 
 		return is_array( $payload ) ? $payload : [];
+	}
+
+	/**
+	 * Creates the exception for an HTTP error that did not come from the sidecar.
+	 *
+	 * @param int                 $status_code HTTP status code.
+	 * @param string              $reason_phrase HTTP reason phrase, when known.
+	 * @param string              $url Request URL.
+	 * @param bool                $record_health Whether to update the health cache.
+	 * @param array<string,mixed> $payload Decoded JSON body, when the body was JSON.
+	 * @return RuntimeRequestException
+	 */
+	private static function proxy_response_exception( int $status_code, string $reason_phrase, string $url, bool $record_health, array $payload = [] ): RuntimeRequestException {
+		$message = self::proxy_response_message( $status_code, $reason_phrase, $url );
+
+		if ( $record_health ) {
+			HealthMonitor::record_failure( $message );
+		}
+
+		// phpcs:disable WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Message is escaped; status, code, and reason phrase are structured exception data and the raw body is excluded.
+		return new RuntimeRequestException(
+			esc_html( sanitize_text_field( $message ) ),
+			$status_code,
+			RuntimeRequestException::PROXY_RESPONSE,
+			'' !== $reason_phrase ? $reason_phrase : 'HTTP ' . $status_code,
+			$payload
+		);
+		// phpcs:enable WordPress.Security.EscapeOutput.ExceptionNotEscaped
+	}
+
+	/**
+	 * Describes an HTTP error that a proxy, tunnel, or gateway returned instead of the sidecar.
+	 *
+	 * @param int    $status_code HTTP status code.
+	 * @param string $reason_phrase HTTP reason phrase, when known.
+	 * @param string $url Request URL.
+	 * @return string
+	 */
+	private static function proxy_response_message( int $status_code, string $reason_phrase, string $url ): string {
+		$status = '' !== $reason_phrase ? $status_code . ' ' . $reason_phrase : (string) $status_code;
+		$target = self::describe_target( $url );
+
+		if ( 524 === $status_code ) {
+			return sprintf(
+				/* translators: 1: runtime host and port, 2: HTTP status code and reason phrase. */
+				__( 'Cloudflare stopped waiting for the Codex runtime at %1$s and returned HTTP %2$s before the sidecar responded. Cloudflare stops waiting after 125 seconds by default, so a longer generation cannot finish through that hostname.', 'scriptorium-ai-provider-for-codex' ),
+				$target,
+				$status
+			);
+		}
+
+		if ( 504 === $status_code ) {
+			return sprintf(
+				/* translators: 1: runtime host and port, 2: HTTP status code and reason phrase. */
+				__( 'A proxy or gateway in front of the Codex runtime at %1$s timed out and returned HTTP %2$s before the sidecar responded. Every proxy timeout between WordPress and the sidecar must allow the generation to finish.', 'scriptorium-ai-provider-for-codex' ),
+				$target,
+				$status
+			);
+		}
+
+		if ( $status_code >= 500 ) {
+			return sprintf(
+				/* translators: 1: runtime host and port, 2: HTTP status code and reason phrase. */
+				__( 'A proxy, tunnel, or gateway in front of the Codex runtime at %1$s returned HTTP %2$s instead of a sidecar response, so the request did not reach a working sidecar. Make sure the sidecar, and any gateway or tunnel in front of it, is running.', 'scriptorium-ai-provider-for-codex' ),
+				$target,
+				$status
+			);
+		}
+
+		return sprintf(
+			/* translators: 1: runtime host and port, 2: HTTP status code and reason phrase. */
+			__( 'The Codex runtime URL at %1$s returned HTTP %2$s with a non-JSON body, so something other than the sidecar answered. Check that the Runtime URL points at the sidecar and that any proxy or gateway in front of it allows the request.', 'scriptorium-ai-provider-for-codex' ),
+			$target,
+			$status
+		);
+	}
+
+	/**
+	 * Returns the host and explicit port of a runtime URL for error messages.
+	 *
+	 * @param string $url Request URL.
+	 * @return string
+	 */
+	private static function describe_target( string $url ): string {
+		$host   = (string) wp_parse_url( $url, PHP_URL_HOST );
+		$port   = (int) wp_parse_url( $url, PHP_URL_PORT );
+		$target = '' !== $host ? $host : $url;
+
+		if ( $port > 0 ) {
+			$target .= ':' . $port;
+		}
+
+		return $target;
 	}
 
 	/**
@@ -318,13 +428,7 @@ final class Client {
 	 */
 	private static function normalize_transport_error_string( string $message, string $url, float $timeout ): string {
 		$lower  = strtolower( $message );
-		$host   = (string) wp_parse_url( $url, PHP_URL_HOST );
-		$port   = (int) wp_parse_url( $url, PHP_URL_PORT );
-		$target = '' !== $host ? $host : $url;
-
-		if ( $port > 0 ) {
-			$target .= ':' . $port;
-		}
+		$target = self::describe_target( $url );
 
 		if (
 			self::string_contains( $lower, 'curl error 7' )
