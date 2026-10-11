@@ -161,8 +161,9 @@ final class Client {
 	 * Parses the runtime response body and converts non-2xx responses into structured exceptions.
 	 *
 	 * The sidecar answers every request with JSON and reports its own failures in an
-	 * `error` envelope. An empty or non-JSON error body, or a 5xx without that envelope,
-	 * was therefore produced by a proxy, tunnel, or gateway in front of the sidecar.
+	 * `error` envelope. An error response without that envelope (empty, non-JSON, or
+	 * envelope-less JSON) was therefore produced by a proxy, tunnel, or gateway in
+	 * front of the sidecar.
 	 *
 	 * @param int    $status_code HTTP status code.
 	 * @param string $raw_body Raw response body.
@@ -201,8 +202,10 @@ final class Client {
 
 		if ( $status_code >= 400 ) {
 			$runtime_error = is_array( $payload ) && is_array( $payload['error'] ?? null ) ? $payload['error'] : [];
+			// Older sidecars report a missing login session as an envelope-less 404 that ConnectionService still recovers from.
+			$legacy_login_miss = 404 === $status_code && 'missing' === ( $payload['status'] ?? null );
 
-			if ( $status_code >= 500 && ! isset( $runtime_error['code'] ) && ! isset( $runtime_error['message'] ) ) {
+			if ( ! isset( $runtime_error['code'] ) && ! isset( $runtime_error['message'] ) && ! $legacy_login_miss ) {
 				throw self::proxy_response_exception( $status_code, $fallback_status_message, $url, $record_health, is_array( $payload ) ? $payload : [] );
 			}
 
@@ -279,7 +282,7 @@ final class Client {
 		if ( 524 === $status_code ) {
 			return sprintf(
 				/* translators: 1: runtime host and port, 2: HTTP status code and reason phrase. */
-				__( 'Cloudflare stopped waiting for the Codex runtime at %1$s and returned HTTP %2$s before the sidecar responded. Cloudflare stops waiting after 125 seconds by default, so a longer generation cannot finish through that hostname.', 'scriptorium-ai-provider-for-codex' ),
+				__( 'Cloudflare stopped waiting for the Codex runtime at %1$s and returned HTTP %2$s. Cloudflare returns 524 when the response takes longer than its 125-second default read timeout, or when sending the request takes longer than its 30-second write timeout, so a longer generation or a slow upload cannot finish through that hostname.', 'scriptorium-ai-provider-for-codex' ),
 				$target,
 				$status
 			);
@@ -314,7 +317,7 @@ final class Client {
 
 		return sprintf(
 			/* translators: 1: runtime host and port, 2: HTTP status code and reason phrase. */
-			__( 'The Codex runtime URL at %1$s returned HTTP %2$s with an empty or non-JSON body, so something other than the sidecar answered. Check that the Runtime URL points at the sidecar and that any proxy or gateway in front of it allows the request.', 'scriptorium-ai-provider-for-codex' ),
+			__( 'The Codex runtime URL at %1$s returned HTTP %2$s without a sidecar error response, so something other than the sidecar answered. Check that the Runtime URL points at the sidecar and that any proxy or gateway in front of it allows the request.', 'scriptorium-ai-provider-for-codex' ),
 			$target,
 			$status
 		);

@@ -112,12 +112,14 @@ if ( $caught instanceof $exception_class ) {
 $codex_proxy_cases = array(
 	'empty tunnel 502'       => array( '', 502, 'Bad Gateway', 'HTTP 502 Bad Gateway', 'is running' ),
 	'string-error 503'       => array( '{"error":"upstream unavailable"}', 503, 'Service Unavailable', 'HTTP 503 Service Unavailable', 'is running' ),
-	'Cloudflare 524 page'    => array( '<!DOCTYPE html><title>A timeout occurred sensitive-test-marker</title>', 524, '', 'HTTP 524', '125 seconds' ),
+	'Cloudflare 524 page'    => array( '<!DOCTYPE html><title>A timeout occurred sensitive-test-marker</title>', 524, '', 'HTTP 524', '125-second default read timeout' ),
 	'gateway 504 page'       => array( '<html>504 Gateway Time-out sensitive-test-marker</html>', 504, 'Gateway Timeout', 'HTTP 504 Gateway Timeout', 'timed out' ),
 	'web server 404 page'    => array( '<html>Not Found sensitive-test-marker</html>', 404, 'Not Found', 'HTTP 404 Not Found', 'points at the sidecar' ),
 	'empty gateway 404'      => array( '', 404, 'Not Found', 'HTTP 404 Not Found', 'points at the sidecar' ),
 	'empty gateway 401'      => array( '', 401, 'Unauthorized', 'HTTP 401 Unauthorized', 'bearer token' ),
 	'access 403 page'        => array( '<html>Forbidden sensitive-test-marker</html>', 403, 'Forbidden', 'HTTP 403 Forbidden', 'bearer token' ),
+	'gateway JSON 401'       => array( '{"error":"unauthorized"}', 401, 'Unauthorized', 'HTTP 401 Unauthorized', 'bearer token' ),
+	'web app JSON 404'       => array( '{"code":"rest_no_route","message":"No route sensitive-test-marker"}', 404, 'Not Found', 'HTTP 404 Not Found', 'points at the sidecar' ),
 );
 foreach ( $codex_proxy_cases as $label => $case ) {
 	Codex_Runtime_Health_Fixture::$status = '';
@@ -136,6 +138,22 @@ foreach ( $codex_proxy_cases as $label => $case ) {
 	}
 	$codex_assert( 'unreachable' === Codex_Runtime_Health_Fixture::$status, "proxy: {$label} marks the runtime unhealthy" );
 }
+
+$codex_reply = array( 'body' => '', 'response' => array( 'code' => 524, 'message' => '' ) );
+$caught      = null;
+try { $client->post( '/v1/responses/text', array( 'input' => 'fixture' ) ); } catch ( Throwable $error ) { $caught = $error; }
+$codex_assert( $caught instanceof $exception_class && false !== strpos( $caught->getMessage(), '30-second write timeout' ), 'proxy: Cloudflare 524 also names the write timeout that slow uploads hit' );
+
+// An older sidecar's envelope-less missing-login 404 stays a sidecar response for ConnectionService recovery.
+Codex_Runtime_Health_Fixture::$status = '';
+$codex_reply = array( 'body' => '{"authSessionId":"fixture","status":"missing","error":"Login session was not found in the local runtime."}', 'response' => array( 'code' => 404, 'message' => 'Not Found' ) );
+$caught      = null;
+try { $client->get( '/v1/login/status' ); } catch ( Throwable $error ) { $caught = $error; }
+$codex_assert( $caught instanceof $exception_class && ! $caught->is_proxy_response(), 'legacy: missing-login 404 is not classified as a proxy response' );
+if ( $caught instanceof $exception_class ) {
+	$codex_assert( 404 === $caught->get_status_code() && 'missing' === ( $caught->get_payload()['status'] ?? null ), 'legacy: missing-login 404 keeps the status and payload ConnectionService recovers from' );
+}
+$codex_assert( '' === Codex_Runtime_Health_Fixture::$status, 'legacy: missing-login 404 does not mark the runtime unhealthy' );
 
 foreach ( array(
 	'sidecar 502 envelope' => array( 502, '{"error":{"code":"image_generation_failed","message":"Codex completed the image turn without returning image data."}}', 'image_generation_failed', 'Codex completed the image turn without returning image data.' ),
