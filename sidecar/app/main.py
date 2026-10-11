@@ -44,10 +44,11 @@ class JsonRpcError(RuntimeError):
 
 
 class HttpError(RuntimeError):
-    def __init__(self, code: str, message: str, status: int) -> None:
+    def __init__(self, code: str, message: str, status: int, *, data: dict[str, Any] | None = None) -> None:
         super().__init__(message)
         self.code = code
         self.status = status
+        self.data = data
 
 
 class JsonRpcSession:
@@ -91,10 +92,9 @@ class JsonRpcSession:
         self.request(
             "initialize",
             {
-                "protocolVersion": "1",
                 "clientInfo": {
                     "name": "codex-wp-sidecar",
-                    "version": "2.1.1",
+                    "version": "2.1.2",
                 },
                 "capabilities": {
                     "optOutNotificationMethods": INITIALIZE_CAPABILITY_OPTOUTS,
@@ -102,6 +102,7 @@ class JsonRpcSession:
             },
             timeout=initialize_timeout or REQUEST_TIMEOUT,
         )
+        self._send({"jsonrpc": "2.0", "method": "initialized"})
         return self
 
     def close(self) -> None:
@@ -343,7 +344,7 @@ def run_diagnostics() -> dict[str, Any]:
 
 
 def _server_identity() -> dict[str, Any]:
-    return {"service": "codex-wp-sidecar", "version": "2.1.1"}
+    return {"service": "codex-wp-sidecar", "version": "2.1.2"}
 
 
 def ensure_storage_root() -> None:
@@ -465,14 +466,11 @@ class RuntimeState:
             account = session.request("account/read", {"refreshToken": True}, timeout=REQUEST_TIMEOUT)
             rate_limits = session.request("account/rateLimits/read", timeout=REQUEST_TIMEOUT)
             models = session.request("model/list", {"includeHidden": False}, timeout=REQUEST_TIMEOUT)
-            try:
-                capabilities = session.request(
-                    "modelProvider/capabilities/read",
-                    {},
-                    timeout=REQUEST_TIMEOUT,
-                )
-            except JsonRpcError:
-                capabilities = {}
+            capabilities = session.request(
+                "modelProvider/capabilities/read",
+                {},
+                timeout=REQUEST_TIMEOUT,
+            )
 
         account_payload = normalize_account_payload(account)
         if not account_payload["authMode"]:
@@ -509,6 +507,10 @@ class RuntimeState:
         reasoning_effort = optional_string(payload.get("reasoningEffort"))
         system_instruction = optional_string(payload.get("systemInstruction"))
         response_format = payload.get("responseFormat")
+        json_object = isinstance(response_format, dict) and response_format.get("type") == "json_object"
+        if json_object:
+            json_instruction = "Return only valid JSON. Do not include Markdown code fences or surrounding commentary."
+            system_instruction = f"{system_instruction}\n\n{json_instruction}" if system_instruction else json_instruction
 
         with app_server_session(codex_home) as session:
             thread_params: dict[str, Any] = {"ephemeral": True}
@@ -577,26 +579,50 @@ class RuntimeState:
                 if "turn/completed" != method or not isinstance(params, dict):
                     continue
 
-                turn = params.get("turn")
-                if isinstance(turn, dict) and turn.get("error"):
-                    raise RuntimeError(str(turn["error"]))
+                turn = require_completed_turn(params.get("turn"))
+                items = turn.get("items")
+                if isinstance(items, list):
+                    for item in reversed(items):
+                        if isinstance(item, dict) and item.get("type") == "agentMessage":
+                            final_text = optional_string(item.get("text"))
+                            if final_text:
+                                output_text = final_text
+                                break
                 break
 
             if not output_text:
                 output_text = "".join(output_parts).strip()
 
-            if not output_text:
-                output_text = self._read_final_agent_message(session, thread_id, turn_id)
+            if not output_text or not output_text.strip():
+                raise HttpError(
+                    "text_generation_failed",
+                    "Codex completed the text turn without returning text output.",
+                    HTTPStatus.BAD_GATEWAY,
+                )
+
+            structured_output = None
+            if response_format:
+                try:
+                    def reject_constant(value: str) -> None:
+                        raise ValueError("Non-finite values are not valid JSON.")
+
+                    structured_output = json.loads(output_text, parse_constant=reject_constant)
+                except ValueError:
+                    if json_object:
+                        raise HttpError(
+                            "invalid_json_output",
+                            "Codex completed the turn without returning valid JSON for the requested JSON response.",
+                            HTTPStatus.BAD_GATEWAY,
+                        ) from None
+                # Valid JSON exponents can exceed Python floats. Keep their
+                # original text without putting Infinity in the HTTP envelope.
+                try:
+                    json.dumps(structured_output, allow_nan=False)
+                except ValueError:
+                    structured_output = None
 
             rate_limits = session.request("account/rateLimits/read", timeout=REQUEST_TIMEOUT)
             account = session.request("account/read", {"refreshToken": False}, timeout=REQUEST_TIMEOUT)
-
-        structured_output = None
-        if response_format and output_text:
-            try:
-                structured_output = json.loads(output_text)
-            except json.JSONDecodeError:
-                structured_output = None
 
         return {
             "account": normalize_account_payload(account),
@@ -624,14 +650,11 @@ class RuntimeState:
         system_instruction = optional_string(payload.get("systemInstruction"))
 
         with app_server_session(codex_home) as session:
-            try:
-                capabilities_payload = session.request(
-                    "modelProvider/capabilities/read",
-                    {},
-                    timeout=REQUEST_TIMEOUT,
-                )
-            except JsonRpcError:
-                capabilities_payload = {}
+            capabilities_payload = session.request(
+                "modelProvider/capabilities/read",
+                {},
+                timeout=REQUEST_TIMEOUT,
+            )
 
             capabilities = normalize_capabilities_payload(capabilities_payload)
             if not capabilities["imageGeneration"]:
@@ -660,11 +683,32 @@ class RuntimeState:
             token_usage: dict[str, Any] | None = None
             image_item: dict[str, Any] | None = None
             image_count = 0
+            image_failure: HttpError | None = None
+            seen_image_ids: set[str] = set()
+
+            def collect_image(item: Any) -> None:
+                nonlocal image_item, image_count, image_failure
+                if not isinstance(item, dict):
+                    return
+                item_id = optional_string(item.get("id"))
+                if item_id and item_id in seen_image_ids:
+                    return
+                extracted = normalize_image_item(item)
+                if extracted is not None:
+                    image_count += 1
+                    if item_id:
+                        seen_image_ids.add(item_id)
+                    if image_item is None:
+                        image_item = extracted
+                else:
+                    failure = normalize_image_failure(item)
+                    if failure is not None:
+                        image_failure = failure
 
             while True:
                 notification = session.wait_for_notification(
                     lambda message: notification_matches_turn(message, turn_id)
-                    or notification_is_image_item(message),
+                    or notification_is_image_item(message, turn_id),
                     timeout=TURN_TIMEOUT,
                 )
                 method = notification.get("method")
@@ -677,28 +721,23 @@ class RuntimeState:
                     continue
 
                 if "item/completed" == method:
-                    extracted = extract_image_item(notification)
-                    if extracted is not None:
-                        image_count += 1
-                        if image_item is None:
-                            image_item = extracted
+                    if isinstance(params, dict):
+                        collect_image(params.get("item"))
                     continue
 
                 if "turn/completed" != method or not isinstance(params, dict):
                     continue
 
-                turn = params.get("turn")
-                if isinstance(turn, dict) and turn.get("error"):
-                    raise RuntimeError(str(turn["error"]))
+                turn = require_completed_turn(params.get("turn"))
+                items = turn.get("items")
+                if isinstance(items, list):
+                    for item in items:
+                        collect_image(item)
                 break
 
             if image_item is None:
-                fallback_items = self._read_final_image_items(session, thread_id, turn_id)
-                if fallback_items:
-                    image_item = fallback_items[0]
-                    image_count = max(image_count, len(fallback_items))
-
-            if image_item is None:
+                if image_failure is not None:
+                    raise image_failure
                 raise HttpError(
                     "image_generation_failed",
                     "Codex completed the image turn without returning image data.",
@@ -730,81 +769,6 @@ class RuntimeState:
 
     def clear_session(self, wp_user_id: int) -> None:
         clear_auth_json(user_codex_home(wp_user_id))
-
-    def _read_final_agent_message(
-        self,
-        session: JsonRpcSession,
-        thread_id: str,
-        turn_id: str,
-    ) -> str:
-        response = session.request(
-            "thread/read",
-            {"threadId": thread_id, "includeTurns": True},
-            timeout=REQUEST_TIMEOUT,
-        )
-        if not isinstance(response, dict):
-            return ""
-
-        thread = response.get("thread")
-        if not isinstance(thread, dict):
-            return ""
-
-        turns = thread.get("turns")
-        if not isinstance(turns, list):
-            return ""
-
-        for turn in turns:
-            if not isinstance(turn, dict) or turn.get("id") != turn_id:
-                continue
-            items = turn.get("items")
-            if not isinstance(items, list):
-                continue
-            for item in reversed(items):
-                if not isinstance(item, dict) or "agentMessage" != item.get("type"):
-                    continue
-                item_text = item.get("text")
-                if isinstance(item_text, str) and item_text.strip():
-                    return item_text.strip()
-        return ""
-
-    def _read_final_image_items(
-        self,
-        session: JsonRpcSession,
-        thread_id: str,
-        turn_id: str,
-    ) -> list[dict[str, Any]]:
-        response = session.request(
-            "thread/read",
-            {"threadId": thread_id},
-            timeout=REQUEST_TIMEOUT,
-        )
-        if not isinstance(response, dict):
-            return []
-
-        thread = response.get("thread")
-        if not isinstance(thread, dict):
-            return []
-
-        turns = thread.get("turns")
-        if not isinstance(turns, list):
-            return []
-
-        for turn in turns:
-            if not isinstance(turn, dict) or turn.get("id") != turn_id:
-                continue
-
-            items = turn.get("items")
-            if not isinstance(items, list):
-                return []
-
-            image_items = []
-            for item in items:
-                normalized = normalize_image_item(item)
-                if normalized is not None:
-                    image_items.append(normalized)
-            return image_items
-
-        return []
 
     def _watch_login_completion(self, auth_session_id: str) -> None:
         session_record: dict[str, Any] | None = None
@@ -896,12 +860,30 @@ def notification_matches_turn(message: dict[str, Any], turn_id: str) -> bool:
     return "turn/completed" == method
 
 
-def notification_is_image_item(message: dict[str, Any]) -> bool:
+def require_completed_turn(turn: Any) -> dict[str, Any]:
+    status = turn.get("status") if isinstance(turn, dict) else None
+    error = turn.get("error") if isinstance(turn, dict) else None
+    if status == "completed" and not error:
+        return turn
+
+    message = optional_string(error.get("message")) if isinstance(error, dict) else optional_string(error)
+    interrupted = status == "interrupted"
+    raise HttpError(
+        "generation_interrupted" if interrupted else "generation_failed",
+        message or ("Codex generation was interrupted." if interrupted else "Codex generation did not complete successfully."),
+        HTTPStatus.CONFLICT if interrupted else HTTPStatus.BAD_GATEWAY,
+        data={"turnStatus": status if isinstance(status, str) and status in {"completed", "failed", "interrupted", "inProgress"} else "unknown"},
+    )
+
+
+def notification_is_image_item(message: dict[str, Any], turn_id: str | None = None) -> bool:
     if "item/completed" != message.get("method"):
         return False
 
     params = message.get("params")
     if not isinstance(params, dict):
+        return False
+    if turn_id is not None and isinstance(params.get("turnId"), str) and params["turnId"] != turn_id:
         return False
 
     item = params.get("item")
@@ -924,6 +906,8 @@ def normalize_image_item(item: Any) -> dict[str, Any] | None:
         return None
 
     if item.get("type") not in {"imageGeneration", "image_generation_call"}:
+        return None
+    if item.get("status") == "failed":
         return None
 
     image_base64 = optional_string(item.get("result"))
@@ -950,9 +934,36 @@ def normalize_image_item(item: Any) -> dict[str, Any] | None:
     return normalized
 
 
+def normalize_image_failure(item: Any) -> HttpError | None:
+    if not isinstance(item, dict) or item.get("type") not in {"imageGeneration", "image_generation_call"}:
+        return None
+    failure = item.get("failure")
+    if isinstance(failure, dict) and failure.get("type") == "usageLimitExceeded":
+        limit_id = (optional_string(failure.get("limitId")) or "")[:128]
+        resets_at = failure.get("resetsAt")
+        if isinstance(resets_at, bool) or not isinstance(resets_at, int) or not -(2**63) <= resets_at < 2**63:
+            resets_at = None
+        message = "Codex image generation quota exceeded."
+        if resets_at is not None:
+            message += f" The quota resets at Unix timestamp {resets_at}."
+        return HttpError(
+            "image_generation_usage_limit_exceeded",
+            message,
+            HTTPStatus.TOO_MANY_REQUESTS,
+            data={"type": "usageLimitExceeded", "limitId": limit_id, "resetsAt": resets_at},
+        )
+    if item.get("status") == "failed":
+        return HttpError(
+            "image_generation_failed",
+            "Codex image generation failed without returning image data.",
+            HTTPStatus.BAD_GATEWAY,
+        )
+    return None
+
+
 def build_image_generation_prompt(prompt: str) -> str:
     return (
-        "Generate an image using the image_generation tool. "
+        "Generate an image using the image_gen.imagegen tool. "
         "Do not reply with text-only commentary. "
         "Use this exact image prompt:\n\n"
         f"{prompt}"
@@ -963,17 +974,17 @@ def extract_turn_token_usage(token_usage: Any) -> dict[str, int]:
     """Maps a Codex ``thread/tokenUsage/updated`` payload to the sidecar usage
     contract.
 
-    Prefers the per-turn ``last`` bucket and falls back to ``total`` (they are
-    equal for the ephemeral single-turn threads this sidecar uses). Surfaces the
+    Prefers ``total`` for the fresh single-turn thread, including every model
+    response and tool continuation. Falls back to ``last`` on older payloads. Surfaces the
     raw Codex counts the PHP model needs — input, output, and reasoning output
     tokens — defaulting to zero when usage is absent so the response shape stays
     stable.
     """
     bucket: dict[str, Any] = {}
     if isinstance(token_usage, dict):
-        candidate = token_usage.get("last")
+        candidate = token_usage.get("total")
         if not isinstance(candidate, dict):
-            candidate = token_usage.get("total")
+            candidate = token_usage.get("last")
         if isinstance(candidate, dict):
             bucket = candidate
 
@@ -1115,7 +1126,7 @@ STATE = RuntimeState()
 
 
 class RuntimeHandler(BaseHTTPRequestHandler):
-    server_version = "CodexWPSidecar/2.1.1"
+    server_version = "CodexWPSidecar/2.1.2"
 
     def do_GET(self) -> None:  # noqa: N802
         self._dispatch()
@@ -1182,11 +1193,14 @@ class RuntimeHandler(BaseHTTPRequestHandler):
 
             self._json_error("not_found", "Runtime route not found.", HTTPStatus.NOT_FOUND)
         except HttpError as exc:
-            self._json_error(exc.code, str(exc), exc.status)
+            self._json_error(exc.code, str(exc), exc.status, data=exc.data)
         except TimeoutError as exc:
             self._json_error("request_timeout", str(exc), HTTPStatus.GATEWAY_TIMEOUT)
         except JsonRpcError as exc:
-            self._json_error("runtime_error", str(exc), HTTPStatus.BAD_GATEWAY)
+            self._json_error(
+                "runtime_error", str(exc), HTTPStatus.BAD_GATEWAY,
+                data={"rpcCode": exc.code} if exc.code is not None else None,
+            )
         except Exception as exc:
             self._json_error("runtime_error", str(exc), HTTPStatus.BAD_GATEWAY)
 
@@ -1233,8 +1247,11 @@ class RuntimeHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(encoded)
 
-    def _json_error(self, code: str, message: str, status: int) -> None:
-        self._json_response({"error": {"code": code, "message": message}}, status=status)
+    def _json_error(self, code: str, message: str, status: int, *, data: dict[str, Any] | None = None) -> None:
+        error: dict[str, Any] = {"code": code, "message": message}
+        if data is not None:
+            error["data"] = data
+        self._json_response({"error": error}, status=status)
 
 
 def main() -> None:

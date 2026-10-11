@@ -85,11 +85,20 @@ final class DiagnosticsController {
 
 			$ok = (bool) ( $result['ok'] ?? false );
 		} catch ( RuntimeRequestException $exception ) {
-			// A structured error means the sidecar answered, so it is reachable;
-			// the failure is in the response and is classified by status + code.
-			$rows[] = self::row( 'reachable', __( 'Sidecar reachable', 'scriptorium-ai-provider-for-codex' ), 'pass', '' );
-			$rows[] = self::runtime_error_row( $exception );
-			$ok     = false;
+			if ( 0 < $exception->get_status_code() ) {
+				// An HTTP response proves reachability, even when its content fails.
+				$rows[] = self::row( 'reachable', __( 'Sidecar reachable', 'scriptorium-ai-provider-for-codex' ), 'pass', '' );
+				$rows[] = self::runtime_error_row( $exception );
+			} else {
+				$rows[] = self::row(
+					'reachable',
+					__( 'Sidecar reachable', 'scriptorium-ai-provider-for-codex' ),
+					'fail',
+					$exception->getMessage(),
+					self::remediation_for_transport( $exception->getMessage() )
+				);
+			}
+			$ok = false;
 		} catch ( RuntimeException $exception ) {
 			$rows[] = self::row(
 				'reachable',

@@ -10,6 +10,7 @@ declare( strict_types=1 );
 namespace AIProviderForCodex\Runtime;
 
 use RuntimeException;
+use WordPress\AiClient\Providers\Http\DTO\RequestOptions;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -48,10 +49,11 @@ final class Client {
 	 *
 	 * @param string              $path Relative runtime path.
 	 * @param array<string,mixed> $body Request body.
+	 * @param RequestOptions|null $options Per-request SDK HTTP options.
 	 * @return array<string,mixed>
 	 */
-	public function post( string $path, array $body = [] ): array {
-		return $this->request( 'POST', $path, $body, [] );
+	public function post( string $path, array $body = [], ?RequestOptions $options = null ): array {
+		return $this->request( 'POST', $path, $body, [], true, $options );
 	}
 
 	/**
@@ -70,9 +72,11 @@ final class Client {
 	 * @param string              $path Relative runtime path.
 	 * @param array<string,mixed> $body Request body.
 	 * @param array<string,mixed> $query Query args.
+	 * @param bool $record_health Whether to update the health cache.
+	 * @param RequestOptions|null $options Per-request SDK HTTP options.
 	 * @return array<string,mixed>
 	 */
-	public function request( string $method, string $path, array $body = [], array $query = [], bool $record_health = true ): array {
+	public function request( string $method, string $path, array $body = [], array $query = [], bool $record_health = true, ?RequestOptions $options = null ): array {
 		$method   = strtoupper( $method );
 		$path     = '/' . ltrim( $path, '/' );
 		$base_url = Settings::get_base_url();
@@ -106,13 +110,18 @@ final class Client {
 			$headers['Content-Type'] = 'application/json';
 		}
 
-		$timeout = $this->request_timeout( $method, $path, $url );
+		$timeout = null !== $options && null !== $options->getTimeout()
+			? $options->getTimeout()
+			: $this->request_timeout( $method, $path, $url );
 
 		$args = [
 			'method'  => $method,
 			'headers' => $headers,
 			'timeout' => $timeout,
 		];
+		if ( null !== $options && null !== $options->getMaxRedirects() ) {
+			$args['redirection'] = $options->getMaxRedirects();
+		}
 
 		if ( '' !== $body_json && 'GET' !== $method ) {
 			$args['body'] = $body_json;
@@ -130,7 +139,13 @@ final class Client {
 				}
 			}
 			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Transport message is escaped when rendered.
-			throw new RuntimeException( $message );
+			throw new RuntimeRequestException(
+				esc_html( sanitize_text_field( $message ) ),
+				0,
+				sanitize_key( (string) $response->get_error_code() ),
+				// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Raw cause is structured exception data, escaped by the rendering consumer.
+				$response->get_error_message()
+			);
 		}
 
 		return $this->process_response(
@@ -159,7 +174,15 @@ final class Client {
 				if ( $record_health ) {
 					HealthMonitor::record_failure( __( 'The local Codex runtime returned invalid JSON.', 'scriptorium-ai-provider-for-codex' ) );
 				}
-				throw self::runtime_exception( esc_html__( 'The local Codex runtime returned invalid JSON.', 'scriptorium-ai-provider-for-codex' ) );
+				// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Message is escaped and the raw response body is excluded.
+				throw new RuntimeRequestException(
+					esc_html__( 'The local Codex runtime returned invalid JSON.', 'scriptorium-ai-provider-for-codex' ),
+					// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- HTTP status is internal integer exception metadata, not rendered output.
+					$status_code,
+					'invalid_json',
+					// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- JSON parser cause is structured exception data; the raw response body is excluded.
+					json_last_error_msg()
+				);
 			}
 		}
 
@@ -231,10 +254,10 @@ final class Client {
 	 *
 	 * @param \WP_Error $error Transport error.
 	 * @param string    $url Request URL.
-	 * @param int       $timeout Timeout in seconds.
+	 * @param float     $timeout Timeout in seconds.
 	 * @return string
 	 */
-	public static function normalize_transport_error_message( \WP_Error $error, string $url, int $timeout ): string {
+	public static function normalize_transport_error_message( \WP_Error $error, string $url, float $timeout ): string {
 		if ( self::is_connector_approval_error( $error ) ) {
 			return self::normalize_connector_approval_error_message( $error );
 		}
@@ -290,10 +313,10 @@ final class Client {
 	 *
 	 * @param string $message Raw error message from the transport layer.
 	 * @param string $url Request URL.
-	 * @param int    $timeout Timeout in seconds.
+	 * @param float  $timeout Timeout in seconds.
 	 * @return string
 	 */
-	private static function normalize_transport_error_string( string $message, string $url, int $timeout ): string {
+	private static function normalize_transport_error_string( string $message, string $url, float $timeout ): string {
 		$lower  = strtolower( $message );
 		$host   = (string) wp_parse_url( $url, PHP_URL_HOST );
 		$port   = (int) wp_parse_url( $url, PHP_URL_PORT );
@@ -327,7 +350,7 @@ final class Client {
 			return sprintf(
 				/* translators: 1: timeout in seconds, 2: runtime host and port */
 				__(
-					'The local Codex runtime request timed out after %1$d seconds while contacting %2$s. Increase the runtime request timeout if longer generations are expected.',
+					'The local Codex runtime request timed out after %1$s seconds while contacting %2$s. Increase the runtime request timeout if longer generations are expected.',
 					'scriptorium-ai-provider-for-codex'
 				),
 				$timeout,

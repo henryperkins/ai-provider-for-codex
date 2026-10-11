@@ -4,7 +4,7 @@ Tags: ai, codex, wordpress-ai-client
 Requires at least: 7.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.1.1
+Stable tag: 2.1.2
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -127,6 +127,13 @@ The sidecar is designed for localhost-only communication between WordPress and t
 Support is limited to documented, self-managed environments that can run the local sidecar runtime and the `codex` CLI on the same host as WordPress.
 
 == Changelog ==
+
+= 2.1.2 =
+* Correct forced account refresh using the current Codex app-server protocol.
+* Restore AI 1.4 request logging and report persistence failures accurately while keeping generation best-effort.
+* Honor JSON output, SDK request options, current reasoning effort choices, and complete token usage.
+* Reject unsuccessful turns, recover output from ephemeral-thread notifications, and preserve image quota and capability errors.
+* Align Connector Approval documentation with consumer attribution and document reproducible local qualification.
 
 = 2.1.1 =
 * Fix Request Log entries being dropped by WordPress AI plugin 1.3.0 and newer: Codex text and image requests are now recorded with the `ai_client` type the AI plugin accepts, with text or image carried as `request_kind` in the entry context.

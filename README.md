@@ -10,7 +10,7 @@ WordPress AI Client provider plugin for Codex text models and capability-gated C
 - The plugin talks only to the local runtime for health checks, account snapshots, text generation, and capability-gated text-to-image generation.
 - Status screens stay read-only and use stored local connection state; explicit connect checks, snapshot refreshes, and live runtime requests reconcile auth against the sidecar.
 - Billing plan display is informational only and mirrors the latest account snapshot; if the runtime stops reporting a plan, the stored value is cleared.
-- If the WordPress AI plugin's experimental Connector Approval feature is enabled, this plugin performs a one-time approval for its own `codex` connector during activation or the next normal boot. It does not pre-approve while the experiment is disabled, and if the approval is later revoked, runtime calls stay blocked until an administrator re-approves it under `Tools > Connector Approvals` or disables the experiment.
+- If the WordPress AI plugin's experimental Connector Approval feature is enabled, this plugin performs a one-time approval for its own `codex` connector during activation or the next normal boot. AI 1.4 attributes generation requests to the consuming extension: direct AI abilities require approval for `ai/ai.php`, while MCP-mediated abilities require approval for `mcp-adapter/mcp-adapter.php`. Revoking the provider's self-approval does not block provider-owned control requests under that policy. Administrators manage consumer approvals under `Tools > Connector Approvals`.
 
 ## Included
 
@@ -27,10 +27,12 @@ WordPress AI Client provider plugin for Codex text models and capability-gated C
 
 ## Current Status
 
+- v2.1.2 completed the eight-configuration local qualification matrix against the audited WordPress AI 1.4.0, MCP Adapter 0.7.0 and PHP AI Client 1.5.0 targets, with Codex stable 0.162.1. See the [retained findings and qualification report](docs/upstream-remediation-2026-10-11.md).
+- Intended-host device-code authentication, forced refresh and one WordPress text generation succeeded, with a persisted success log. Live image generation, complete production error/de-duplication coverage and reboot recovery remain unverified; the logging bridge remains.
 - Phase 1 functional cutover to the localhost runtime is complete.
 - Phase 2 cleanup removed the remaining legacy compatibility aliases from the active plugin code and docs.
 - Pending device-code sessions now recover cleanly after a sidecar restart when `auth.json` already exists for that user.
-- Text-to-image generation is available through `codex-image` only for connected users whose current Codex app-server snapshot reports `imageGeneration: true`.
+- Text-to-image generation is exposed through `codex-image` only for connected users whose current Codex app-server snapshot reports `imageGeneration: true`. The capability flag does not establish account entitlement or remaining image quota.
 
 ## Quick Start On A WordPress Host
 
@@ -47,28 +49,37 @@ WordPress AI Client provider plugin for Codex text models and capability-gated C
 - `wp --path=/path/to/site eval-file wp-content/plugins/scriptorium-ai-provider-for-codex/scripts/verify.php`
 - `python3 sidecar/scripts/test-image-generation.py`
 
-GitHub Actions runs `.github/workflows/verify.yml` for pull requests, pushes to
-`main`, release tags (`v*`), and manual dispatches. It runs the full verification
-script against disposable WordPress 7.0 and 7.1 / MySQL 8.4 installations on PHP
-7.4 and 8.3, plus Composer validation and PHPStan. Text-generation regressions cover HTTP
-200 responses with missing text or an invalid finish reason: one error log, the
-original exception type and message, and a preserved account connection.
+Release qualification uses local evidence; GitHub Actions is unavailable for this
+repository. Run the full verification script against disposable WordPress 7.0 and
+7.1 / MySQL 8.4 installations on PHP 7.4 and 8.3, plus Composer validation and
+PHPStan. Also check the latest WordPress AI/MCP stack and standalone PHP AI Client
+without replacing Core's bundled SDK. AI 1.4 requires WordPress 7.0.3 or newer.
+See [the local release gate](docs/local-release-gate.md) for coverage and evidence
+requirements.
 
-A separate Linux job verifies the checksum of the pinned Codex **0.155.1** release
-and exercises the real sidecar JSON-RPC transport with an isolated, unauthenticated
-`CODEX_HOME`: initialization, capability probing, and process restart. It also
-checks the binary's generated protocol for device-code login support. To run that
-check locally on Linux:
+The audited Codex stable target is **0.162.1**. Verify the official binary's
+checksum and exercise the real sidecar JSON-RPC transport with an isolated,
+unauthenticated `CODEX_HOME`. These checks cover initialization, capability probing,
+process restart, and device-code protocol availability. To run them locally on Linux:
 
 ```sh
-CODEX_BIN=/path/to/codex python3 sidecar/scripts/test-codex-compatibility.py --version 0.155.1
+CODEX_BIN=/path/to/codex python3 sidecar/scripts/test-codex-compatibility.py --version 0.162.1
 ```
 
-Each job records the exact checked-out commit and tool versions and uploads its
-logs as an artifact, including on failure. Pull-request runs normally test GitHub's
-merge commit; pushes and tags test their own commit. These checks do not perform
-login or billable generation, and are not deployment or authenticated-runtime
-proof. Adding this workflow does not retroactively attach checks to older releases.
+Save the exact source revision and patch, tool versions, dependency and binary
+checksums, logs, and exit codes, including failures. Preview Codex checks are
+reported separately. These checks do not perform login or billable generation;
+intended-host authentication and generation need their own evidence.
+
+Generation honors the consumer's SDK request timeout and redirect limit. Explicit
+SDK options take precedence over the provider timeout filter; absent options keep
+the provider defaults. WordPress Core's prompt builder supplies a 30-second timeout
+by default; the provider's 360-second generation fallback applies when the caller
+supplies no SDK timeout. Consumers requesting a long generation should supply a
+matching timeout. A separate SDK connection timeout has no portable WordPress
+HTTP mapping. JSON output without a schema uses a JSON-only instruction and
+validates the returned text; invalid output fails instead of being accepted as
+plain text.
 
 ## Automated Sidecar Setup
 

@@ -2,9 +2,11 @@
 /**
  * Standalone unit tests for RequestLogWriter.
  *
- * Pure logic only (no WordPress / AI-plugin dependency), so it runs fast:
+ * Standalone logic and default-sink contract tests (no WordPress installation):
  *
  *   php scripts/test-request-log-writer.php
+ *   php scripts/test-request-log-writer.php --legacy
+ *   php scripts/test-request-log-writer.php --legacy-integration
  *
  * @package AIProviderForCodex
  */
@@ -17,6 +19,53 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 require __DIR__ . '/../src/Logging/RequestLogWriter.php';
+
+// Match the optional AI plugin boundary while keeping storage controlled.
+class Codex_Log_Manager_Fixture {
+
+	public static $entries = array();
+	public static $fail = false;
+
+	public function log( array $entry ) {
+		if ( self::$fail ) {
+			return false;
+		}
+		self::$entries[] = $entry;
+		return 'fixture-log-' . count( self::$entries );
+	}
+}
+
+class Codex_Logging_Integration_Fixture {
+
+	public static $manager;
+
+	public static function get_log_manager() {
+		return self::$manager;
+	}
+}
+
+// AI versions before 1.3 have the integration class but no public manager getter.
+class Codex_Legacy_Logging_Integration_Fixture {}
+
+class_alias( Codex_Log_Manager_Fixture::class, 'WordPress\\AI\\Logging\\AI_Request_Log_Manager' );
+$codex_legacy_integration = in_array( '--legacy-integration', $argv, true );
+$codex_modern_logging = ! in_array( '--legacy', $argv, true ) && ! $codex_legacy_integration;
+if ( $codex_modern_logging ) {
+	class_alias( Codex_Logging_Integration_Fixture::class, 'WordPress\\AI\\Logging\\Logging_Integration' );
+} elseif ( $codex_legacy_integration ) {
+	class_alias( Codex_Legacy_Logging_Integration_Fixture::class, 'WordPress\\AI\\Logging\\Logging_Integration' );
+}
+Codex_Logging_Integration_Fixture::$manager = new Codex_Log_Manager_Fixture();
+$codex_options = array( 'wpai_feature_ai-request-logging_enabled' => true );
+
+function get_option( $name, $default = false ) {
+	global $codex_options;
+	return $codex_options[ $name ] ?? $default;
+}
+
+function apply_filters( $name, $value ) {
+	return $value;
+}
 
 $codex_failures = 0;
 $codex_tests    = 0;
@@ -178,6 +227,40 @@ try {
 
 $codex_assert( false === $threw, 'record: never lets a sink exception escape' );
 $codex_assert( false === $result, 'record: returns false when sink throws' );
+
+$codex_assert(
+	false === $writer::record( $entry, static function ( array $payload ): bool { return false; } ),
+	'record: returns false when a sink rejects persistence without throwing'
+);
+
+// AI 1.4 deletes the old global option; the initialized manager remains active.
+if ( $codex_modern_logging ) {
+	$codex_assert( true === $writer::is_logging_enabled(), 'current: active shared manager enables logging without the retired global option' );
+	$codex_assert( true === $writer::record( $entry ), 'current: success reaches the default sink' );
+	$codex_assert( true === $writer::record( $err ), 'current: failure reaches the default sink' );
+	$codex_assert( 2 === count( Codex_Log_Manager_Fixture::$entries ), 'current: default sink writes one entry for each outcome' );
+	$codex_assert( $entry === ( Codex_Log_Manager_Fixture::$entries[0] ?? null ), 'current: default sink preserves success payload' );
+	$codex_assert( $err === ( Codex_Log_Manager_Fixture::$entries[1] ?? null ), 'current: default sink preserves error payload' );
+} else {
+	$codex_assert( false === $writer::is_logging_enabled(), 'legacy: missing global option disables logging' );
+	$codex_options['wpai_features_enabled'] = true;
+	$codex_assert( true === $writer::is_logging_enabled(), 'legacy: both options enable logging' );
+	$codex_assert( true === $writer::record( $entry ), 'legacy: default sink writes success' );
+	$codex_options['wpai_feature_ai-request-logging_enabled'] = false;
+	$codex_assert( false === $writer::is_logging_enabled(), 'legacy: individual option disables logging' );
+	$codex_options['wpai_feature_ai-request-logging_enabled'] = true;
+}
+
+// Leave legacy options enabled so this also catches discarded storage failures.
+$codex_options['wpai_features_enabled'] = true;
+Codex_Log_Manager_Fixture::$fail = true;
+$codex_assert( false === $writer::record( $entry ), 'default: persistence rejection returns false without throwing' );
+Codex_Log_Manager_Fixture::$fail = false;
+if ( $codex_modern_logging ) {
+	Codex_Logging_Integration_Fixture::$manager = null;
+	$codex_assert( false === $writer::is_logging_enabled(), 'current: inactive shared manager overrides legacy enabled options' );
+	$codex_assert( false === $writer::record( $entry ), 'current: inactive experiment skips the default sink' );
+}
 
 echo 0 === $codex_failures
 	? "OK: {$codex_tests} assertions passed\n"

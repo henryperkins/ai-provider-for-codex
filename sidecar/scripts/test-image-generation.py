@@ -152,7 +152,7 @@ class GenerateImageTest(unittest.TestCase):
                 },
                 {
                     "method": "turn/completed",
-                    "params": {"turn": {"id": "turn_text"}},
+                    "params": {"turn": {"id": "turn_text", "status": "completed", "items": [], "error": None}},
                 },
             ],
         )
@@ -223,11 +223,10 @@ class GenerateImageTest(unittest.TestCase):
         with mock.patch.object(main, "STORAGE_ROOT", storage_root), mock.patch.object(
             main, "app_server_session", fake_session
         ):
-            with self.assertRaises(main.HttpError) as caught:
+            with self.assertRaises(main.JsonRpcError) as caught:
                 main.RuntimeState().generate_image(123, {"prompt": "Draw a blue square."})
 
-        self.assertEqual(caught.exception.code, "image_generation_unavailable")
-        self.assertEqual(caught.exception.status, main.HTTPStatus.CONFLICT)
+        self.assertEqual(str(caught.exception), "Unknown method.")
         self.assertEqual([call[0] for call in fake.requests], ["modelProvider/capabilities/read"])
 
     def test_generates_image_without_runtime_model_override(self):
@@ -283,7 +282,7 @@ class GenerateImageTest(unittest.TestCase):
                 },
                 {
                     "method": "turn/completed",
-                    "params": {"turn": {"id": "turn_123"}},
+                    "params": {"turn": {"id": "turn_123", "status": "completed", "items": [], "error": None}},
                 },
             ],
         )
@@ -326,7 +325,7 @@ class GenerateImageTest(unittest.TestCase):
             [
                 {
                     "type": "text",
-                    "text": "Generate an image using the image_generation tool. Do not reply with text-only commentary. Use this exact image prompt:\n\nDraw a blue square.",
+                    "text": "Generate an image using the image_gen.imagegen tool. Do not reply with text-only commentary. Use this exact image prompt:\n\nDraw a blue square.",
                 }
             ],
         )

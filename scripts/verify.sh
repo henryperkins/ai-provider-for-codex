@@ -107,6 +107,10 @@ if [[ -f "$sidecar_main" ]]; then
 fi
 
 php "$ROOT_DIR/scripts/test-request-log-writer.php"
+php "$ROOT_DIR/scripts/test-request-log-writer.php" --legacy
+php "$ROOT_DIR/scripts/test-request-log-writer.php" --legacy-integration
+php "$ROOT_DIR/scripts/test-runtime-client.php"
+php "$ROOT_DIR/scripts/test-sdk-contracts.php"
 
 node --input-type=module --check < "$ROOT_DIR/assets/connection-flow.js" >/dev/null
 node --input-type=module --check < "$ROOT_DIR/assets/connectors.js" >/dev/null
@@ -119,4 +123,5 @@ python3 "$ROOT_DIR/sidecar/scripts/test-token-usage.py"
 python3 "$ROOT_DIR/sidecar/scripts/test-diagnostics.py"
 python3 "$ROOT_DIR/sidecar/scripts/test-account-snapshot.py"
 python3 "$ROOT_DIR/sidecar/scripts/test-image-generation.py"
+python3 "$ROOT_DIR/sidecar/scripts/test-generation-contract.py"
 wp --path="$WP_PATH" eval-file "$ROOT_DIR/scripts/verify.php"

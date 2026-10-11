@@ -65,6 +65,13 @@ final class RequestLogWriter {
 	private const MANAGER_CLASS = 'WordPress\\AI\\Logging\\AI_Request_Log_Manager';
 
 	/**
+	 * AI plugin 1.3+ exposes its active shared manager through this integration.
+	 */
+	private const INTEGRATION_CLASS = 'WordPress\\AI\\Logging\\Logging_Integration';
+
+	private const LOG_HELPER = 'WordPress\\AI\\log_ai_request';
+
+	/**
 	 * Builds an AI-plugin request-log payload from a generation outcome.
 	 *
 	 * Pure: performs no WordPress or AI-plugin calls, so it is unit-testable in
@@ -151,11 +158,12 @@ final class RequestLogWriter {
 	 * Records a log entry on a best-effort basis.
 	 *
 	 * Never throws and never disturbs generation: any failure to write is
-	 * swallowed. Returns whether the entry was handed to a sink successfully.
+	 * swallowed. An explicit false from the sink reports a rejected write;
+	 * existing void sinks remain supported.
 	 *
 	 * @param array<string,mixed> $entry Payload from build_entry().
-	 * @param callable|null       $sink  Optional writer `fn(array): void`; resolved when null.
-	 * @return bool True when an entry was written, false when skipped or failed.
+	 * @param callable|null       $sink  Optional writer; resolved when null.
+	 * @return bool True when the sink accepts the entry, false when skipped or failed.
 	 */
 	public static function record( array $entry, ?callable $sink = null ): bool {
 		try {
@@ -167,9 +175,7 @@ final class RequestLogWriter {
 				return false;
 			}
 
-			$sink( $entry );
-
-			return true;
+			return false !== $sink( $entry );
 		} catch ( \Throwable $e ) {
 			return false;
 		}
@@ -178,13 +184,19 @@ final class RequestLogWriter {
 	/**
 	 * Whether the AI plugin's Request Logging experiment is present and enabled.
 	 *
-	 * Mirrors the AI plugin's own gate (global toggle + per-feature toggle) and
-	 * fails closed: if either option is off or the manager class is absent, no
-	 * codex entries are written.
+	 * Uses the AI plugin's active shared manager on 1.3+, which also honors its
+	 * feature filters. Older versions retain their global and individual gates.
 	 *
 	 * @return bool
 	 */
 	public static function is_logging_enabled(): bool {
+		if ( class_exists( self::INTEGRATION_CLASS ) && in_array( 'get_log_manager', get_class_methods( self::INTEGRATION_CLASS ), true ) ) {
+			$integration_class = self::INTEGRATION_CLASS;
+			$manager_class     = self::MANAGER_CLASS;
+
+			return $integration_class::get_log_manager() instanceof $manager_class;
+		}
+
 		if ( ! class_exists( self::MANAGER_CLASS ) ) {
 			return false;
 		}
@@ -208,8 +220,8 @@ final class RequestLogWriter {
 		/**
 		 * Filters the sink used to record Codex request-log entries.
 		 *
-		 * Return a callable `fn(array $entry): void` to redirect or observe
-		 * Codex log writes, or null to disable them.
+		 * Return a callable to redirect or observe Codex log writes, or null to
+		 * disable them. An explicit false reports failure; void sinks are accepted.
 		 *
 		 * @param callable|null $default Default sink (AI-plugin log manager), or null when unavailable.
 		 */
@@ -224,11 +236,23 @@ final class RequestLogWriter {
 	 * @return callable
 	 */
 	private static function default_sink(): callable {
-		return static function ( array $entry ): void {
-			$manager_class = self::MANAGER_CLASS;
-			$manager       = new $manager_class();
+		return static function ( array $entry ) {
+			if ( function_exists( self::LOG_HELPER ) ) {
+				return call_user_func( self::LOG_HELPER, $entry );
+			}
 
-			$manager->log( $entry );
+			$manager_class = self::MANAGER_CLASS;
+			if ( class_exists( self::INTEGRATION_CLASS ) && in_array( 'get_log_manager', get_class_methods( self::INTEGRATION_CLASS ), true ) ) {
+				$integration_class = self::INTEGRATION_CLASS;
+				$manager           = $integration_class::get_log_manager();
+				if ( ! $manager instanceof $manager_class ) {
+					return false;
+				}
+			} else {
+				$manager = new $manager_class();
+			}
+
+			return $manager->log( $entry );
 		};
 	}
 

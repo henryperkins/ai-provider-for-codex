@@ -83,7 +83,8 @@ final class CodexImageGenerationModel extends AbstractApiBasedModel implements I
 		try {
 			$response = $client->post(
 				'/v1/responses/image',
-				$body
+				$body,
+				$this->getRequestOptions()
 			);
 		} catch ( RuntimeRequestException $exception ) {
 			RequestLogWriter::record(

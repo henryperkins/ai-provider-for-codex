@@ -53,17 +53,28 @@ final class ResponseMapper {
 	 * @param array<string,mixed> $payload Runtime payload.
 	 * @param ProviderMetadata    $provider_metadata Provider metadata.
 	 * @param ModelMetadata       $model_metadata Model metadata.
+	 * @param bool                $require_json Whether text output must be valid JSON.
 	 * @return GenerativeAiResult
 	 */
 	public static function to_generative_ai_result(
 		array $payload,
 		ProviderMetadata $provider_metadata,
-		ModelMetadata $model_metadata
+		ModelMetadata $model_metadata,
+		bool $require_json = false
 	): GenerativeAiResult {
 		$text = self::extract_output_text( $payload );
 
+		if ( $require_json ) {
+			json_decode( $text );
+
+			if ( JSON_ERROR_NONE !== json_last_error() ) {
+				throw self::runtime_exception( esc_html__( 'The local Codex runtime response did not include valid JSON output.', 'scriptorium-ai-provider-for-codex' ) );
+			}
+		}
+
 		$usage_input      = (int) ( $payload['usage']['inputTokens'] ?? 0 );
 		$usage_completion = (int) ( $payload['usage']['outputTokens'] ?? 0 );
+		$usage_reasoning  = isset( $payload['usage']['reasoningOutputTokens'] ) ? (int) $payload['usage']['reasoningOutputTokens'] : null;
 		$total_tokens     = $usage_input + $usage_completion;
 
 		return new GenerativeAiResult(
@@ -78,7 +89,7 @@ final class ResponseMapper {
 					self::finish_reason( $payload['finishReason'] ?? 'stop' )
 				),
 			],
-			new TokenUsage( $usage_input, $usage_completion, $total_tokens ),
+			new TokenUsage( $usage_input, $usage_completion, $total_tokens, $usage_reasoning ),
 			$provider_metadata,
 			$model_metadata,
 			[
@@ -116,6 +127,7 @@ final class ResponseMapper {
 
 		$usage_input      = (int) ( $payload['usage']['inputTokens'] ?? 0 );
 		$usage_completion = (int) ( $payload['usage']['outputTokens'] ?? 0 );
+		$usage_reasoning  = isset( $payload['usage']['reasoningOutputTokens'] ) ? (int) $payload['usage']['reasoningOutputTokens'] : null;
 		$total_tokens     = $usage_input + $usage_completion;
 		$additional_data  = [
 			'account'    => $payload['account'] ?? [],
@@ -146,7 +158,7 @@ final class ResponseMapper {
 					self::finish_reason( $payload['finishReason'] ?? 'stop' )
 				),
 			],
-			new TokenUsage( $usage_input, $usage_completion, $total_tokens ),
+			new TokenUsage( $usage_input, $usage_completion, $total_tokens, $usage_reasoning ),
 			$provider_metadata,
 			$model_metadata,
 			$additional_data

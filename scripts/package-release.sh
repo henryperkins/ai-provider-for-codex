@@ -10,7 +10,9 @@ UNTRACKED_EXCLUDE_FILE=""
 
 cleanup() {
 	rm -rf "${STAGING_DIR}"
-	[[ -n "${UNTRACKED_EXCLUDE_FILE}" ]] && rm -f "${UNTRACKED_EXCLUDE_FILE}"
+	if [[ -n "${UNTRACKED_EXCLUDE_FILE}" ]]; then
+		rm -f "${UNTRACKED_EXCLUDE_FILE}"
+	fi
 }
 trap cleanup EXIT
 

@@ -46,6 +46,19 @@ namespace {
 }
 
 namespace WordPress\AI\Logging {
+	if ( ! class_exists( 'WordPress\\AI\\Logging\\Logging_Integration' ) ) {
+		/**
+		 * Active shared logging manager exposed by AI plugin 1.3+.
+		 */
+		class Logging_Integration {
+
+			/**
+			 * @return AI_Request_Log_Manager|null Null when logging is inactive.
+			 */
+			public static function get_log_manager(): ?AI_Request_Log_Manager {}
+		}
+	}
+
 	if ( ! class_exists( 'WordPress\\AI\\Logging\\AI_Request_Log_Manager' ) ) {
 		/**
 		 * AI plugin Request Logging manager stub for PHPStan.
@@ -62,5 +75,17 @@ namespace WordPress\AI\Logging {
 			 */
 			public function log( array $data ) {}
 		}
+	}
+}
+
+namespace WordPress\AI {
+	if ( ! function_exists( 'WordPress\\AI\\log_ai_request' ) ) {
+		/**
+		 * Public request-log helper provided by AI plugin 1.3+.
+		 *
+		 * @param array<string,mixed> $data Request log data.
+		 * @return string|false Log identifier, or false when inactive or rejected.
+		 */
+		function log_ai_request( array $data ) {}
 	}
 }

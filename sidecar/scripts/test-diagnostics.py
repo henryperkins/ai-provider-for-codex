@@ -1,3 +1,4 @@
+import io
 import sys
 import unittest
 from pathlib import Path
@@ -11,7 +12,7 @@ class ServerIdentityTest(unittest.TestCase):
     def test_returns_service_and_version_only(self):
         self.assertEqual(
             main._server_identity(),
-            {"service": "codex-wp-sidecar", "version": "2.1.1"},
+            {"service": "codex-wp-sidecar", "version": "2.1.2"},
         )
 
 
@@ -24,6 +25,7 @@ class StartTimeoutTest(unittest.TestCase):
         with mock.patch.object(session, "request") as request, mock.patch.object(
             main.subprocess, "Popen"
         ), mock.patch.object(main.threading, "Thread"):
+            main.subprocess.Popen.return_value.stdin = io.StringIO()
             session.start(initialize_timeout=7.5)
         self.assertEqual(request.call_args.args[0], "initialize")
         self.assertEqual(request.call_args.kwargs["timeout"], 7.5)

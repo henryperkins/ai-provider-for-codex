@@ -32,7 +32,7 @@ final class CodexTextGenerationModel extends AbstractApiBasedModel implements Te
 
 	use LocalRuntimeModelTrait;
 
-	private const REASONING_EFFORTS = [ 'none', 'minimal', 'low', 'medium', 'high', 'xhigh' ];
+	private const REASONING_EFFORTS = [ 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra' ];
 
 	/**
 	 * Generates a text result through the local runtime API.
@@ -98,7 +98,8 @@ final class CodexTextGenerationModel extends AbstractApiBasedModel implements Te
 					static function ( $value ): bool {
 						return null !== $value && '' !== $value && [] !== $value;
 					}
-				)
+				),
+				$this->getRequestOptions()
 			);
 		} catch ( RuntimeRequestException $exception ) {
 			RequestLogWriter::record(
@@ -126,7 +127,8 @@ final class CodexTextGenerationModel extends AbstractApiBasedModel implements Te
 			$result = ResponseMapper::to_generative_ai_result(
 				$response,
 				$this->providerMetadata(),
-				$this->metadata()
+				$this->metadata(),
+				'application/json' === $config->getOutputMimeType()
 			);
 		} catch ( \Throwable $exception ) {
 			RequestLogWriter::record(
@@ -244,8 +246,12 @@ final class CodexTextGenerationModel extends AbstractApiBasedModel implements Te
 	private function build_response_format(): ?array {
 		$config = $this->getConfig();
 
-		if ( 'application/json' !== $config->getOutputMimeType() || ! $config->getOutputSchema() ) {
+		if ( 'application/json' !== $config->getOutputMimeType() ) {
 			return null;
+		}
+
+		if ( ! $config->getOutputSchema() ) {
+			return [ 'type' => 'json_object' ];
 		}
 
 		return [
@@ -315,13 +321,19 @@ final class CodexTextGenerationModel extends AbstractApiBasedModel implements Te
 				: null;
 		}
 
-		if ( ! is_scalar( $value ) ) {
+		if ( null === $value ) {
 			return null;
 		}
 
-		$value = sanitize_key( (string) $value );
+		if ( is_string( $value ) ) {
+			$value = strtolower( trim( $value ) );
 
-		return in_array( $value, self::REASONING_EFFORTS, true ) ? $value : null;
+			if ( in_array( $value, self::REASONING_EFFORTS, true ) ) {
+				return $value;
+			}
+		}
+
+		throw self::runtime_exception( esc_html__( 'The requested Codex reasoning effort is not supported.', 'scriptorium-ai-provider-for-codex' ) );
 	}
 
 }

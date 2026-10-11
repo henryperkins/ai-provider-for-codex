@@ -32,7 +32,7 @@ captured = {
     "modelContextWindow": 258400,
 }
 failures += check(
-    "captured prefers .last",
+    "captured uses .total",
     extract_turn_token_usage(captured),
     {"inputTokens": 18074, "outputTokens": 5, "reasoningOutputTokens": 0},
 )
@@ -48,10 +48,10 @@ failures += check(
     {"inputTokens": 100, "outputTokens": 220, "reasoningOutputTokens": 200},
 )
 
-# Falls back to .total when .last is absent.
+# The total bucket is authoritative on the fresh single-turn thread.
 only_total = {"total": {"inputTokens": 7, "outputTokens": 8, "reasoningOutputTokens": 1}}
 failures += check(
-    "falls back to .total",
+    "uses .total without .last",
     extract_turn_token_usage(only_total),
     {"inputTokens": 7, "outputTokens": 8, "reasoningOutputTokens": 1},
 )
