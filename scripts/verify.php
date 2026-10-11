@@ -3171,6 +3171,31 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 				}
 			);
 
+			// Tunnel/gateway 502 with no sidecar error envelope => reachable fail, never a sidecar_error row.
+			$codex_provider_with_mock_runtime(
+				static function ( $preempt, array $args, string $url ) {
+					if ( false !== strpos( $url, '/v1/diagnostics' ) ) {
+						return [
+							'headers'  => [],
+							'body'     => '',
+							'response' => [
+								'code'    => 502,
+								'message' => 'Bad Gateway',
+							],
+							'cookies'  => [],
+							'filename' => null,
+						];
+					}
+					return $preempt;
+				},
+				static function () use ( $codex_provider_assert, $codex_provider_diagnostics_rows ) {
+					$rows = $codex_provider_diagnostics_rows( \AIProviderForCodex\REST\DiagnosticsController::run()->get_data() );
+					$codex_provider_assert( 'fail' === $rows['reachable']['status'], 'A tunnel or gateway 502 must not prove the sidecar is reachable.' );
+					$codex_provider_assert( false !== strpos( $rows['reachable']['detail'], 'HTTP 502 Bad Gateway' ), 'A tunnel or gateway 502 must name its HTTP status.' );
+					$codex_provider_assert( ! isset( $rows['sidecar_error'] ), 'A tunnel or gateway 502 must not be attributed to the sidecar.' );
+				}
+			);
+
 			// --- Setup snippets + stable suggested token. ---
 			// suggested_bearer_token() returns the configured bearer when one is set
 			// and only generates+persists a token otherwise. Clear the configured
