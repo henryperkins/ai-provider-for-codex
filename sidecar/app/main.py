@@ -411,6 +411,36 @@ def generation_thread_params(*, image_generation: bool = False) -> dict[str, Any
     }
 
 
+def require_generation_policy(thread_started: Any) -> None:
+    # Codex echoes the effective policy in the thread/start result. A different
+    # value means an unqualified Codex build or a rejected override; starting a
+    # turn in that state would silently drop the isolation guarantee. A thread
+    # whose environment selection is not empty gets the local host environment
+    # (rooted at "/" for sidecar sessions), so that is checked as well.
+    result = thread_started if isinstance(thread_started, dict) else {}
+    approval = result.get("approvalPolicy")
+    sandbox = result.get("sandbox")
+    sandbox_type = sandbox.get("type") if isinstance(sandbox, dict) else None
+    thread = result.get("thread")
+    environments = thread.get("environments") if isinstance(thread, dict) else None
+    if approval != "never" or sandbox_type != "readOnly" or environments != []:
+        raise HttpError(
+            "runtime_policy_rejected",
+            "Codex did not apply the sidecar generation policy. Check the Codex version against the qualified release.",
+            HTTPStatus.BAD_GATEWAY,
+            data={
+                "approvalPolicy": policy_echo(approval),
+                "sandboxType": policy_echo(sandbox_type),
+                "environmentCount": len(environments) if isinstance(environments, list) else None,
+            },
+        )
+
+
+def policy_echo(value: Any) -> str | None:
+    # Bound what reaches the HTTP envelope: only short strings, never payloads.
+    return value[:64] if isinstance(value, str) else None
+
+
 def auth_file_path(codex_home: Path) -> Path:
     return codex_home / "auth.json"
 
@@ -570,6 +600,7 @@ class RuntimeState:
                 thread_params["developerInstructions"] = system_instruction
 
             thread_started = session.request("thread/start", thread_params, timeout=REQUEST_TIMEOUT)
+            require_generation_policy(thread_started)
             thread_id = require_nested_string(thread_started, "thread", "id")
             turn_input: list[dict[str, Any]] = []
             if input_text:
@@ -719,6 +750,7 @@ class RuntimeState:
                 thread_params["developerInstructions"] = system_instruction
 
             thread_started = session.request("thread/start", thread_params, timeout=REQUEST_TIMEOUT)
+            require_generation_policy(thread_started)
             thread_id = require_nested_string(thread_started, "thread", "id")
             image_prompt = build_image_generation_prompt(prompt)
             started = session.request(

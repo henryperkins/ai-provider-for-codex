@@ -45,12 +45,25 @@ def completed_item(item, turn_id="turn_test"):
     }}
 
 
+def thread_started(approval="never", sandbox=None, environments=()):
+    # Codex 0.162.1 thread/start result shape (fields the sidecar reads).
+    thread = {"id": "thread_test"}
+    if environments is not None:
+        thread["environments"] = list(environments)
+    return {
+        "thread": thread,
+        "approvalPolicy": approval,
+        "sandbox": {"type": "readOnly", "networkAccess": False} if sandbox is None else sandbox,
+    }
+
+
 class FixtureSession:
     """Only the external app-server boundary is replaced; runtime mapping is real."""
 
-    def __init__(self, notifications, capabilities=None):
+    def __init__(self, notifications, capabilities=None, started=None):
         self.notifications = list(notifications)
         self.capabilities = {"imageGeneration": True} if capabilities is None else capabilities
+        self.started = thread_started() if started is None else started
         self.requests = []
 
     def request(self, method, params=None, *, timeout=None):
@@ -62,7 +75,7 @@ class FixtureSession:
         if method == "thread/start":
             if params.get("ephemeral") is not True:
                 raise AssertionError("Generation must keep prompts in an ephemeral thread")
-            return {"thread": {"id": "thread_test"}}
+            return self.started
         if method == "turn/start":
             return {"turn": {"id": "turn_test"}}
         if method == "account/read":
@@ -97,8 +110,8 @@ class GenerationContractTest(unittest.TestCase):
         self.addCleanup(patcher.stop)
 
     @contextmanager
-    def session(self, notifications, capabilities=None):
-        fixture = FixtureSession(notifications, capabilities)
+    def session(self, notifications, capabilities=None, started=None):
+        fixture = FixtureSession(notifications, capabilities, started)
 
         @contextmanager
         def open_session(codex_home):
@@ -108,8 +121,8 @@ class GenerationContractTest(unittest.TestCase):
         with mock.patch.object(main, "app_server_session", open_session):
             yield fixture
 
-    def generate(self, kind, notifications, capabilities=None, payload=None):
-        with self.session(notifications, capabilities) as fixture:
+    def generate(self, kind, notifications, capabilities=None, payload=None, started=None):
+        with self.session(notifications, capabilities, started) as fixture:
             try:
                 if kind == "text":
                     result = main.RuntimeState().generate_text(123, {"input": "Fixture prompt", **(payload or {})})
@@ -177,6 +190,53 @@ class GenerationContractTest(unittest.TestCase):
         })
         turn_params = next(params for method, params in requests if method == "turn/start")
         self.assertIn("image_gen.imagegen", turn_params["input"][0]["text"])
+
+    def assert_policy_refused(self, result, requests):
+        self.assertIsInstance(result, main.HttpError)
+        self.assertEqual(result.code, "runtime_policy_rejected")
+        self.assertEqual(result.status, 502)
+        self.assertNotIn("turn/start", [method for method, _ in requests])
+
+    def test_text_turn_is_refused_when_thread_policy_is_missing(self):
+        # Pre-0.162.1 shape: Codex echoed no effective policy at all.
+        result, requests = self.generate("text", [terminal(items=[text_item()])], started={"thread": {"id": "thread_test"}})
+        self.assert_policy_refused(result, requests)
+        self.assertEqual(result.data, {"approvalPolicy": None, "sandboxType": None, "environmentCount": None})
+
+    def test_image_turn_is_refused_when_sandbox_is_not_read_only(self):
+        result, requests = self.generate("image", [terminal(items=[image_item()])],
+                                         started=thread_started(sandbox={"type": "workspaceWrite"}))
+        self.assert_policy_refused(result, requests)
+        self.assertEqual(result.data["sandboxType"], "workspaceWrite")
+
+    def test_turn_is_refused_when_approval_policy_is_not_never(self):
+        for approval in ("onRequest", "untrusted", {"granular": {}}, None):
+            with self.subTest(approval=approval):
+                result, requests = self.generate("text", [terminal(items=[text_item()])],
+                                                 started=thread_started(approval=approval))
+                self.assert_policy_refused(result, requests)
+
+    def test_turn_is_refused_when_codex_selects_a_host_environment(self):
+        # Codex selects the local environment rooted at "/" when it ignores
+        # the requested empty selection; a missing selection is not proof.
+        local = {"environmentId": "local", "cwd": "/", "runtimeWorkspaceRoots": ["/"]}
+        for kind in ("text", "image"):
+            for environments in ([local], None):
+                with self.subTest(kind=kind, environments=environments):
+                    result, requests = self.generate(kind, [terminal(items=[text_item(), image_item()])],
+                                                     started=thread_started(environments=environments))
+                    self.assert_policy_refused(result, requests)
+
+    def test_policy_rejection_survives_the_real_http_dispatch_boundary(self):
+        started = thread_started(sandbox={"type": "dangerFullAccess", "detail": "x" * 500})
+        with self.session([terminal(items=[text_item()])], started=started) as fixture:
+            payload, status = self.dispatch("/v1/responses/text", {"wpUserId": 123, "input": "Fixture prompt"})
+        self.assertEqual(status, 502)
+        self.assertEqual(payload["error"]["code"], "runtime_policy_rejected")
+        self.assertEqual(payload["error"]["data"], {"approvalPolicy": "never", "sandboxType": "dangerFullAccess",
+                                                    "environmentCount": 0})
+        self.assertNotIn("x" * 100, json.dumps(payload))
+        self.assertNotIn("turn/start", [method for method, _ in fixture.requests])
 
     def test_failed_text_turn_never_returns_partial_success(self):
         result, _ = self.generate("text", [completed_item(text_item("partial")), terminal("failed")])
