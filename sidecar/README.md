@@ -30,10 +30,14 @@ It wraps `codex app-server`, stores per-user ChatGPT/Codex auth state on disk, a
 - `CODEX_RUNTIME_TURN_TIMEOUT` default: `300`
 - `CODEX_RUNTIME_LOGIN_TIMEOUT` default: `1800`
 
-Codex child processes receive only `PATH`, `PATHEXT`, `SYSTEMROOT` and `WINDIR`
-when present, plus `CODEX_HOME`, `HOME` and `USERPROFILE` set to the user's Codex
-directory. Provider keys, proxy settings and sidecar credentials are not
-forwarded. Codex uses the connected user's stored ChatGPT authentication.
+Codex child processes receive only `PATH`, `PATHEXT`, `SYSTEMROOT`, `WINDIR`,
+`SSL_CERT_FILE`, `SSL_CERT_DIR` and `CODEX_CA_CERTIFICATE` when present, plus
+`CODEX_HOME`, `HOME` and `USERPROFILE` set to the user's Codex directory.
+Provider keys, proxy settings and sidecar credentials are not forwarded. If the
+host requires a private CA, set `SSL_CERT_FILE` (or `CODEX_CA_CERTIFICATE`) in
+the sidecar's environment; these are forwarded. Proxy variables are not
+forwarded; put the sidecar host on a network path that reaches `chatgpt.com`
+directly. Codex uses the connected user's stored ChatGPT authentication.
 
 Text and image threads use `approvalPolicy: "never"`, `sandbox: "read-only"` and
 disable shell execution, local image viewing, both multi-agent backends and web

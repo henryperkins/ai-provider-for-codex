@@ -491,9 +491,19 @@ def ensure_codex_home(codex_home: Path) -> None:
 
 
 def codex_process_environment(codex_home: Path) -> dict[str, str]:
-    # Allow runtime paths explicitly: a name-based secret filter cannot catch
-    # arbitrary credentials, proxy URLs or future sidecar configuration keys.
-    path_variables = {"PATH", "PATHEXT", "SYSTEMROOT", "WINDIR"}
+    # Allow runtime paths and public CA trust anchors explicitly: a name-based
+    # secret filter cannot catch arbitrary credentials, proxy URLs or future
+    # sidecar configuration keys. Proxies stay excluded: proxy URLs can embed
+    # credentials and would redirect user traffic.
+    path_variables = {
+        "PATH",
+        "PATHEXT",
+        "SYSTEMROOT",
+        "WINDIR",
+        "SSL_CERT_FILE",
+        "SSL_CERT_DIR",
+        "CODEX_CA_CERTIFICATE",
+    }
     environment = {key: value for key, value in os.environ.items() if key.upper() in path_variables}
     home = str(codex_home)
     environment.update({"CODEX_HOME": home, "HOME": home, "USERPROFILE": home})
