@@ -27,7 +27,7 @@ It wraps `codex app-server`, stores per-user ChatGPT/Codex auth state on disk, a
 - `CODEX_WP_PORT` default: `4317`
 - `CODEX_WP_BEARER_TOKEN` required
 - `CODEX_RUNTIME_REQUEST_TIMEOUT` default: `60`
-- `CODEX_RUNTIME_TURN_TIMEOUT` default: `300`
+- `CODEX_RUNTIME_TURN_TIMEOUT` default: `300` (maximum wall-clock seconds for one complete text or image generation turn, after which the sidecar sends `turn/interrupt` and terminates the process; the default 300s stays below the WordPress-side 360s generation timeout)
 - `CODEX_RUNTIME_LOGIN_TIMEOUT` default: `1800`
 
 Codex child processes receive only `PATH`, `PATHEXT`, `SYSTEMROOT`, `WINDIR`,

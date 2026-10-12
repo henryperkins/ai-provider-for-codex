@@ -43,6 +43,7 @@ class ProcessSecurityTest(unittest.TestCase):
             encoding="utf-8",
         )
         real_popen = subprocess.Popen
+        self.real_popen = real_popen
 
         def launch_fixture(command, **kwargs):
             # Replace the external executable, keeping real environment, pipes,
@@ -139,6 +140,35 @@ class ProcessSecurityTest(unittest.TestCase):
             "USERPROFILE": str(self.root / "_diagnostics"),
             "CODEX_HOME": str(self.root / "_diagnostics"),
         })
+
+    def test_initialize_timeout_terminates_the_real_child(self):
+        # An inert real child never answers initialize. A failed session must
+        # not leave it running after the context manager raises the timeout.
+        session = main.JsonRpcSession(self.home)
+        processes = []
+
+        def launch_unresponsive_child(_command, **kwargs):
+            process = self.real_popen([sys.executable, "-c", "import time; time.sleep(30)"], **kwargs)
+            processes.append(process)
+            return process
+
+        try:
+            with mock.patch.object(main.subprocess, "Popen", side_effect=launch_unresponsive_child), \
+                mock.patch.object(main, "JsonRpcSession", return_value=session), \
+                mock.patch.object(main, "REQUEST_TIMEOUT", 0.1):
+                with self.assertRaises(TimeoutError):
+                    with main.app_server_session(self.home):
+                        self.fail("An unanswered initialize must not enter the session")
+            self.assertEqual(len(processes), 1)
+            self.assertIsNotNone(processes[0].poll(), "Timed-out initialization left a child running")
+        finally:
+            # Keep the regression test hygienic even before the fix is applied.
+            session.close()
+            if session._reader is not None:
+                session._reader.join(timeout=5)
+            for process in processes:
+                if process.stdout is not None:
+                    process.stdout.close()
 
 
 if __name__ == "__main__":

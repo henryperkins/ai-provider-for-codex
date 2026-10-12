@@ -11,6 +11,7 @@ import io
 import json
 import sys
 import tempfile
+import time
 import unittest
 from contextlib import contextmanager
 from pathlib import Path
@@ -60,11 +61,12 @@ def thread_started(approval="never", sandbox=None, environments=()):
 class FixtureSession:
     """Only the external app-server boundary is replaced; runtime mapping is real."""
 
-    def __init__(self, notifications, capabilities=None, started=None):
+    def __init__(self, notifications, capabilities=None, started=None, *, on_wait=None):
         self.notifications = list(notifications)
         self.capabilities = {"imageGeneration": True} if capabilities is None else capabilities
         self.started = thread_started() if started is None else started
         self.requests = []
+        self.on_wait = on_wait
 
     def request(self, method, params=None, *, timeout=None):
         self.requests.append((method, params))
@@ -78,6 +80,8 @@ class FixtureSession:
             return self.started
         if method == "turn/start":
             return {"turn": {"id": "turn_test"}}
+        if method == "turn/interrupt":
+            return {}
         if method == "account/read":
             return {"account": {"type": "chatgpt", "email": "fixture@example.test", "planType": "fixture"}}
         if method == "account/rateLimits/read":
@@ -91,6 +95,8 @@ class FixtureSession:
         raise AssertionError(f"Unexpected app-server request: {method}")
 
     def wait_for_notification(self, predicate, *, timeout=None):
+        if self.on_wait is not None:
+            self.on_wait(self, timeout)
         for index, notification in enumerate(self.notifications):
             if predicate(notification):
                 return self.notifications.pop(index)
@@ -110,8 +116,8 @@ class GenerationContractTest(unittest.TestCase):
         self.addCleanup(patcher.stop)
 
     @contextmanager
-    def session(self, notifications, capabilities=None, started=None):
-        fixture = FixtureSession(notifications, capabilities, started)
+    def session(self, notifications, capabilities=None, started=None, *, on_wait=None):
+        fixture = FixtureSession(notifications, capabilities, started, on_wait=on_wait)
 
         @contextmanager
         def open_session(codex_home):
@@ -121,8 +127,8 @@ class GenerationContractTest(unittest.TestCase):
         with mock.patch.object(main, "app_server_session", open_session):
             yield fixture
 
-    def generate(self, kind, notifications, capabilities=None, payload=None, started=None):
-        with self.session(notifications, capabilities, started) as fixture:
+    def generate(self, kind, notifications, capabilities=None, payload=None, started=None, *, on_wait=None):
+        with self.session(notifications, capabilities, started, on_wait=on_wait) as fixture:
             try:
                 if kind == "text":
                     result = main.RuntimeState().generate_text(123, {"input": "Fixture prompt", **(payload or {})})
@@ -258,6 +264,78 @@ class GenerationContractTest(unittest.TestCase):
         result, _ = self.generate("image", [completed_item(image_item()), terminal("interrupted")])
         self.assertIsInstance(result, main.HttpError)
         self.assertEqual(result.code, "generation_interrupted")
+
+    def test_text_turn_wall_clock_timeout_sends_interrupt_and_raises(self):
+        notifications = [
+            {"method": "item/agentMessage/delta", "params": {"threadId": "thread_test", "turnId": "turn_test", "delta": "part1 "}},
+            {"method": "item/agentMessage/delta", "params": {"threadId": "thread_test", "turnId": "turn_test", "delta": "part2"}},
+            terminal(items=[text_item("completed text")]),
+        ]
+        with mock.patch.object(main, "TURN_TIMEOUT", 0.05):
+            result, requests = self.generate(
+                "text",
+                notifications,
+                on_wait=lambda _fix, _to: time.sleep(0.04),
+            )
+        self.assertIsInstance(result, TimeoutError)
+        self.assertIn("timed out", str(result))
+        interrupts = [params for method, params in requests if method == "turn/interrupt"]
+        self.assertEqual(interrupts, [{"threadId": "thread_test", "turnId": "turn_test"}])
+
+    def test_image_turn_wall_clock_timeout_sends_interrupt_and_raises(self):
+        notifications = [
+            completed_item(image_item()),
+            terminal(items=[image_item()]),
+        ]
+        with mock.patch.object(main, "TURN_TIMEOUT", 0.05):
+            result, requests = self.generate(
+                "image",
+                notifications,
+                on_wait=lambda _fix, _to: time.sleep(0.06),
+            )
+        self.assertIsInstance(result, TimeoutError)
+        self.assertIn("timed out", str(result))
+        interrupts = [params for method, params in requests if method == "turn/interrupt"]
+        self.assertEqual(interrupts, [{"threadId": "thread_test", "turnId": "turn_test"}])
+
+    def test_turn_completing_within_deadline_does_not_send_interrupt(self):
+        result, requests = self.generate("text", [terminal(items=[text_item("OK")])])
+        self.assertIsInstance(result, dict)
+        self.assertNotIn("turn/interrupt", [method for method, _ in requests])
+
+    def test_late_queued_completion_cannot_escape_the_wall_clock_deadline(self):
+        # wait_for_notification may find a queued completion before checking
+        # its own timeout. A late wakeup must not turn into partial success.
+        for kind in ("text", "image"):
+            with self.subTest(kind=kind):
+                clock = [0.0]
+
+                def late_wakeup(_fixture, _timeout):
+                    clock[0] = 2.0
+
+                with mock.patch.object(main.time, "monotonic", side_effect=lambda: clock[0]), \
+                    mock.patch.object(main, "TURN_TIMEOUT", 1.0):
+                    result, requests = self.generate(
+                        kind, [terminal(items=[text_item(), image_item()])], on_wait=late_wakeup,
+                    )
+                self.assertIsInstance(result, TimeoutError)
+                self.assertEqual(
+                    [params for method, params in requests if method == "turn/interrupt"],
+                    [{"threadId": "thread_test", "turnId": "turn_test"}],
+                )
+
+    def test_turn_timeout_returns_504_over_http_dispatch(self):
+        notifications = [
+            {"method": "item/agentMessage/delta", "params": {"threadId": "thread_test", "turnId": "turn_test", "delta": "part1"}},
+        ]
+        with mock.patch.object(main, "TURN_TIMEOUT", 0.05):
+            with self.session(notifications, on_wait=lambda _fix, _to: time.sleep(0.06)) as fixture:
+                payload, status = self.dispatch("/v1/responses/text", {"wpUserId": 123, "input": "Fixture prompt"})
+        self.assertEqual(status, 504)
+        self.assertEqual(payload["error"]["code"], "request_timeout")
+        self.assertIn("timed out", payload["error"]["message"])
+        interrupts = [params for method, params in fixture.requests if method == "turn/interrupt"]
+        self.assertEqual(interrupts, [{"threadId": "thread_test", "turnId": "turn_test"}])
 
     def test_completed_notification_requires_completed_status(self):
         for status in (None, "inProgress", "unknown", {}, []):

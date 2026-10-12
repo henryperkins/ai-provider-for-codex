@@ -622,8 +622,9 @@ def now_timestamp() -> int:
 
 @contextmanager
 def app_server_session(codex_home: Path) -> Any:
-    session = JsonRpcSession(codex_home).start()
+    session = JsonRpcSession(codex_home)
     try:
+        session.start()
         yield session
     finally:
         session.close()
@@ -793,54 +794,73 @@ class RuntimeState:
             ):
                 turn_payload["outputSchema"] = response_format["schema"]
 
-            started = session.request("turn/start", turn_payload, timeout=REQUEST_TIMEOUT)
+            deadline = time.monotonic() + TURN_TIMEOUT
+            started = session.request("turn/start", turn_payload, timeout=max(0.0, min(REQUEST_TIMEOUT, TURN_TIMEOUT)))
             turn_id = require_nested_string(started, "turn", "id")
             output_parts: list[str] = []
             output_text: str | None = None
             finish_reason = "stop"
             token_usage: dict[str, Any] | None = None
 
-            while True:
-                notification = session.wait_for_notification(
-                    lambda message: notification_matches_turn(message, turn_id),
-                    timeout=TURN_TIMEOUT,
-                )
-                method = notification.get("method")
-                params = notification.get("params")
+            try:
+                while True:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise TimeoutError(f"Turn timed out after {TURN_TIMEOUT:.1f}s.")
+                    notification = session.wait_for_notification(
+                        lambda message: notification_matches_turn(message, turn_id),
+                        timeout=remaining,
+                    )
+                    # A queued event may be returned after a late wakeup without
+                    # wait_for_notification checking its timeout again.
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError(f"Turn timed out after {TURN_TIMEOUT:.1f}s.")
+                    method = notification.get("method")
+                    params = notification.get("params")
 
-                if "item/agentMessage/delta" == method and isinstance(params, dict):
-                    delta = params.get("delta")
-                    if isinstance(delta, str):
-                        output_parts.append(delta)
-                    continue
+                    if "item/agentMessage/delta" == method and isinstance(params, dict):
+                        delta = params.get("delta")
+                        if isinstance(delta, str):
+                            output_parts.append(delta)
+                        continue
 
-                if "item/completed" == method and isinstance(params, dict):
-                    item = params.get("item")
-                    if isinstance(item, dict) and "agentMessage" == item.get("type"):
-                        item_text = item.get("text")
-                        if isinstance(item_text, str):
-                            output_text = item_text
-                    continue
+                    if "item/completed" == method and isinstance(params, dict):
+                        item = params.get("item")
+                        if isinstance(item, dict) and "agentMessage" == item.get("type"):
+                            item_text = item.get("text")
+                            if isinstance(item_text, str):
+                                output_text = item_text
+                        continue
 
-                if "thread/tokenUsage/updated" == method and isinstance(params, dict):
-                    usage_update = params.get("tokenUsage")
-                    if isinstance(usage_update, dict):
-                        token_usage = usage_update
-                    continue
+                    if "thread/tokenUsage/updated" == method and isinstance(params, dict):
+                        usage_update = params.get("tokenUsage")
+                        if isinstance(usage_update, dict):
+                            token_usage = usage_update
+                        continue
 
-                if "turn/completed" != method or not isinstance(params, dict):
-                    continue
+                    if "turn/completed" != method or not isinstance(params, dict):
+                        continue
 
-                turn = require_completed_turn(params.get("turn"))
-                items = turn.get("items")
-                if isinstance(items, list):
-                    for item in reversed(items):
-                        if isinstance(item, dict) and item.get("type") == "agentMessage":
-                            final_text = optional_string(item.get("text"))
-                            if final_text:
-                                output_text = final_text
-                                break
-                break
+                    turn = require_completed_turn(params.get("turn"))
+                    items = turn.get("items")
+                    if isinstance(items, list):
+                        for item in reversed(items):
+                            if isinstance(item, dict) and item.get("type") == "agentMessage":
+                                final_text = optional_string(item.get("text"))
+                                if final_text:
+                                    output_text = final_text
+                                    break
+                    break
+            except TimeoutError:
+                try:
+                    session.request(
+                        "turn/interrupt",
+                        {"threadId": thread_id, "turnId": turn_id},
+                        timeout=5,
+                    )
+                except Exception:
+                    pass
+                raise
 
             if not output_text:
                 output_text = "".join(output_parts).strip()
@@ -924,13 +944,14 @@ class RuntimeState:
             require_generation_policy(thread_started)
             thread_id = require_nested_string(thread_started, "thread", "id")
             image_prompt = build_image_generation_prompt(prompt)
+            deadline = time.monotonic() + TURN_TIMEOUT
             started = session.request(
                 "turn/start",
                 {
                     "threadId": thread_id,
                     "input": [{"type": "text", "text": image_prompt}],
                 },
-                timeout=REQUEST_TIMEOUT,
+                timeout=max(0.0, min(REQUEST_TIMEOUT, TURN_TIMEOUT)),
             )
             turn_id = require_nested_string(started, "turn", "id")
             token_usage: dict[str, Any] | None = None
@@ -958,35 +979,51 @@ class RuntimeState:
                     if failure is not None:
                         image_failure = failure
 
-            while True:
-                notification = session.wait_for_notification(
-                    lambda message: notification_matches_turn(message, turn_id)
-                    or notification_is_image_item(message, turn_id),
-                    timeout=TURN_TIMEOUT,
-                )
-                method = notification.get("method")
-                params = notification.get("params")
+            try:
+                while True:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise TimeoutError(f"Turn timed out after {TURN_TIMEOUT:.1f}s.")
+                    notification = session.wait_for_notification(
+                        lambda message: notification_matches_turn(message, turn_id)
+                        or notification_is_image_item(message, turn_id),
+                        timeout=remaining,
+                    )
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError(f"Turn timed out after {TURN_TIMEOUT:.1f}s.")
+                    method = notification.get("method")
+                    params = notification.get("params")
 
-                if "thread/tokenUsage/updated" == method and isinstance(params, dict):
-                    usage_update = params.get("tokenUsage")
-                    if isinstance(usage_update, dict):
-                        token_usage = usage_update
-                    continue
+                    if "thread/tokenUsage/updated" == method and isinstance(params, dict):
+                        usage_update = params.get("tokenUsage")
+                        if isinstance(usage_update, dict):
+                            token_usage = usage_update
+                        continue
 
-                if "item/completed" == method:
-                    if isinstance(params, dict):
-                        collect_image(params.get("item"))
-                    continue
+                    if "item/completed" == method:
+                        if isinstance(params, dict):
+                            collect_image(params.get("item"))
+                        continue
 
-                if "turn/completed" != method or not isinstance(params, dict):
-                    continue
+                    if "turn/completed" != method or not isinstance(params, dict):
+                        continue
 
-                turn = require_completed_turn(params.get("turn"))
-                items = turn.get("items")
-                if isinstance(items, list):
-                    for item in items:
-                        collect_image(item)
-                break
+                    turn = require_completed_turn(params.get("turn"))
+                    items = turn.get("items")
+                    if isinstance(items, list):
+                        for item in items:
+                            collect_image(item)
+                    break
+            except TimeoutError:
+                try:
+                    session.request(
+                        "turn/interrupt",
+                        {"threadId": thread_id, "turnId": turn_id},
+                        timeout=5,
+                    )
+                except Exception:
+                    pass
+                raise
 
             if image_item is None:
                 if image_failure is not None:
