@@ -60,12 +60,19 @@ requirements.
 The audited Codex stable target is **0.162.1**. Verify the official binary's
 checksum and exercise the real sidecar JSON-RPC transport with an isolated,
 unauthenticated `CODEX_HOME`. These checks cover initialization, capability probing,
-generation-thread approval and sandbox policies, disabled host-tool features,
-process restart, and device-code protocol availability. To run them locally on Linux:
+generation-thread approval and sandbox policies, policy echo verification, disabled host-tool
+features, disabled ChatGPT Apps and account-synced Plugins, process restart, device-code protocol
+availability, and sidecar runtime diagnostics. To run them locally on Linux:
 
 ```sh
 CODEX_BIN=/path/to/codex python3 sidecar/scripts/test-codex-compatibility.py --version 0.162.1
 ```
+
+The [offline tool-surface probe](sidecar/scripts/offline-tool-surface-probe/README.md)
+checks both model classes against a loopback HTTPS mock in a network-disabled
+container. It verifies text delivery, text/image thread tool surfaces, policy
+echoes and absence of Apps/Plugins traffic. Image-tool execution is outside its
+observational-only scope; image-delivery regressions use inert protocol fixtures.
 
 Save the exact source revision and patch, tool versions, dependency and binary
 checksums, logs, and exit codes, including failures. Preview Codex checks are

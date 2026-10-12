@@ -133,8 +133,9 @@ Support is limited to documented, self-managed environments that can run the loc
 == Changelog ==
 
 = 2.1.4 =
-
-* Harden sidecar generation sessions with explicit runtime policies and a minimal child-process environment.
+* Harden sidecar generation sessions: minimal child-process environment, explicit approval/sandbox/tool policies, ChatGPT Apps and account-synced Plugins disabled for sidecar-owned Codex processes.
+* Refuse generation when Codex does not confirm the requested policy; new diagnostics rows for Codex version qualification, policy enforcement, and per-user configuration overrides.
+* Forward CA bundle variables to Codex; apply the turn timeout as a wall-clock limit.
 
 = 2.1.3 =
 * Extend WordPress AI's standard image-generation timeout from 90 to 360 seconds when Codex is the first preferred image model.

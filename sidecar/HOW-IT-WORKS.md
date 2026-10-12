@@ -42,7 +42,7 @@ The sidecar reads its runtime configuration from environment variables:
 - `CODEX_WP_PORT`: bind port, default `4317`
 - `CODEX_WP_BEARER_TOKEN`: shared secret required by WordPress
 - `CODEX_RUNTIME_REQUEST_TIMEOUT`: short RPC timeout, default `60`
-- `CODEX_RUNTIME_TURN_TIMEOUT`: generation turn timeout, default `300`
+- `CODEX_RUNTIME_TURN_TIMEOUT`: wall-clock budget from `turn/start` through completion, default `300`; incoming events do not reset it
 - `CODEX_RUNTIME_LOGIN_TIMEOUT`: device-code login wait timeout, default `1800`
 
 At startup the sidecar:
@@ -93,29 +93,24 @@ When the sidecar starts a `codex app-server` subprocess for a user, it sets:
 
 That causes `codex app-server` to read and write auth and runtime files inside that per-user directory instead of sharing state across users.
 
-The child environment contains only these homes and the available operating-system
-path variables `PATH`, `PATHEXT`, `SYSTEMROOT` and `WINDIR`. It does not inherit
-the sidecar's credentials, provider keys or proxy settings.
+### Generation Isolation (Three Layers)
 
-Every text and image thread explicitly uses `approvalPolicy: "never"` and
-`sandbox: "read-only"`, disables `features.shell_tool`, `features.view_image`,
-`features.multi_agent`, `features.multi_agent_v2` and `agents.enabled`, and sets
-`web_search` to `"disabled"`. Native image generation is enabled only for image threads.
-Threads set `environments: []` and disable `features.stable_environment_tools`,
-so model tools have no host filesystem environment. Native image references fail
-before local files are read, and `apply_patch` is unavailable. New native image
-generation and per-user artifact storage remain available. The sidecar opts into
-`experimentalApi` for the empty environment selection in Codex 0.162.1.
-Separate directories under one system account do not provide operating-system
-isolation; deployments requiring that boundary need separate accounts or
-filesystem confinement.
+Every generation session enforces isolation across three distinct layers:
+
+1. **Process environment:** `codex app-server` receives only `PATH`, `PATHEXT`, `SYSTEMROOT`, `WINDIR`, `SSL_CERT_FILE`, `SSL_CERT_DIR` and `CODEX_CA_CERTIFICATE` from the parent process, plus `CODEX_HOME`, `HOME` and `USERPROFILE` pointing to the user's isolated directory. Provider API keys, proxy settings, sidecar credentials (`CODEX_WP_BEARER_TOKEN`), and database passwords are never passed to the child process. Proxies stay excluded because proxy URLs can embed credentials and would redirect user traffic; private CA trust anchors (`SSL_CERT_FILE` or `CODEX_CA_CERTIFICATE`) are forwarded when configured.
+
+2. **Process features:** Every `codex app-server` is spawned with `--disable apps --disable plugins`. ChatGPT Apps exposes the connected ChatGPT account's external connectors to every generation turn, and Plugins synchronizes the account's installed plugins into the user's `CODEX_HOME` and starts declared MCP servers as host processes. Using `--disable` (rather than `-c features.<name>=false`) ensures startup fails closed if an unrecognized feature name is supplied.
+
+3. **Thread policy:** Every generation thread is created with `approvalPolicy: "never"`, `sandbox: "read-only"`, `environments: []`, `features.shell_tool: false`, `features.stable_environment_tools: false`, `features.view_image: false`, `features.multi_agent: false`, `features.multi_agent_v2: false`, `agents.enabled: false`, and `web_search: "disabled"`. Native image generation (`features.image_generation`) is enabled only for image threads when advertised by the connected account. The empty environment selection ensures model tools have no host filesystem environment (preventing native image tools from reading local reference paths and disabling `apply_patch`). The sidecar inspects the `thread/start` result and immediately aborts the turn with HTTP 502 `runtime_policy_rejected` if Codex fails to echo the exact requested approval policy, read-only sandbox, and empty environments list.
+
+**Security boundary:** On the qualified baseline without externally configured tools, built-in model tools have no host filesystem or command-execution access. Codex itself retains access to authentication, runtime state and generated-artifact storage. MCP servers and enabled, trusted or managed hooks defined in any applicable Codex configuration layer run as ordinary host processes under the sidecar's OS account, outside the per-thread policy. Keep MCP servers, hooks and plugin marketplaces out of system, user, managed and project configuration on the sidecar host. `--disable plugins` removes account-synced plugins only; it does not suppress separately configured servers or hooks. Per-user directories under one OS account separate state but are not an OS isolation boundary; that requires separate service accounts or filesystem confinement.
 
 The sidecar itself only explicitly knows about `auth.json`:
 
 - `auth.json` is treated as the marker that a user has stored auth.
 - `POST /v1/session/clear` deletes `auth.json`.
 
-The existing design documents also reserve room for other Codex-managed files in the same directory, such as `config.toml`, `history.jsonl`, and `logs/`, but those are created and managed by Codex rather than by the sidecar.
+Codex also creates runtime databases, caches, system skills and generated-artifact files. The sidecar never writes per-user configuration. Diagnostics warn about `config.toml`, `hooks.json`, `.env`, `AGENTS.md` and `AGENTS.override.md` in user homes, without reading their contents. This scan does not audit all system or managed configuration layers.
 
 ## JSON-RPC Bridge To `codex app-server`
 
@@ -126,7 +121,7 @@ The core adapter is `JsonRpcSession`.
 When a session starts, it:
 
 1. Creates the user directory if needed.
-2. Spawns `codex app-server`.
+2. Spawns `codex app-server --disable apps --disable plugins` with the scoped child environment.
 3. Connects to its stdin/stdout.
 4. Starts a reader thread.
 5. Sends an `initialize` JSON-RPC request.
@@ -149,7 +144,8 @@ The sidecar uses JSON-RPC synchronously for direct requests like:
 - `modelProvider/capabilities/read`
 - `thread/start`
 - `turn/start`
-- `thread/read`
+- `turn/interrupt` (best-effort on deadline expiry)
+- `experimentalFeature/list` (explicit diagnostics only)
 
 It uses notification waiting for long-running async events like:
 
@@ -171,7 +167,7 @@ For device-code login, the sidecar keeps the subprocess alive in memory until th
 
 ## HTTP API
 
-The sidecar exposes six routes plus the `ping` alias.
+The sidecar exposes health, diagnostics, login, snapshot, text/image generation and session-clear routes, plus the `ping` health alias.
 
 ### `GET /healthz`
 
@@ -188,10 +184,16 @@ Response shape:
 {
   "ok": true,
   "service": "codex-wp-sidecar",
-  "version": "2.1.1",
+  "version": "2.1.4",
   "codexBin": "/usr/local/bin/codex"
 }
 ```
+
+### `GET /v1/diagnostics`
+
+This bearer-authenticated route is called only from an explicit administrator action in WordPress. It checks Python, `codex --version`, writable storage and per-user configuration files. If the CLI check passes, it adds `codex_version` (a warning unless the installed version is 0.162.1) and starts an unauthenticated app-server in a throwaway `_diagnostics` home.
+
+After initialization it opens an ephemeral generation thread and confirms the approval, sandbox and environment echo plus all seven disabled features (`shell_tool`, `stable_environment_tools`, `view_image`, `multi_agent`, `multi_agent_v2`, `apps`, `plugins`). A mismatch produces a failing `generation_policy` row naming the first mismatch. The process closes and the throwaway home is removed. No generation turn or account snapshot is requested. Warnings count as issues in the overall result.
 
 ### `POST /v1/login/start`
 
@@ -280,7 +282,7 @@ Behavior:
 2. Rejects the request with `409 auth_required` if `auth.json` is missing.
 3. Starts a short-lived `codex app-server` session for that user.
 4. Calls:
-   - `account/read` with `{ "refresh": true }`
+   - `account/read` with `{ "refreshToken": true }`
    - `account/rateLimits/read`
    - `model/list` with `{ "includeHidden": false }`
    - `modelProvider/capabilities/read`
@@ -298,7 +300,7 @@ Returned data includes:
 Important implementation detail:
 
 - `planType` is optional and may be blank.
-- If `modelProvider/capabilities/read` is unavailable, capability booleans fail closed to `false`.
+- A failed capability RPC preserves its cause and fails the snapshot. Missing capability fields in an otherwise successful reply normalize to `false`.
 - WordPress clears stale stored account fields when a fresh snapshot omits them.
 - If this route returns `409 auth_required`, WordPress clears the local connection and prompts the user to reconnect.
 
@@ -330,13 +332,13 @@ Behavior:
 thread/start { "ephemeral": true, ... }
 ```
 
-4. Starts a turn with the flattened input text and optional controls.
-5. Waits for notifications associated with the turn.
+4. Confirms the generation policy echo, then starts a turn with the flattened input text and optional controls.
+5. Waits for turn notifications within one wall-clock deadline; on expiry attempts `turn/interrupt` and returns HTTP 504 without partial output.
 6. Collects output from:
    - `item/agentMessage/delta`
    - `item/completed`
    - `turn/completed`
-7. If no direct text was captured, falls back to `thread/read` and extracts the final agent message from the completed turn.
+7. Requires a successfully completed turn; recovers text from terminal items or streamed deltas. Missing output fails. Ephemeral threads do not support history recovery, so no `thread/read` is sent.
 8. Reads account and rate-limit data again after generation.
 9. Returns a normalized text response.
 
@@ -356,12 +358,12 @@ Behavior:
 1. Rejects with `409 auth_required` if `auth.json` is missing.
 2. Starts a short-lived `codex app-server` session for that user.
 3. Calls `modelProvider/capabilities/read` and rejects with `409 image_generation_unavailable` unless `imageGeneration` is true.
-4. Creates an ephemeral thread without a `model` override.
+4. Creates an ephemeral thread without a `model` override and confirms its generation policy echo.
 5. Starts a turn with one text input part containing the image prompt.
-6. Waits for notifications associated with the turn.
+6. Waits for turn notifications within one wall-clock deadline; timeout interrupts the turn and fails without partial output.
 7. Captures `item/completed` notifications whose `params.item.type` is `imageGeneration`.
 8. Treats a non-empty `params.item.result` as deliverable image data even if the item status string is still `generating`.
-9. If no image item was captured before `turn/completed`, falls back to plain `thread/read` without `includeTurns` and searches the returned turn items.
+9. Requires a successfully completed turn and also inspects its terminal items. Missing images fail; no ephemeral-history request is sent.
 10. Reads account and rate-limit data again after generation.
 11. Returns a normalized image response with `imageBase64`, `mimeType`, optional `revisedPrompt`, optional local `artifacts.savedPath`, and token usage when Codex emits it.
 
@@ -392,7 +394,7 @@ If the final text looks like JSON, the sidecar also attempts `json.loads()` and 
 
 ### Usage accounting
 
-The sidecar listens for `thread/tokenUsage/updated` and returns the per-turn `last` bucket when present:
+The sidecar listens for `thread/tokenUsage/updated` and uses the `total` bucket for the ephemeral single-turn thread, which counts all model responses in that turn. It falls back to `last` when `total` is missing or malformed:
 
 ```json
 {
