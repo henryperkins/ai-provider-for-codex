@@ -60,6 +60,7 @@ requirements.
 The audited Codex stable target is **0.162.1**. Verify the official binary's
 checksum and exercise the real sidecar JSON-RPC transport with an isolated,
 unauthenticated `CODEX_HOME`. These checks cover initialization, capability probing,
+generation-thread approval and sandbox policies, disabled host-tool features,
 process restart, and device-code protocol availability. To run them locally on Linux:
 
 ```sh

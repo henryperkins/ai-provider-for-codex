@@ -70,9 +70,6 @@ class JsonRpcSession:
             return self
 
         ensure_codex_home(self._codex_home)
-        env = os.environ.copy()
-        env["CODEX_HOME"] = str(self._codex_home)
-        env["HOME"] = str(self._codex_home)
 
         self._proc = subprocess.Popen(
             [CODEX_BIN, "app-server"],
@@ -81,7 +78,7 @@ class JsonRpcSession:
             stderr=subprocess.DEVNULL,
             text=True,
             bufsize=1,
-            env=env,
+            env=codex_process_environment(self._codex_home),
             # Pin to a directory that can't be unlinked under us. Codex calls
             # getcwd() while loading config and aborts if the parent's CWD has
             # been replaced (e.g. a deploy that swapped inodes).
@@ -94,9 +91,12 @@ class JsonRpcSession:
             {
                 "clientInfo": {
                     "name": "codex-wp-sidecar",
-                    "version": "2.1.3",
+                    "version": "2.1.4",
                 },
                 "capabilities": {
+                    # The empty thread environment list is an experimental
+                    # protocol field in the qualified Codex 0.162.1 baseline.
+                    "experimentalApi": True,
                     "optOutNotificationMethods": INITIALIZE_CAPABILITY_OPTOUTS,
                 },
             },
@@ -284,6 +284,7 @@ def _check_codex_cli() -> dict[str, Any]:
             capture_output=True,
             text=True,
             timeout=5,
+            env=codex_process_environment(STORAGE_ROOT / "_diagnostics"),
         )
     except FileNotFoundError:
         return {"id": "codex_cli", "label": label, "status": "fail", "detail": f"codex not found at {CODEX_BIN}"}
@@ -344,7 +345,7 @@ def run_diagnostics() -> dict[str, Any]:
 
 
 def _server_identity() -> dict[str, Any]:
-    return {"service": "codex-wp-sidecar", "version": "2.1.3"}
+    return {"service": "codex-wp-sidecar", "version": "2.1.4"}
 
 
 def ensure_storage_root() -> None:
@@ -359,6 +360,40 @@ def user_codex_home(wp_user_id: int) -> Path:
 
 def ensure_codex_home(codex_home: Path) -> None:
     codex_home.mkdir(parents=True, exist_ok=True)
+
+
+def codex_process_environment(codex_home: Path) -> dict[str, str]:
+    # Allow runtime paths explicitly: a name-based secret filter cannot catch
+    # arbitrary credentials, proxy URLs or future sidecar configuration keys.
+    path_variables = {"PATH", "PATHEXT", "SYSTEMROOT", "WINDIR"}
+    environment = {key: value for key, value in os.environ.items() if key.upper() in path_variables}
+    home = str(codex_home)
+    environment.update({"CODEX_HOME": home, "HOME": home, "USERPROFILE": home})
+    return environment
+
+
+def generation_thread_params(*, image_generation: bool = False) -> dict[str, Any]:
+    # Read-only sandboxing alone does not isolate other users' readable files.
+    # Empty environments block native image references before file access;
+    # disabling stable environment tools also removes apply_patch. New native
+    # image generation does not need a host filesystem environment.
+    return {
+        "ephemeral": True,
+        "approvalPolicy": "never",
+        "sandbox": "read-only",
+        "environments": [],
+        "config": {
+            "features.shell_tool": False,
+            "features.stable_environment_tools": False,
+            "features.view_image": False,
+            "features.multi_agent": False,
+            "features.multi_agent_v2": False,
+            # Model-selected agent backends can bypass the legacy feature flag.
+            "agents.enabled": False,
+            "features.image_generation": image_generation,
+            "web_search": "disabled",
+        },
+    }
 
 
 def auth_file_path(codex_home: Path) -> Path:
@@ -513,7 +548,7 @@ class RuntimeState:
             system_instruction = f"{system_instruction}\n\n{json_instruction}" if system_instruction else json_instruction
 
         with app_server_session(codex_home) as session:
-            thread_params: dict[str, Any] = {"ephemeral": True}
+            thread_params = generation_thread_params()
             if model:
                 thread_params["model"] = model
             if system_instruction:
@@ -664,7 +699,7 @@ class RuntimeState:
                     HTTPStatus.CONFLICT,
                 )
 
-            thread_params: dict[str, Any] = {"ephemeral": True}
+            thread_params = generation_thread_params(image_generation=True)
             if system_instruction:
                 thread_params["developerInstructions"] = system_instruction
 
@@ -1126,7 +1161,7 @@ STATE = RuntimeState()
 
 
 class RuntimeHandler(BaseHTTPRequestHandler):
-    server_version = "CodexWPSidecar/2.1.3"
+    server_version = "CodexWPSidecar/2.1.4"
 
     def do_GET(self) -> None:  # noqa: N802
         self._dispatch()

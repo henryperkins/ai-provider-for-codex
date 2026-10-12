@@ -30,6 +30,27 @@ It wraps `codex app-server`, stores per-user ChatGPT/Codex auth state on disk, a
 - `CODEX_RUNTIME_TURN_TIMEOUT` default: `300`
 - `CODEX_RUNTIME_LOGIN_TIMEOUT` default: `1800`
 
+Codex child processes receive only `PATH`, `PATHEXT`, `SYSTEMROOT` and `WINDIR`
+when present, plus `CODEX_HOME`, `HOME` and `USERPROFILE` set to the user's Codex
+directory. Provider keys, proxy settings and sidecar credentials are not
+forwarded. Codex uses the connected user's stored ChatGPT authentication.
+
+Text and image threads use `approvalPolicy: "never"`, `sandbox: "read-only"` and
+disable shell execution, local image viewing, both multi-agent backends and web
+search. Native image generation is enabled only for image threads when advertised by Codex.
+These settings are enforced by the sidecar on every generation thread.
+
+Generation threads also select no filesystem environments and disable stable
+environment tools. This prevents native image tools from reading local reference
+paths and removes `apply_patch`, while preserving new image generation and
+Codex's generated-artifact storage. The empty environment selection requires
+`experimentalApi` and is qualified against Codex 0.162.1; verify compatibility
+before using a different Codex version. Restart the sidecar after updating its source.
+
+Per-user directories separate Codex state within the sidecar's system account;
+they do not enforce operating-system isolation between users. Separate system
+accounts or filesystem confinement remain a deployment hardening step.
+
 ## Manual Run For Testing
 
 ```bash

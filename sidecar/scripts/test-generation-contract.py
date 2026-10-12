@@ -114,10 +114,69 @@ class GenerationContractTest(unittest.TestCase):
                 if kind == "text":
                     result = main.RuntimeState().generate_text(123, {"input": "Fixture prompt", **(payload or {})})
                 else:
-                    result = main.RuntimeState().generate_image(123, {"prompt": "Fixture image"})
+                    result = main.RuntimeState().generate_image(123, {"prompt": "Fixture image", **(payload or {})})
             except Exception as error:
                 result = error
         return result, fixture.requests
+
+    def test_text_generation_disables_host_tools_even_when_payload_requests_them(self):
+        result, requests = self.generate("text", [terminal(items=[text_item()])], payload={
+            "model": "fixture",
+            "systemInstruction": "Fixture system instruction",
+            "approvalPolicy": "on-request",
+            "sandbox": "danger-full-access",
+            "config": {"features.shell_tool": True, "web_search": "live"},
+        })
+        self.assertIsInstance(result, dict)
+        thread_params = next(params for method, params in requests if method == "thread/start")
+        self.assertEqual(thread_params, {
+            "ephemeral": True,
+            "approvalPolicy": "never",
+            "sandbox": "read-only",
+            "environments": [],
+            "config": {
+                "features.shell_tool": False,
+                "features.stable_environment_tools": False,
+                "features.view_image": False,
+                "features.multi_agent": False,
+                "features.multi_agent_v2": False,
+                "agents.enabled": False,
+                "features.image_generation": False,
+                "web_search": "disabled",
+            },
+            "model": "fixture",
+            "developerInstructions": "Fixture system instruction",
+        })
+
+    def test_image_generation_disables_host_tools_and_keeps_native_image_generation(self):
+        result, requests = self.generate("image", [terminal(items=[image_item()])], payload={
+            "systemInstruction": "Fixture image instruction",
+            "approvalPolicy": "on-request",
+            "sandbox": "danger-full-access",
+            "config": {"features.view_image": True, "agents.enabled": True},
+        })
+        self.assertIsInstance(result, dict)
+        self.assertEqual(result["imageBase64"], PNG)
+        thread_params = next(params for method, params in requests if method == "thread/start")
+        self.assertEqual(thread_params, {
+            "ephemeral": True,
+            "approvalPolicy": "never",
+            "sandbox": "read-only",
+            "environments": [],
+            "config": {
+                "features.shell_tool": False,
+                "features.stable_environment_tools": False,
+                "features.view_image": False,
+                "features.multi_agent": False,
+                "features.multi_agent_v2": False,
+                "agents.enabled": False,
+                "features.image_generation": True,
+                "web_search": "disabled",
+            },
+            "developerInstructions": "Fixture image instruction",
+        })
+        turn_params = next(params for method, params in requests if method == "turn/start")
+        self.assertIn("image_gen.imagegen", turn_params["input"][0]["text"])
 
     def test_failed_text_turn_never_returns_partial_success(self):
         result, _ = self.generate("text", [completed_item(text_item("partial")), terminal("failed")])
@@ -387,6 +446,7 @@ class HandshakeContractTest(unittest.TestCase):
                 spawn.return_value.stdin = io.StringIO()
                 session.start()
             initialize = request.call_args.args[1]
+            self.assertIs(initialize["capabilities"].get("experimentalApi"), True)
             self.assertNotIn("protocolVersion", initialize)
             messages = [json.loads(line) for line in spawn.return_value.stdin.getvalue().splitlines()]
             self.assertEqual([message["method"] for message in messages], ["initialized"])

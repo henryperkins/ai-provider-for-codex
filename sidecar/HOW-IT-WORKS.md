@@ -85,12 +85,30 @@ By default that is:
 /var/lib/codex-wp/users/<wp_user_id>/
 ```
 
-When the sidecar starts a `codex app-server` subprocess for a user, it sets both:
+When the sidecar starts a `codex app-server` subprocess for a user, it sets:
 
 - `CODEX_HOME=<that user's directory>`
 - `HOME=<that user's directory>`
+- `USERPROFILE=<that user's directory>`
 
 That causes `codex app-server` to read and write auth and runtime files inside that per-user directory instead of sharing state across users.
+
+The child environment contains only these homes and the available operating-system
+path variables `PATH`, `PATHEXT`, `SYSTEMROOT` and `WINDIR`. It does not inherit
+the sidecar's credentials, provider keys or proxy settings.
+
+Every text and image thread explicitly uses `approvalPolicy: "never"` and
+`sandbox: "read-only"`, disables `features.shell_tool`, `features.view_image`,
+`features.multi_agent`, `features.multi_agent_v2` and `agents.enabled`, and sets
+`web_search` to `"disabled"`. Native image generation is enabled only for image threads.
+Threads set `environments: []` and disable `features.stable_environment_tools`,
+so model tools have no host filesystem environment. Native image references fail
+before local files are read, and `apply_patch` is unavailable. New native image
+generation and per-user artifact storage remain available. The sidecar opts into
+`experimentalApi` for the empty environment selection in Codex 0.162.1.
+Separate directories under one system account do not provide operating-system
+isolation; deployments requiring that boundary need separate accounts or
+filesystem confinement.
 
 The sidecar itself only explicitly knows about `auth.json`:
 

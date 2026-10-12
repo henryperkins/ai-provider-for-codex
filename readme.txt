@@ -4,7 +4,7 @@ Tags: ai, codex, wordpress-ai-client
 Requires at least: 7.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.1.3
+Stable tag: 2.1.4
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -131,6 +131,10 @@ The sidecar is designed for localhost-only communication between WordPress and t
 Support is limited to documented, self-managed environments that can run the local sidecar runtime and the `codex` CLI on the same host as WordPress.
 
 == Changelog ==
+
+= 2.1.4 =
+
+* Harden sidecar generation sessions with explicit runtime policies and a minimal child-process environment.
 
 = 2.1.3 =
 * Extend WordPress AI's standard image-generation timeout from 90 to 360 seconds when Codex is the first preferred image model.

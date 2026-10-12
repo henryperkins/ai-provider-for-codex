@@ -84,6 +84,27 @@ def run(expected_version: str) -> None:
                     main.normalize_capabilities_payload(capabilities)["imageGeneration"] is capabilities["imageGeneration"],
                     "sidecar preserves the advertised image capability",
                 )
+                for image_generation in (False, True):
+                    kind = "image" if image_generation else "text"
+                    thread = session.request("thread/start", main.generation_thread_params(
+                        image_generation=image_generation,
+                    ), timeout=15)
+                    check(thread.get("approvalPolicy") == "never", f"{kind} threads never wait for approval")
+                    check(thread.get("sandbox", {}).get("type") == "readOnly", f"{kind} threads use a read-only sandbox")
+                    features = {}
+                    cursor = None
+                    while True:
+                        page = session.request("experimentalFeature/list", {
+                            "threadId": thread["thread"]["id"], "limit": 100, "cursor": cursor,
+                        }, timeout=15)
+                        features.update({feature["name"]: feature["enabled"] for feature in page["data"]})
+                        cursor = page.get("nextCursor")
+                        if not cursor:
+                            break
+                    for name in ("shell_tool", "stable_environment_tools", "view_image", "multi_agent", "multi_agent_v2"):
+                        check(features.get(name) is False, f"{kind} thread disables the real {name} feature")
+                    check(features.get("image_generation") is image_generation,
+                          f"{kind} thread {'enables' if image_generation else 'disables'} native image generation")
                 check(not (codex_home / "auth.json").exists(), "smoke test creates no authentication credentials")
             finally:
                 session.close()
