@@ -4,6 +4,7 @@ import hmac
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -26,6 +27,14 @@ REQUEST_TIMEOUT = float(os.environ.get("CODEX_RUNTIME_REQUEST_TIMEOUT", "60"))
 TURN_TIMEOUT = float(os.environ.get("CODEX_RUNTIME_TURN_TIMEOUT", "300"))
 LOGIN_TIMEOUT = float(os.environ.get("CODEX_RUNTIME_LOGIN_TIMEOUT", "1800"))
 DIAGNOSTIC_HANDSHAKE_TIMEOUT = 10.0
+# Total budget for the diagnostics policy probe (thread/start plus the feature
+# list). Together with the version and handshake limits it stays inside the
+# WordPress control-plane timeout for the diagnostics request.
+DIAGNOSTIC_POLICY_TIMEOUT = 4.0
+# The Codex CLI release this sidecar release was qualified against with the
+# compatibility smoke test and the offline tool-surface probe. Diagnostics warn
+# when another release is installed. Change it only after re-qualifying.
+QUALIFIED_CODEX_VERSION = "0.162.1"
 INITIALIZE_CAPABILITY_OPTOUTS = [
     "codex/event/agent_message_content_delta",
     "codex/event/reasoning_content_delta",
@@ -42,6 +51,22 @@ INITIALIZE_CAPABILITY_OPTOUTS = [
 # `-c features.<name>=false`: `--disable` refuses to start on an unknown
 # feature name, while `-c` silently ignores one.
 CODEX_DISABLED_FEATURES = ("apps", "plugins")
+# Files Codex 0.162.1 reads from a CODEX_HOME that the sidecar never writes.
+# MCP servers and hooks defined in config.toml or hooks.json run as host
+# processes outside the thread policy, and config.toml can also change where
+# requests go; .env adds variables to the Codex process; the AGENTS files add
+# instructions to every generation for that user.
+USER_CONFIG_OVERRIDE_FILES = ("config.toml", "hooks.json", ".env", "AGENTS.md", "AGENTS.override.md")
+# Features every generation thread must report as disabled: the thread config
+# turns off the first five, the app-server launch flags the last two.
+GENERATION_DISABLED_FEATURES = (
+    "shell_tool",
+    "stable_environment_tools",
+    "view_image",
+    "multi_agent",
+    "multi_agent_v2",
+    *CODEX_DISABLED_FEATURES,
+)
 
 
 def codex_app_server_command() -> list[str]:
@@ -314,6 +339,26 @@ def _check_codex_cli() -> dict[str, Any]:
     return {"id": "codex_cli", "label": label, "status": "pass", "detail": f"{version} at {CODEX_BIN}"}
 
 
+def _check_codex_version(cli_check: dict[str, Any]) -> dict[str, Any]:
+    label = "Codex version qualified"
+    match = re.match(r"codex-cli (\S+)", str(cli_check.get("detail") or ""))
+    found = match.group(1) if match else None
+    if found == QUALIFIED_CODEX_VERSION:
+        return {
+            "id": "codex_version",
+            "label": label,
+            "status": "pass",
+            "detail": f"{found} is the release this sidecar was qualified against",
+        }
+    return {
+        "id": "codex_version",
+        "label": label,
+        "status": "warn",
+        "detail": f"{found or 'An unrecognized version'} installed; "
+        f"this sidecar release is qualified against {QUALIFIED_CODEX_VERSION}",
+    }
+
+
 def _check_storage_root() -> dict[str, Any]:
     label = "Storage root writable"
     try:
@@ -326,35 +371,103 @@ def _check_storage_root() -> dict[str, Any]:
     return {"id": "storage_root", "label": label, "status": "pass", "detail": f"{STORAGE_ROOT} is writable"}
 
 
-def _check_app_server() -> dict[str, Any]:
+def _check_user_config_overrides() -> dict[str, Any]:
+    # Per-user directories should hold only auth and runtime state. A
+    # configuration file there was written by something other than the sidecar,
+    # for example an earlier unrestricted Codex run with the same home.
+    row = {"id": "user_config_overrides", "label": "No per-user Codex configuration"}
+    users = STORAGE_ROOT / "users"
+    found: list[Path] = []
+    try:
+        if users.is_dir():
+            for home in sorted(users.iterdir()):
+                if not home.is_dir():
+                    continue
+                for name in USER_CONFIG_OVERRIDE_FILES:
+                    path = home / name
+                    if path.is_symlink() or path.exists():
+                        found.append(path)
+    except OSError as exc:
+        return {**row, "status": "warn", "detail": f"could not scan {users}: {exc}"}
+    if not found:
+        return {**row, "status": "pass", "detail": f"no Codex configuration files under {users}"}
+    detail = ", ".join(str(path) for path in found[:5])
+    if len(found) > 5:
+        detail += f" and {len(found) - 5} more"
+    return {**row, "status": "warn", "detail": detail}
+
+
+def _check_app_server() -> list[dict[str, Any]]:
+    # Returns the handshake row and, once the handshake succeeds, the
+    # generation policy row from the same throwaway app-server.
     label = "app-server handshake"
     started = time.time()
     home = STORAGE_ROOT / "_diagnostics"
     session = JsonRpcSession(home)
     try:
-        session.start(initialize_timeout=DIAGNOSTIC_HANDSHAKE_TIMEOUT)
-    except FileNotFoundError:
-        return {"id": "app_server", "label": label, "status": "fail", "detail": f"codex not found at {CODEX_BIN}"}
-    except Exception as exc:  # noqa: BLE001 - any startup failure is a diagnostic failure
-        return {"id": "app_server", "label": label, "status": "fail", "detail": f"initialize failed: {exc}"}
+        try:
+            session.start(initialize_timeout=DIAGNOSTIC_HANDSHAKE_TIMEOUT)
+        except FileNotFoundError:
+            return [{"id": "app_server", "label": label, "status": "fail", "detail": f"codex not found at {CODEX_BIN}"}]
+        except Exception as exc:  # noqa: BLE001 - any startup failure is a diagnostic failure
+            return [{"id": "app_server", "label": label, "status": "fail", "detail": f"initialize failed: {exc}"}]
+        elapsed = time.time() - started
+        handshake = {
+            "id": "app_server",
+            "label": label,
+            "status": "pass",
+            "detail": f"initialize completed in {elapsed:.1f}s",
+        }
+        return [handshake, _check_generation_policy(session)]
     finally:
         session.close()
         # Probe only: don't leave a throwaway CODEX_HOME behind on disk.
         shutil.rmtree(home, ignore_errors=True)
-    elapsed = time.time() - started
-    return {"id": "app_server", "label": label, "status": "pass", "detail": f"initialize completed in {elapsed:.1f}s"}
+
+
+def _check_generation_policy(session: JsonRpcSession) -> dict[str, Any]:
+    # Starts one ephemeral thread with the exact generation parameters and
+    # reads back what Codex applied. No account or model request is involved.
+    row = {"id": "generation_policy", "label": "Generation policy enforced"}
+    deadline = time.monotonic() + DIAGNOSTIC_POLICY_TIMEOUT
+    try:
+        thread_started = session.request(
+            "thread/start", generation_thread_params(), timeout=DIAGNOSTIC_POLICY_TIMEOUT
+        )
+        mismatch = generation_policy_mismatch(thread_started)
+        if mismatch is not None:
+            return {**row, "status": "fail", "detail": f"Codex did not confirm the requested {mismatch}"}
+        features = thread_feature_states(
+            session,
+            require_nested_string(thread_started, "thread", "id"),
+            timeout=max(0.0, deadline - time.monotonic()),
+        )
+    except Exception as exc:  # noqa: BLE001 - any probe failure is a diagnostic failure
+        return {**row, "status": "fail", "detail": f"policy probe failed: {exc}"}
+    for name in GENERATION_DISABLED_FEATURES:
+        if features.get(name) is not False:
+            return {**row, "status": "fail", "detail": f"The {name} feature is not disabled on generation threads"}
+    return {
+        **row,
+        "status": "pass",
+        "detail": "approval never, read-only sandbox, no environments; "
+        + ", ".join(GENERATION_DISABLED_FEATURES)
+        + " disabled",
+    }
 
 
 def run_diagnostics() -> dict[str, Any]:
     python_check = _check_python_version()
     cli_check = _check_codex_cli()
     storage_check = _check_storage_root()
-    checks = [python_check, cli_check, storage_check]
-    # The app-server handshake spawns codex; skip it when the CLI check already
-    # failed, to avoid a second failure row for the same root cause and a wasted
-    # spawn that would otherwise block on the handshake timeout.
+    checks = [python_check, cli_check, storage_check, _check_user_config_overrides()]
+    # The version row reads the CLI check, and the app-server rows spawn codex;
+    # skip them when the CLI check already failed, to avoid repeated failure
+    # rows for the same root cause and a wasted spawn that would otherwise
+    # block on the handshake timeout.
     if cli_check["status"] == "pass":
-        checks.append(_check_app_server())
+        checks.append(_check_codex_version(cli_check))
+        checks.extend(_check_app_server())
     ok = all(check["status"] == "pass" for check in checks)
     return {"ok": ok, **_server_identity(), "checks": checks}
 
@@ -411,29 +524,77 @@ def generation_thread_params(*, image_generation: bool = False) -> dict[str, Any
     }
 
 
-def require_generation_policy(thread_started: Any) -> None:
-    # Codex echoes the effective policy in the thread/start result. A different
-    # value means an unqualified Codex build or a rejected override; starting a
-    # turn in that state would silently drop the isolation guarantee. A thread
-    # whose environment selection is not empty gets the local host environment
-    # (rooted at "/" for sidecar sessions), so that is checked as well.
+def thread_policy_echo(thread_started: Any) -> tuple[Any, Any, Any]:
+    # Codex echoes the effective policy in the thread/start result: approval
+    # policy, sandbox type and the thread's environment selection.
     result = thread_started if isinstance(thread_started, dict) else {}
-    approval = result.get("approvalPolicy")
     sandbox = result.get("sandbox")
-    sandbox_type = sandbox.get("type") if isinstance(sandbox, dict) else None
     thread = result.get("thread")
-    environments = thread.get("environments") if isinstance(thread, dict) else None
-    if approval != "never" or sandbox_type != "readOnly" or environments != []:
-        raise HttpError(
-            "runtime_policy_rejected",
-            "Codex did not apply the sidecar generation policy. Check the Codex version against the qualified release.",
-            HTTPStatus.BAD_GATEWAY,
-            data={
-                "approvalPolicy": policy_echo(approval),
-                "sandboxType": policy_echo(sandbox_type),
-                "environmentCount": len(environments) if isinstance(environments, list) else None,
-            },
+    return (
+        result.get("approvalPolicy"),
+        sandbox.get("type") if isinstance(sandbox, dict) else None,
+        thread.get("environments") if isinstance(thread, dict) else None,
+    )
+
+
+def generation_policy_mismatch(thread_started: Any) -> str | None:
+    # A different echo means an unqualified Codex build or a rejected override.
+    # A thread whose environment selection is not empty gets the local host
+    # environment (rooted at "/" for sidecar sessions), so that is checked too.
+    approval, sandbox_type, environments = thread_policy_echo(thread_started)
+    if approval != "never":
+        return "approvalPolicy"
+    if sandbox_type != "readOnly":
+        return "sandbox"
+    if environments != []:
+        return "environments"
+    return None
+
+
+def require_generation_policy(thread_started: Any) -> None:
+    # Starting a turn on a thread whose policy Codex did not confirm would
+    # silently drop the isolation guarantee, so the request fails instead.
+    if generation_policy_mismatch(thread_started) is None:
+        return
+    approval, sandbox_type, environments = thread_policy_echo(thread_started)
+    raise HttpError(
+        "runtime_policy_rejected",
+        "Codex did not apply the sidecar generation policy. Check the Codex version against the qualified release.",
+        HTTPStatus.BAD_GATEWAY,
+        data={
+            "approvalPolicy": policy_echo(approval),
+            "sandboxType": policy_echo(sandbox_type),
+            "environmentCount": len(environments) if isinstance(environments, list) else None,
+        },
+    )
+
+
+def thread_feature_states(session: JsonRpcSession, thread_id: str, *, timeout: float) -> dict[str, Any]:
+    # Lists every experimental feature as one thread sees it, which covers both
+    # the app-server launch flags and the thread's own config overrides.
+    # `timeout` is the budget for all pages together.
+    deadline = time.monotonic() + timeout
+    features: dict[str, Any] = {}
+    cursor: str | None = None
+    for _ in range(20):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError(f"experimentalFeature/list timed out after {timeout:.1f}s")
+        page = session.request(
+            "experimentalFeature/list",
+            {"threadId": thread_id, "limit": 100, "cursor": cursor},
+            timeout=remaining,
         )
+        data = page.get("data") if isinstance(page, dict) else None
+        if not isinstance(data, list):
+            raise RuntimeError("experimentalFeature/list returned no feature list.")
+        for feature in data:
+            if isinstance(feature, dict) and isinstance(feature.get("name"), str):
+                features[feature["name"]] = feature.get("enabled")
+        cursor = page.get("nextCursor")
+        if not cursor:
+            return features
+    raise RuntimeError("experimentalFeature/list did not finish within 20 pages.")
 
 
 def policy_echo(value: Any) -> str | None:

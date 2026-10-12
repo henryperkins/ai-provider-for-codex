@@ -3103,6 +3103,45 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 				}
 			);
 
+			// Per-user configuration, Codex version and generation policy rows keep their status and carry remediation.
+			delete_transient( 'codex_provider_last_diagnostics' );
+			$codex_provider_with_mock_runtime(
+				static function ( $preempt, array $args, string $url ) use ( $codex_provider_http_json_response ) {
+					if ( false !== strpos( $url, '/v1/diagnostics' ) ) {
+						return $codex_provider_http_json_response(
+							200,
+							[
+								'ok'     => false,
+								'checks' => [
+									[ 'id' => 'user_config_overrides', 'label' => 'No per-user Codex configuration', 'status' => 'warn', 'detail' => '/var/lib/codex-wp/users/3/config.toml' ],
+									[ 'id' => 'codex_version', 'label' => 'Codex version qualified', 'status' => 'warn', 'detail' => '0.163.0 installed; this sidecar release is qualified against 0.162.1' ],
+									[ 'id' => 'app_server', 'label' => 'app-server handshake', 'status' => 'pass', 'detail' => 'initialize completed in 0.1s' ],
+									[ 'id' => 'generation_policy', 'label' => 'Generation policy enforced', 'status' => 'fail', 'detail' => 'The apps feature is not disabled on generation threads' ],
+								],
+							]
+						);
+					}
+					return $preempt;
+				},
+				static function () use ( $codex_provider_assert, $codex_provider_diagnostics_rows ) {
+					$body = \AIProviderForCodex\REST\DiagnosticsController::run()->get_data();
+					$rows = $codex_provider_diagnostics_rows( $body );
+					$codex_provider_assert( false === $body['ok'], 'An unqualified Codex version or unconfirmed policy must yield overall ok=false.' );
+					$codex_provider_assert( 'warn' === $rows['codex_version']['status'], 'An unqualified Codex version should surface as a warning row.' );
+					$codex_provider_assert( '' !== $rows['codex_version']['remediation'], 'The Codex version row must include remediation.' );
+					$codex_provider_assert( 'fail' === $rows['generation_policy']['status'], 'An unconfirmed generation policy should surface as a fail row.' );
+					$codex_provider_assert( '' !== $rows['generation_policy']['remediation'], 'The generation policy row must include remediation.' );
+					$codex_provider_assert( 'warn' === $rows['user_config_overrides']['status'], 'Per-user Codex configuration should surface as a warning row.' );
+					$codex_provider_assert( '' !== $rows['user_config_overrides']['remediation'], 'The per-user configuration row must include remediation.' );
+					$codex_provider_assert( '' === $rows['app_server']['remediation'], 'A passing row must not carry remediation.' );
+					$verdict = get_transient( 'codex_provider_last_diagnostics' );
+					$codex_provider_assert(
+						is_array( $verdict ) && in_array( 'Codex version qualified', (array) $verdict['failed'], true ) && in_array( 'Generation policy enforced', (array) $verdict['failed'], true ),
+						'The settings card verdict must count the version warning and the policy failure as issues.'
+					);
+				}
+			);
+
 			// 401 => bearer fail, reachable pass.
 			$codex_provider_with_mock_runtime(
 				static function ( $preempt, array $args, string $url ) use ( $codex_provider_http_json_response ) {
