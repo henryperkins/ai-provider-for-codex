@@ -30,7 +30,9 @@ class ProcessSecurityTest(unittest.TestCase):
         fixture.write_text(
             "import json, os, sys\n"
             "from pathlib import Path\n"
-            f"Path({str(self.environment_report)!r}).write_text(json.dumps(dict(os.environ)))\n"
+            # Tests clear the parent environment, so __ARGV__ cannot collide with
+            # an inherited variable; they pop it before comparing environments.
+            f"Path({str(self.environment_report)!r}).write_text(json.dumps({{**os.environ, '__ARGV__': sys.argv[1:]}}))\n"
             "if '--version' in sys.argv:\n"
             "    print('codex-cli fixture')\n"
             "    sys.exit(0)\n"
@@ -86,6 +88,11 @@ class ProcessSecurityTest(unittest.TestCase):
             "CODEX_WP_STORAGE_ROOT": "/shared/storage",
             "TEMP": "/shared/temp",
         })
+        # The real child receives the account-backed feature opt-outs.
+        self.assertEqual(
+            environment.pop("__ARGV__"),
+            ["app-server", "--disable", "apps", "--disable", "plugins"],
+        )
         # CPython may add LC_CTYPE while coercing the fixture's empty locale.
         environment.pop("LC_CTYPE", None)
         self.assertEqual(environment, {
@@ -100,6 +107,7 @@ class ProcessSecurityTest(unittest.TestCase):
 
     def test_app_server_starts_without_optional_parent_path_variables(self):
         environment = self.start_session({"CODEX_WP_BEARER_TOKEN": "fixture-bearer"})
+        environment.pop("__ARGV__")
         environment.pop("LC_CTYPE", None)
         self.assertEqual(environment, {
             "HOME": str(self.home),
@@ -117,6 +125,7 @@ class ProcessSecurityTest(unittest.TestCase):
             result = main._check_codex_cli()
         self.assertEqual(result["status"], "pass")
         environment = json.loads(self.environment_report.read_text(encoding="utf-8"))
+        self.assertEqual(environment.pop("__ARGV__"), ["--version"])
         environment.pop("LC_CTYPE", None)
         self.assertEqual(environment, {
             "PATH": "/fixture/bin",

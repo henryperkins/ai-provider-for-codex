@@ -445,6 +445,10 @@ class HandshakeContractTest(unittest.TestCase):
             with mock.patch.object(main.subprocess, "Popen") as spawn, mock.patch.object(main.threading, "Thread"), mock.patch.object(session, "request") as request:
                 spawn.return_value.stdin = io.StringIO()
                 session.start()
+            self.assertEqual(
+                spawn.call_args.args[0],
+                [main.CODEX_BIN, "app-server", "--disable", "apps", "--disable", "plugins"],
+            )
             initialize = request.call_args.args[1]
             self.assertIs(initialize["capabilities"].get("experimentalApi"), True)
             self.assertNotIn("protocolVersion", initialize)

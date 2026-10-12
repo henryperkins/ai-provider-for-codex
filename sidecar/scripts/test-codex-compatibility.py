@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Exercise the real sidecar transport against a named, unauthenticated Codex CLI.
 
-Run: CODEX_BIN=/path/to/codex python3 sidecar/scripts/test-codex-compatibility.py --version 0.155.1
+Run: CODEX_BIN=/path/to/codex python3 sidecar/scripts/test-codex-compatibility.py --version 0.162.1
 No login or generation is performed. Existing user credentials are never loaded.
 """
 
@@ -101,7 +101,10 @@ def run(expected_version: str) -> None:
                         cursor = page.get("nextCursor")
                         if not cursor:
                             break
-                    for name in ("shell_tool", "stable_environment_tools", "view_image", "multi_agent", "multi_agent_v2"):
+                    # apps and plugins come from the app-server launch flags,
+                    # the rest from the thread policy; both must reach the thread.
+                    for name in ("shell_tool", "stable_environment_tools", "view_image", "multi_agent", "multi_agent_v2",
+                                 "apps", "plugins"):
                         check(features.get(name) is False, f"{kind} thread disables the real {name} feature")
                     check(features.get("image_generation") is image_generation,
                           f"{kind} thread {'enables' if image_generation else 'disables'} native image generation")

@@ -34,6 +34,21 @@ INITIALIZE_CAPABILITY_OPTOUTS = [
     "codex/event/task_started",
     "codex/event/task_complete",
 ]
+# Process-wide Codex features that must never exist in a sidecar-owned
+# app-server. Apps and Plugins are account-backed: Apps exposes the connected
+# ChatGPT account's connectors to every turn, and Plugins syncs that account's
+# installed plugins onto this shared host and starts their MCP servers as host
+# processes, outside the per-thread policy. Use `--disable`, not
+# `-c features.<name>=false`: `--disable` refuses to start on an unknown
+# feature name, while `-c` silently ignores one.
+CODEX_DISABLED_FEATURES = ("apps", "plugins")
+
+
+def codex_app_server_command() -> list[str]:
+    command = [CODEX_BIN, "app-server"]
+    for feature in CODEX_DISABLED_FEATURES:
+        command.extend(["--disable", feature])
+    return command
 
 
 class JsonRpcError(RuntimeError):
@@ -72,7 +87,7 @@ class JsonRpcSession:
         ensure_codex_home(self._codex_home)
 
         self._proc = subprocess.Popen(
-            [CODEX_BIN, "app-server"],
+            codex_app_server_command(),
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
