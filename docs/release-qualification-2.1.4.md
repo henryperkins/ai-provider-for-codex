@@ -129,6 +129,8 @@ checksum verification.
 - Files: **48**, with no duplicate ZIP entries
 - SHA-256: `8f8fef0b8a6f37209387e201fe4e79d5087a022e0a5f276a546a3f599dc75dc1`
 
+Superseded by the rebuilt package recorded under "Post-Qualification Changes".
+
 Every file matches both the frozen source and working tree; extraction followed
 by `cmp` also passed for every packaged file. Development scripts, the probe,
 internal docs, dependencies and local artifacts are excluded. Version metadata
@@ -182,8 +184,8 @@ An independent review of the branch was triaged after the qualification above.
 Three findings held: proxy variables were withheld from Codex, a failed login
 start leaked a Codex process, and Codex launch errors were discarded. The source
 changes below were made on the branch after the qualified bytes, so the package
-hash above no longer describes the shipping tree. The ZIP must be rebuilt,
-re-hashed and re-checked before release.
+recorded above was superseded; the rebuilt package and re-run matrix are
+recorded at the end of this section.
 
 - `codex_process_environment()` also forwards `HTTP_PROXY`, `HTTPS_PROXY`,
   `ALL_PROXY` and `NO_PROXY` in any letter case. Codex 0.162.1 honors them by
@@ -213,6 +215,20 @@ binary, a deliberately unknown `--disable` name failed `initialize` in 0.01 s
 with `Codex reported: … Error: Unknown feature flag: …` in both the generation
 error and the diagnostics `app_server` row.
 
-Not re-run: the eight-configuration WordPress matrix, Plugin Check and
-packaging. Still not performed: Windows sidecar validation and authenticated
-text/image generation.
+Rebuilt package and matrix (October 13, 2026, commits `7c85cdb` and `aa5b97c`):
+the eight-configuration matrix was rebuilt on disposable sites (WordPress 7.0.7
+and 7.1.3, PHP 7.4.33 and 8.3.35, with and without AI 1.4.0 + MCP Adapter 0.7.0,
+MySQL 8.4 at the CI digest). Every configuration passed the complete
+`scripts/verify.sh` with exit 0, and the four AI/MCP configurations also passed
+the 11 persisted request-log assertions with zero live runtime requests.
+`scripts/package-release.sh` produced `scriptorium-ai-provider-for-codex-2.1.4.zip`:
+**132,638 bytes**, **48 files**, no duplicate entries, SHA-256
+`eee2485e24a5cf79bccb970840486f986d48a22bf7dd185b030322abc9ee1c8b`; every
+extracted file matches the committed tree. Plugin Check 2.1.0 reported zero
+`ERROR` rows and only the excluded `.github` `github_directory` warning on the
+source export, and no errors or warnings on the installed ZIP, which also passed
+the integration script and the 11 persisted logging assertions on WordPress
+7.1.3 / PHP 8.3 / AI 1.4 / MCP 0.7.
+
+Still not performed: Windows sidecar validation and authenticated text/image
+generation.
