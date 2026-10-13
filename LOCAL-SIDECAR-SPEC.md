@@ -176,8 +176,8 @@ The sidecar must ensure:
 
 Every `codex app-server` subprocess and generation thread enforces isolation across process environment, process features, and thread policies:
 
-1. **Process environment allowlist:** Child processes receive only `PATH`, `PATHEXT`, `SYSTEMROOT`, `WINDIR`, `SSL_CERT_FILE`, `SSL_CERT_DIR`, and `CODEX_CA_CERTIFICATE` from the parent environment, plus `CODEX_HOME`, `HOME`, and `USERPROFILE` set to the user's directory. Secrets, credentials, and proxy variables are strictly excluded.
-2. **Process launch flags:** `codex app-server --disable apps --disable plugins` is used for all child processes. This prevents exposure of ChatGPT account connectors (Apps) and disables synchronizing installed plugins or executing plugin-declared MCP servers on the host. The `--disable` flag fails closed on unrecognized flags.
+1. **Process environment allowlist:** Child processes receive only `PATH`, `PATHEXT`, `SYSTEMROOT`, `WINDIR`, the CA trust paths `SSL_CERT_FILE`, `SSL_CERT_DIR`, and `CODEX_CA_CERTIFICATE`, and the proxy settings `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, and `NO_PROXY` (any letter case) from the parent environment, plus `CODEX_HOME`, `HOME`, and `USERPROFILE` set to the user's directory. Secrets, credentials, and every other variable are strictly excluded.
+2. **Process launch flags:** `codex app-server --disable apps --disable plugins` is used for all child processes. This prevents exposure of ChatGPT account connectors (Apps) and disables synchronizing installed plugins or executing plugin-declared MCP servers on the host. The `--disable` flag fails closed on unrecognized flags; when the child exits during startup, the sidecar reports the exit code together with the last lines Codex wrote to stderr.
 3. **Thread generation policy:** Every ephemeral generation thread is created with:
    - `approvalPolicy: "never"`
    - `sandbox: "read-only"`

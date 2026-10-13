@@ -97,7 +97,7 @@ That causes `codex app-server` to read and write auth and runtime files inside t
 
 Every generation session enforces isolation across three distinct layers:
 
-1. **Process environment:** `codex app-server` receives only `PATH`, `PATHEXT`, `SYSTEMROOT`, `WINDIR`, `SSL_CERT_FILE`, `SSL_CERT_DIR` and `CODEX_CA_CERTIFICATE` from the parent process, plus `CODEX_HOME`, `HOME` and `USERPROFILE` pointing to the user's isolated directory. Provider API keys, proxy settings, sidecar credentials (`CODEX_WP_BEARER_TOKEN`), and database passwords are never passed to the child process. Proxies stay excluded because proxy URLs can embed credentials and would redirect user traffic; private CA trust anchors (`SSL_CERT_FILE` or `CODEX_CA_CERTIFICATE`) are forwarded when configured.
+1. **Process environment:** `codex app-server` receives only `PATH`, `PATHEXT`, `SYSTEMROOT`, `WINDIR`, the CA trust paths `SSL_CERT_FILE`, `SSL_CERT_DIR` and `CODEX_CA_CERTIFICATE`, and the proxy settings `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY` and `NO_PROXY` (any letter case) from the parent process, plus `CODEX_HOME`, `HOME` and `USERPROFILE` pointing to the user's isolated directory. Provider API keys, sidecar credentials (`CODEX_WP_BEARER_TOKEN`), database passwords and every other variable are never passed to the child process. Proxy variables are operator-owned network configuration like the CA paths: Codex honors them by default, and a host that reaches `chatgpt.com` only through a proxy cannot log in or generate without them. Under the enforced thread policy the model cannot read the child's environment.
 
 2. **Process features:** Every `codex app-server` is spawned with `--disable apps --disable plugins`. ChatGPT Apps exposes the connected ChatGPT account's external connectors to every generation turn, and Plugins synchronizes the account's installed plugins into the user's `CODEX_HOME` and starts declared MCP servers as host processes. Using `--disable` (rather than `-c features.<name>=false`) ensures startup fails closed if an unrecognized feature name is supplied.
 
@@ -122,7 +122,7 @@ When a session starts, it:
 
 1. Creates the user directory if needed.
 2. Spawns `codex app-server --disable apps --disable plugins` with the scoped child environment.
-3. Connects to its stdin/stdout.
+3. Connects to its stdin/stdout and drains stderr, keeping a short printable tail (five lines) for error messages.
 4. Starts a reader thread.
 5. Sends an `initialize` JSON-RPC request.
 
@@ -163,7 +163,7 @@ There are two distinct session lifetimes:
 
 For short-lived work, the sidecar uses `app_server_session(...)`, which starts a subprocess, does the work, and closes it immediately afterward.
 
-For device-code login, the sidecar keeps the subprocess alive in memory until the login completes or errors, because it needs to wait for an `account/login/completed` notification.
+For device-code login, the sidecar keeps the subprocess alive in memory until the login completes or errors, because it needs to wait for an `account/login/completed` notification. If the app-server fails to start or the device-code request fails, the sidecar closes that subprocess before returning the error; an unexpected exit reports the exit code together with Codex's last stderr lines.
 
 ## HTTP API
 

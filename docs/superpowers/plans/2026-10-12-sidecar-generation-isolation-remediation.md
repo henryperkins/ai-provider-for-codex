@@ -203,6 +203,7 @@ The sidecar owns `${CODEX_WP_STORAGE_ROOT}/users/<id>/` and never writes `config
 - Modify: `sidecar/config.example.env`, `sidecar/README.md`
 
 - [x] **Step 1:** In `codex_process_environment()`, extend the allowlist to `{"PATH", "PATHEXT", "SYSTEMROOT", "WINDIR", "SSL_CERT_FILE", "SSL_CERT_DIR", "CODEX_CA_CERTIFICATE"}`. These are file paths to public trust anchors, not credentials; proxies stay excluded (proxy URLs can embed credentials and would redirect the user's traffic).
+  - **Superseded 2026-10-12 after review:** `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY` and `NO_PROXY` are forwarded after all. Codex 0.162.1 honors them by default and 2.1.3 forwarded the whole environment, so withholding them silently broke proxy-only hosts. See `docs/release-qualification-2.1.4.md`, "Post-Qualification Changes".
 
 - [x] **Step 2:** Tests: add the three variables to the parent environment in `test_app_server_child_receives_only_runtime_paths_and_scoped_homes` and expect them in the child; keep `HTTPS_PROXY`, `OPENAI_API_KEY`, `CODEX_WP_BEARER_TOKEN` and the unclassified credential excluded.
 

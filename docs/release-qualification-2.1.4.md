@@ -13,7 +13,8 @@ were added afterward; the shipping bytes remain those tested here.
 Every app-server launch uses `--disable apps --disable plugins` and a scoped
 child environment. Only operating-system path variables and the three CA trust
 path variables are inherited. User homes are scoped; provider keys, bearer
-tokens, database credentials and proxy variables are excluded.
+tokens and database credentials are excluded. (The qualified tree also excluded
+proxy variables; they are forwarded since the post-qualification change below.)
 
 Text and image threads request approval `never`, sandbox `read-only`, no
 environments, disabled shell/environment/image-view/multi-agent tools and
@@ -174,3 +175,44 @@ Historical authenticated/adversarial session results are not substituted for thi
 observational probe. Intended-host checks in [the local release gate](local-release-gate.md)
 remain separate from this local qualification. No push, PR or publication is
 part of these local checks.
+
+## Post-Qualification Changes (October 12, 2026)
+
+An independent review of the branch was triaged after the qualification above.
+Three findings held: proxy variables were withheld from Codex, a failed login
+start leaked a Codex process, and Codex launch errors were discarded. The source
+changes below were made on the branch after the qualified bytes, so the package
+hash above no longer describes the shipping tree. The ZIP must be rebuilt,
+re-hashed and re-checked before release.
+
+- `codex_process_environment()` also forwards `HTTP_PROXY`, `HTTPS_PROXY`,
+  `ALL_PROXY` and `NO_PROXY` in any letter case. Codex 0.162.1 honors them by
+  default (`respect_system_proxy` is off, so the transport-default route reads
+  them) and 2.1.3 forwarded the whole environment, so withholding them would have
+  broken proxy-only hosts silently; no diagnostics row can detect that failure.
+- `RuntimeState.start_login` closes the app-server session when initialization
+  or the device-code request fails. Previously the child stayed alive, holding
+  the user's `CODEX_HOME`, until the sidecar restarted.
+- `JsonRpcSession` drains the child's stderr into a five-line tail (240
+  characters per line) and appends it to unexpected-exit errors, which are also
+  written once to the sidecar's own stderr. A refused launch now reads
+  `Unknown feature flag: …` instead of only an exit code.
+- `readme.txt` records the proxy forwarding, the qualified-release requirement
+  and the login fix; the sidecar documentation, spec and plan were aligned.
+
+Re-run on the changed tree (host Python 3.14.4, PHP 8.4.26, Node 24, local Codex
+CLI 0.162.1, no login or generation): every step of `scripts/verify.sh` except
+the WP-CLI integration script passed, including `test-diagnostics.py` 32,
+`test-generation-contract.py` 43, `test-process-security.py` 6 (two new
+regressions: login-start cleanup against a real child, stderr tail reporting),
+`test-image-generation.py` 9, `test-account-snapshot.py` 3, `test-token-usage.py`,
+the standalone PHP request-log, runtime-client and SDK contract tests and the
+JavaScript tests. `test-codex-compatibility.py --version 0.162.1` passed its 36
+checks on the host (not in a network-disabled container). Against the real
+binary, a deliberately unknown `--disable` name failed `initialize` in 0.01 s
+with `Codex reported: … Error: Unknown feature flag: …` in both the generation
+error and the diagnostics `app_server` row.
+
+Not re-run: the eight-configuration WordPress matrix, Plugin Check and
+packaging. Still not performed: Windows sidecar validation and authenticated
+text/image generation.
