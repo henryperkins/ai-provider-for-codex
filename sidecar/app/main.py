@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import collections
 import hmac
+import io
 import json
 import os
 import platform
@@ -31,6 +33,11 @@ DIAGNOSTIC_HANDSHAKE_TIMEOUT = 10.0
 # list). Together with the version and handshake limits it stays inside the
 # WordPress control-plane timeout for the diagnostics request.
 DIAGNOSTIC_POLICY_TIMEOUT = 4.0
+# How much of a Codex child's stderr the session keeps for error messages. Codex
+# explains launch failures there, such as an unknown `--disable` feature name,
+# and the sidecar would otherwise only see the exit code.
+CHILD_STDERR_TAIL_LINES = 5
+CHILD_STDERR_LINE_LIMIT = 240
 # The Codex CLI release this sidecar release was qualified against with the
 # compatibility smoke test and the offline tool-surface probe. Diagnostics warn
 # when another release is installed. Change it only after re-qualifying.
@@ -96,6 +103,8 @@ class JsonRpcSession:
         self._codex_home = codex_home
         self._proc: subprocess.Popen[str] | None = None
         self._reader: threading.Thread | None = None
+        self._stderr_reader: threading.Thread | None = None
+        self._stderr_tail: collections.deque[str] = collections.deque(maxlen=CHILD_STDERR_TAIL_LINES)
         self._write_lock = threading.Lock()
         self._state_lock = threading.RLock()
         self._notification_condition = threading.Condition(self._state_lock)
@@ -115,7 +124,7 @@ class JsonRpcSession:
             codex_app_server_command(),
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
             text=True,
             bufsize=1,
             env=codex_process_environment(self._codex_home),
@@ -126,6 +135,8 @@ class JsonRpcSession:
         )
         self._reader = threading.Thread(target=self._reader_loop, daemon=True)
         self._reader.start()
+        self._stderr_reader = threading.Thread(target=self._stderr_loop, daemon=True)
+        self._stderr_reader.start()
         self.request(
             "initialize",
             {
@@ -258,8 +269,17 @@ class JsonRpcSession:
                 proc.stdin.write(line)
                 proc.stdin.flush()
             except Exception as exc:
-                self._set_transport_error(f"Failed writing to Codex app-server: {exc}")
-                raise RuntimeError("Failed writing to Codex app-server.") from exc
+                # A refused launch (for example an unknown `--disable` feature)
+                # can exit before the first request is written. Report the exit
+                # and what Codex printed rather than the broken pipe.
+                return_code = self._wait_for_exit(proc, timeout=2)
+                message = (
+                    self._exit_message(return_code)
+                    if return_code is not None
+                    else f"Failed writing to Codex app-server: {exc}"
+                )
+                self._set_transport_error(message)
+                raise RuntimeError(message) from exc
 
     def _reader_loop(self) -> None:
         proc = self._proc
@@ -291,18 +311,71 @@ class JsonRpcSession:
             self._set_transport_error(f"Codex app-server transport failed: {exc}")
             return
 
-        return_code = proc.poll()
-        self._set_transport_error(
-            f"Codex app-server exited unexpectedly with code {return_code}."
-        )
+        self._set_transport_error(self._exit_message(self._wait_for_exit(proc, timeout=5)))
 
     def _set_transport_error(self, message: str) -> None:
         with self._notification_condition:
+            journal = self._transport_error is None and not self._closed
             if self._transport_error is None:
                 self._transport_error = message
             for waiter in self._pending.values():
                 waiter["event"].set()
             self._notification_condition.notify_all()
+        if journal:
+            # The HTTP handler suppresses request logging; a child that dies
+            # under a live session is worth one line in the service journal.
+            # Never let a broken stderr disturb the session state above.
+            try:
+                print(f"codex-wp-sidecar: {message}", file=sys.stderr, flush=True)
+            except Exception:
+                pass
+
+    @staticmethod
+    def _wait_for_exit(proc: subprocess.Popen[str], timeout: float) -> int | None:
+        try:
+            return proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            return proc.poll()
+
+    def _exit_message(self, return_code: int | None) -> str:
+        # Let the stderr drain finish so the tail is complete before reporting.
+        stderr_reader = self._stderr_reader
+        if stderr_reader is not None and stderr_reader is not threading.current_thread():
+            try:
+                stderr_reader.join(timeout=2)
+            except Exception:
+                pass
+        with self._state_lock:
+            tail = " | ".join(self._stderr_tail)
+        message = f"Codex app-server exited unexpectedly with code {return_code}."
+        if tail:
+            message += f" Codex reported: {tail}"
+        return message
+
+    def _stderr_loop(self) -> None:
+        # Drain the child's stderr so it can never block on a full pipe, keeping
+        # only a short, printable tail for error messages.
+        proc = self._proc
+        stream = proc.stderr if proc is not None else None
+        if not isinstance(stream, io.TextIOBase):
+            return
+        try:
+            for raw_line in stream.buffer:
+                text = "".join(
+                    character
+                    for character in raw_line.decode("utf-8", "replace").strip()
+                    if character.isprintable()
+                )
+                if text:
+                    with self._state_lock:
+                        self._stderr_tail.append(text[:CHILD_STDERR_LINE_LIMIT])
+        except Exception:
+            return
+        finally:
+            try:
+                stream.close()
+            except Exception:
+                pass
 
     def _raise_if_broken(self) -> None:
         if self._transport_error:
@@ -491,11 +564,15 @@ def ensure_codex_home(codex_home: Path) -> None:
 
 
 def codex_process_environment(codex_home: Path) -> dict[str, str]:
-    # Allow runtime paths and public CA trust anchors explicitly: a name-based
-    # secret filter cannot catch arbitrary credentials, proxy URLs or future
-    # sidecar configuration keys. Proxies stay excluded: proxy URLs can embed
-    # credentials and would redirect user traffic.
-    path_variables = {
+    # Allow operating-system paths, public CA trust anchors and proxy settings
+    # explicitly: a name-based secret filter cannot catch arbitrary credentials
+    # or future sidecar configuration keys. Proxy variables are operator-owned
+    # network configuration like the CA paths: Codex honors them by default, so
+    # a host that reaches chatgpt.com only through a proxy cannot log in or
+    # generate without them. The enforced thread policy keeps the model from
+    # reading the child's environment, and a `.env` in CODEX_HOME could add
+    # them anyway (diagnostics warn about that file).
+    allowed_variables = {
         "PATH",
         "PATHEXT",
         "SYSTEMROOT",
@@ -503,8 +580,14 @@ def codex_process_environment(codex_home: Path) -> dict[str, str]:
         "SSL_CERT_FILE",
         "SSL_CERT_DIR",
         "CODEX_CA_CERTIFICATE",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "NO_PROXY",
     }
-    environment = {key: value for key, value in os.environ.items() if key.upper() in path_variables}
+    # Names match case-insensitively and are copied as spelled, so lowercase
+    # proxy variables (the curl convention) reach Codex unchanged.
+    environment = {key: value for key, value in os.environ.items() if key.upper() in allowed_variables}
     home = str(codex_home)
     environment.update({"CODEX_HOME": home, "HOME": home, "USERPROFILE": home})
     return environment
@@ -643,23 +726,29 @@ class RuntimeState:
 
             auth_session_id = f"auth_{uuid.uuid4().hex[:20]}"
             codex_home = user_codex_home(wp_user_id)
-            session = JsonRpcSession(codex_home).start()
-            response = session.request(
-                "account/login/start",
-                {"type": "chatgptDeviceCode"},
-                timeout=REQUEST_TIMEOUT,
-            )
-
-            if not isinstance(response, dict) or "chatgptDeviceCode" != response.get("type"):
+            session = JsonRpcSession(codex_home)
+            try:
+                session.start()
+                response = session.request(
+                    "account/login/start",
+                    {"type": "chatgptDeviceCode"},
+                    timeout=REQUEST_TIMEOUT,
+                )
+                if not isinstance(response, dict) or "chatgptDeviceCode" != response.get("type"):
+                    raise RuntimeError("Device-code login did not return a device-code response.")
+                login_id = optional_string(response.get("loginId"))
+                verification_url = optional_string(response.get("verificationUrl"))
+                user_code = optional_string(response.get("userCode"))
+                if not login_id or not verification_url or not user_code:
+                    raise RuntimeError("Device-code login response was incomplete.")
+            except BaseException:
+                # Until the watcher thread owns this session, any failure (an
+                # app-server that never answers initialize, a refused launch, a
+                # failed device-code request) must stop the child; otherwise it
+                # keeps running with this user's CODEX_HOME until the sidecar
+                # restarts.
                 session.close()
-                raise RuntimeError("Device-code login did not return a device-code response.")
-
-            login_id = optional_string(response.get("loginId"))
-            verification_url = optional_string(response.get("verificationUrl"))
-            user_code = optional_string(response.get("userCode"))
-            if not login_id or not verification_url or not user_code:
-                session.close()
-                raise RuntimeError("Device-code login response was incomplete.")
+                raise
 
             login_session = {
                 "authSessionId": auth_session_id,

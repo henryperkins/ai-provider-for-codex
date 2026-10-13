@@ -6,6 +6,8 @@ No Codex process, credentials, login, or billable generation is used.
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import os
 import subprocess
@@ -89,6 +91,9 @@ class ProcessSecurityTest(unittest.TestCase):
             "DATABASE_PASSWORD": "fixture-password",
             "UNCLASSIFIED_CREDENTIAL": "fixture-credential",
             "HTTPS_PROXY": "https://fixture-credential@proxy.example.test",
+            "HTTP_PROXY": "http://proxy.example.test:3128",
+            "ALL_PROXY": "socks5://proxy.example.test:1080",
+            "no_proxy": "127.0.0.1,localhost",
             "CODEX_WP_STORAGE_ROOT": "/shared/storage",
             "TEMP": "/shared/temp",
         })
@@ -107,6 +112,13 @@ class ProcessSecurityTest(unittest.TestCase):
             "SSL_CERT_FILE": "/etc/ssl/certs/custom-ca.pem",
             "SSL_CERT_DIR": "/etc/ssl/certs",
             "CODEX_CA_CERTIFICATE": "/etc/ssl/certs/codex-ca.pem",
+            # Proxy settings are operator network configuration: Codex honors
+            # them by default and proxy-only hosts cannot reach chatgpt.com
+            # without them. Lowercase spellings pass through as written.
+            "HTTPS_PROXY": "https://fixture-credential@proxy.example.test",
+            "HTTP_PROXY": "http://proxy.example.test:3128",
+            "ALL_PROXY": "socks5://proxy.example.test:1080",
+            "no_proxy": "127.0.0.1,localhost",
             "HOME": str(self.home),
             "USERPROFILE": str(self.home),
             "CODEX_HOME": str(self.home),
@@ -140,6 +152,103 @@ class ProcessSecurityTest(unittest.TestCase):
             "USERPROFILE": str(self.root / "_diagnostics"),
             "CODEX_HOME": str(self.root / "_diagnostics"),
         })
+
+    def test_login_start_failures_terminate_the_real_child(self):
+        # start_login owns the app-server until its watcher thread takes over.
+        # A child that never answers initialize, or a failed device-code
+        # request, must not leave that child running with the user's CODEX_HOME.
+        login_fixture = self.root / "login-error-fixture.py"
+        login_fixture.write_text(
+            "import json, sys\n"
+            "for line in sys.stdin:\n"
+            "    message = json.loads(line)\n"
+            "    if 'id' not in message:\n"
+            "        continue\n"
+            "    if message.get('method') == 'initialize':\n"
+            "        print(json.dumps({'id': message['id'], 'result': {}}), flush=True)\n"
+            "    else:\n"
+            "        print(json.dumps({'id': message['id'], 'error': {'code': -32000, 'message': 'login unavailable'}}), flush=True)\n",
+            encoding="utf-8",
+        )
+        scenarios = {
+            "initialize timeout": ([sys.executable, "-c", "import time; time.sleep(30)"], TimeoutError, 0.3),
+            "device-code request error": ([sys.executable, str(login_fixture)], main.JsonRpcError, 10),
+        }
+        for name, (argv, expected, request_timeout) in scenarios.items():
+            with self.subTest(name):
+                processes = []
+
+                def launch(_command, **kwargs):
+                    process = self.real_popen(argv, **kwargs)
+                    processes.append(process)
+                    return process
+
+                state = main.RuntimeState()
+                try:
+                    with mock.patch.object(main.subprocess, "Popen", side_effect=launch), \
+                        mock.patch.object(main, "REQUEST_TIMEOUT", request_timeout):
+                        with self.assertRaises(expected):
+                            state.start_login(123)
+                    self.assertEqual(len(processes), 1)
+                    self.assertIsNotNone(processes[0].poll(), f"{name} left the login child running")
+                    self.assertEqual(state._login_sessions, {})
+                finally:
+                    for process in processes:
+                        if process.poll() is None:
+                            process.kill()
+                        process.wait(timeout=5)
+                        for stream in (process.stdout, process.stderr):
+                            if stream is not None:
+                                stream.close()
+
+    def test_launch_failure_reports_codex_stderr(self):
+        # Codex explains a refused launch (for example an unknown `--disable`
+        # feature name) only on stderr and exits before answering initialize.
+        # The session must surface a short tail of it instead of just the code.
+        script = (
+            "import sys\n"
+            "for index in range(1, 9):\n"
+            "    print(f'line-{index} ' + 'x' * 300, file=sys.stderr)\n"
+            "print('Error: Unknown feature flag: apps', file=sys.stderr)\n"
+            "sys.exit(1)\n"
+        )
+        processes = []
+
+        def launch(_command, **kwargs):
+            process = self.real_popen([sys.executable, "-c", script], **kwargs)
+            processes.append(process)
+            return process
+
+        session = main.JsonRpcSession(self.home)
+        journal = io.StringIO()
+        try:
+            with mock.patch.object(main.subprocess, "Popen", side_effect=launch), \
+                contextlib.redirect_stderr(journal):
+                with self.assertRaises(RuntimeError) as raised:
+                    session.start(initialize_timeout=5)
+                # The journal line is written by the reader thread after the
+                # waiter wakes; join it while stderr is still redirected.
+                if session._reader is not None:
+                    session._reader.join(timeout=5)
+        finally:
+            session.close()
+            for thread in (session._reader, session._stderr_reader):
+                if thread is not None:
+                    thread.join(timeout=5)
+            for process in processes:
+                if process.stdout is not None:
+                    process.stdout.close()
+        message = str(raised.exception)
+        self.assertIn("exited unexpectedly with code 1", message)
+        self.assertIn("Codex reported:", message)
+        self.assertIn("Unknown feature flag: apps", message)
+        # Only a short, bounded tail is kept: the oldest lines drop out and
+        # each retained line is truncated.
+        self.assertNotIn("line-1 ", message)
+        self.assertIn("line-8", message)
+        self.assertLess(len(message), 1400)
+        # The same message reaches the service journal once.
+        self.assertEqual(journal.getvalue().count("Unknown feature flag: apps"), 1)
 
     def test_initialize_timeout_terminates_the_real_child(self):
         # An inert real child never answers initialize. A failed session must
