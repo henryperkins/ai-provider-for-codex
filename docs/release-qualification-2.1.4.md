@@ -230,5 +230,13 @@ source export, and no errors or warnings on the installed ZIP, which also passed
 the integration script and the 11 persisted logging assertions on WordPress
 7.1.3 / PHP 8.3 / AI 1.4 / MCP 0.7.
 
+Production deployment (October 13, 2026, partial): the rebuilt 2.1.4 ZIP
+(SHA-256 `eee2485e…1c8b`) was installed over the active plugin on hperkins.blog
+through the WordPress.com plugin upload; the site reports version 2.1.4, active.
+The Windows sidecar behind the production gateway was not updated in this step:
+the gateway's public health endpoint still reports runtime version 2.1.2. The
+diagnostics run and the authenticated text/image generations remain pending
+until that host runs the 2.1.4 sidecar.
+
 Still not performed: Windows sidecar validation and authenticated text/image
 generation.
