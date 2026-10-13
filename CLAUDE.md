@@ -51,6 +51,7 @@ Runtime uses a **hand-rolled autoloader** (`src/autoload.php`), not Composer's. 
 - **Status reads are passive.** `SupportChecks` / the `/status` route / the Connectors card use stored state + a cheap `/healthz` probe only. They must **not** trigger live `account/snapshot` or generation calls — only explicit connect/refresh/generate do. `scripts/verify.php` asserts this.
 - **Effective model catalog is two sources, no cascade** (`ModelCatalogState`): the user's runtime snapshot if they're linked and it has models, otherwise the admin **fallback** list (`codex_runtime_allowed_models`, defaults `gpt-5-codex`, `gpt-5.3-codex`). Snapshot `models` remain text models; `codex-image` is appended only when `capabilities.imageGeneration === true`. Selected text model = user meta `codex_provider_preferred_model` → first text model, and text preferences must never emit `codex-image`.
 - **Bearer token must match raw** between WordPress and the sidecar's `CODEX_WP_BEARER_TOKEN`. `Settings::normalize_bearer_token_value()` strips a pasted `Bearer ` prefix and surrounding quotes but preserves opaque contents — keep that behavior.
+- **Sidecar isolation and launch flags** (`main.py`): `CODEX_DISABLED_FEATURES = ("apps", "plugins")` must be passed via `--disable` to every `codex app-server` launch. Generation threads must enforce `approvalPolicy: "never"`, `sandbox: "read-only"`, and `environments: []`; the sidecar refuses turns on mismatch. `QUALIFIED_CODEX_VERSION = "0.162.1"` must match the audited release and CI test matrix pin; diagnostics warn on version drift. Child processes get an allowlisted environment only (`codex_process_environment`: OS path variables, CA trust paths, proxy variables, scoped `HOME`/`USERPROFILE`/`CODEX_HOME`); `test-process-security.py` pins the exact set. Child stderr is drained into a short tail that is attached to unexpected-exit errors, so launch failures stay diagnosable.
 
 ## Runtime config precedence (`Runtime\Settings`)
 
@@ -110,8 +111,9 @@ python3 sidecar/scripts/test-image-generation.py
 A release must keep these in lockstep:
 - `scriptorium-ai-provider-for-codex.php`: the `Version:` header **and** the `const VERSION` (and `MIN_WP_VERSION` if it changes)
 - `readme.txt`: `Stable tag:` (must equal the scriptorium-ai-provider-for-codex.php `Version:`) and `Requires at least:` (must equal scriptorium-ai-provider-for-codex.php's, and be referenced in `PLUGIN-SUBMISSION-READINESS-CHECKLIST.md`)
-- `sidecar/app/main.py`: the reported `version` strings (`clientInfo`, the `/healthz` payload, `server_version`)
+- `sidecar/app/main.py`: the reported `version` strings (`clientInfo`, the `/healthz` payload, `server_version`), plus `QUALIFIED_CODEX_VERSION` and `CODEX_DISABLED_FEATURES`
+- `.github/workflows/verify.yml`: the pinned Codex version in the compatibility job
 
-`package-release.sh` enforces scriptorium-ai-provider-for-codex.php `Version:` == readme `Stable tag:`, and `verify.sh` enforces the `Requires at least:` parity (scriptorium-ai-provider-for-codex.php ↔ readme.txt ↔ checklist). The sidecar version strings are **not** script-enforced — bump them by hand.
+`package-release.sh` enforces scriptorium-ai-provider-for-codex.php `Version:` == readme `Stable tag:`, and `verify.sh` enforces the `Requires at least:` parity (scriptorium-ai-provider-for-codex.php ↔ readme.txt ↔ checklist). `verify.sh` also checks the three sidecar version strings; bump them together by hand. Bumping `QUALIFIED_CODEX_VERSION` requires re-running the compatibility smoke and offline tool-surface probe.
 
 `PLUGIN-SUBMISSION-READINESS-CHECKLIST.md` is the WordPress.org submission gate. Planning/spec artifacts live in `docs/superpowers/plans/` and `docs/superpowers/specs/`.

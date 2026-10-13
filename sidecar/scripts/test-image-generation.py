@@ -41,6 +41,15 @@ class FakeSession:
         raise TimeoutError("No matching fake notification.")
 
 
+def qualified_thread(thread_id):
+    # thread/start result as Codex 0.162.1 returns it for the sidecar's policy.
+    return {
+        "thread": {"id": thread_id, "environments": []},
+        "approvalPolicy": "never",
+        "sandbox": {"type": "readOnly", "networkAccess": False},
+    }
+
+
 def stored_auth_temp_root():
     temp = tempfile.TemporaryDirectory()
     storage_root = Path(temp.name)
@@ -128,7 +137,7 @@ class GenerateImageTest(unittest.TestCase):
         self.addCleanup(temp.cleanup)
         fake = FakeSession(
             {
-                "thread/start": {"thread": {"id": "thread_text"}},
+                "thread/start": qualified_thread("thread_text"),
                 "turn/start": {"turn": {"id": "turn_text"}},
                 "account/rateLimits/read": {"rateLimits": {"remaining": 5}},
                 "account/read": {
@@ -235,7 +244,7 @@ class GenerateImageTest(unittest.TestCase):
         fake = FakeSession(
             {
                 "modelProvider/capabilities/read": {"imageGeneration": True},
-                "thread/start": {"thread": {"id": "thread_123"}},
+                "thread/start": qualified_thread("thread_123"),
                 "turn/start": {"turn": {"id": "turn_123"}},
                 "account/rateLimits/read": {"rateLimits": {"remaining": 5}},
                 "account/read": {

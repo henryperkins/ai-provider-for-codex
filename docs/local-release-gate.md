@@ -21,6 +21,7 @@ Codex 0.163.0-alpha.5 is preview coverage only. Recheck available upstream relea
 4. Exercise the default logging sink against a real disposable database: persisted success and error entries, disabled logging, failed INSERTs, and duplicate counts. Keep the bridge until the upstream replacement meets these contracts.
 5. Run checksum-verified stable Codex startup/protocol checks without credentials or inference. Cover terminal status, streamed output recovery on ephemeral threads, capability errors, quota/reset failures, and complete-turn usage with deterministic regressions. Save preview results separately.
 6. Run `scripts/package-release.sh`, inspect the exact ZIP against source and exclusions, record SHA-256, and install/activate that ZIP on a disposable site. Run release-style Plugin Check and document any remaining findings.
+7. For sidecar isolation changes or a Codex version bump, also run the [offline tool-surface probe](../sidecar/scripts/offline-tool-surface-probe/README.md). Qualify model-facing and nested code-mode tool names, policy echoes and absence of Apps/Plugins traffic. Its mock sends no tool calls: image-thread surface checks and fixture-based image delivery must be reported separately from real Codex image-tool execution.
 
 ## Intended-host gate
 

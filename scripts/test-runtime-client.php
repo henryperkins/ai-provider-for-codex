@@ -107,6 +107,29 @@ if ( $caught instanceof $exception_class ) {
 	$codex_assert( false === strpos( $caught->getMessage(), 'sensitive-test-marker' ), 'JSON: raw invalid body does not leak through the displayed error' );
 }
 
+// A sidecar generation-policy refusal keeps its code and message and never clears authentication.
+$codex_reply = array(
+	'body'     => json_encode(
+		array(
+			'error' => array(
+				'code'    => 'runtime_policy_rejected',
+				'message' => 'Codex did not apply the sidecar generation policy. Check the Codex version against the qualified release.',
+				'data'    => array( 'approvalPolicy' => 'never', 'sandboxType' => null, 'environmentCount' => null ),
+			),
+		)
+	),
+	'response' => array( 'code' => 502, 'message' => 'Bad Gateway' ),
+);
+$caught = null;
+try { $client->post( '/v1/responses/text', array( 'input' => 'fixture' ) ); } catch ( Throwable $error ) { $caught = $error; }
+$codex_assert( $caught instanceof $exception_class, 'policy: refusal reaches the model logging catch as RuntimeRequestException' );
+if ( $caught instanceof $exception_class ) {
+	$codex_assert( 502 === $caught->get_status_code(), 'policy: HTTP status is retained' );
+	$codex_assert( 'runtime_policy_rejected' === $caught->get_runtime_error_code(), 'policy: sidecar error code passes through unchanged' );
+	$codex_assert( false !== strpos( $caught->getMessage(), 'did not apply the sidecar generation policy' ), 'policy: sidecar message passes through unchanged' );
+	$codex_assert( false === $caught->is_auth_required(), 'policy: refusal does not clear account authentication' );
+}
+
 $codex_reply = array( 'body' => '{"outputText":"fixture"}', 'response' => array( 'code' => 200, 'message' => 'OK' ) );
 $client->post( '/v1/responses/text', array() );
 $codex_assert( 360 === $codex_last_args['timeout'], 'options: unspecified generation timeout retains the existing default' );

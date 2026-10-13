@@ -11,6 +11,7 @@ import io
 import json
 import sys
 import tempfile
+import time
 import unittest
 from contextlib import contextmanager
 from pathlib import Path
@@ -45,13 +46,27 @@ def completed_item(item, turn_id="turn_test"):
     }}
 
 
+def thread_started(approval="never", sandbox=None, environments=()):
+    # Codex 0.162.1 thread/start result shape (fields the sidecar reads).
+    thread = {"id": "thread_test"}
+    if environments is not None:
+        thread["environments"] = list(environments)
+    return {
+        "thread": thread,
+        "approvalPolicy": approval,
+        "sandbox": {"type": "readOnly", "networkAccess": False} if sandbox is None else sandbox,
+    }
+
+
 class FixtureSession:
     """Only the external app-server boundary is replaced; runtime mapping is real."""
 
-    def __init__(self, notifications, capabilities=None):
+    def __init__(self, notifications, capabilities=None, started=None, *, on_wait=None):
         self.notifications = list(notifications)
         self.capabilities = {"imageGeneration": True} if capabilities is None else capabilities
+        self.started = thread_started() if started is None else started
         self.requests = []
+        self.on_wait = on_wait
 
     def request(self, method, params=None, *, timeout=None):
         self.requests.append((method, params))
@@ -62,9 +77,11 @@ class FixtureSession:
         if method == "thread/start":
             if params.get("ephemeral") is not True:
                 raise AssertionError("Generation must keep prompts in an ephemeral thread")
-            return {"thread": {"id": "thread_test"}}
+            return self.started
         if method == "turn/start":
             return {"turn": {"id": "turn_test"}}
+        if method == "turn/interrupt":
+            return {}
         if method == "account/read":
             return {"account": {"type": "chatgpt", "email": "fixture@example.test", "planType": "fixture"}}
         if method == "account/rateLimits/read":
@@ -78,6 +95,8 @@ class FixtureSession:
         raise AssertionError(f"Unexpected app-server request: {method}")
 
     def wait_for_notification(self, predicate, *, timeout=None):
+        if self.on_wait is not None:
+            self.on_wait(self, timeout)
         for index, notification in enumerate(self.notifications):
             if predicate(notification):
                 return self.notifications.pop(index)
@@ -97,8 +116,8 @@ class GenerationContractTest(unittest.TestCase):
         self.addCleanup(patcher.stop)
 
     @contextmanager
-    def session(self, notifications, capabilities=None):
-        fixture = FixtureSession(notifications, capabilities)
+    def session(self, notifications, capabilities=None, started=None, *, on_wait=None):
+        fixture = FixtureSession(notifications, capabilities, started, on_wait=on_wait)
 
         @contextmanager
         def open_session(codex_home):
@@ -108,16 +127,122 @@ class GenerationContractTest(unittest.TestCase):
         with mock.patch.object(main, "app_server_session", open_session):
             yield fixture
 
-    def generate(self, kind, notifications, capabilities=None, payload=None):
-        with self.session(notifications, capabilities) as fixture:
+    def generate(self, kind, notifications, capabilities=None, payload=None, started=None, *, on_wait=None):
+        with self.session(notifications, capabilities, started, on_wait=on_wait) as fixture:
             try:
                 if kind == "text":
                     result = main.RuntimeState().generate_text(123, {"input": "Fixture prompt", **(payload or {})})
                 else:
-                    result = main.RuntimeState().generate_image(123, {"prompt": "Fixture image"})
+                    result = main.RuntimeState().generate_image(123, {"prompt": "Fixture image", **(payload or {})})
             except Exception as error:
                 result = error
         return result, fixture.requests
+
+    def test_text_generation_disables_host_tools_even_when_payload_requests_them(self):
+        result, requests = self.generate("text", [terminal(items=[text_item()])], payload={
+            "model": "fixture",
+            "systemInstruction": "Fixture system instruction",
+            "approvalPolicy": "on-request",
+            "sandbox": "danger-full-access",
+            "config": {"features.shell_tool": True, "web_search": "live"},
+        })
+        self.assertIsInstance(result, dict)
+        thread_params = next(params for method, params in requests if method == "thread/start")
+        self.assertEqual(thread_params, {
+            "ephemeral": True,
+            "approvalPolicy": "never",
+            "sandbox": "read-only",
+            "environments": [],
+            "config": {
+                "features.shell_tool": False,
+                "features.stable_environment_tools": False,
+                "features.view_image": False,
+                "features.multi_agent": False,
+                "features.multi_agent_v2": False,
+                "agents.enabled": False,
+                "features.image_generation": False,
+                "web_search": "disabled",
+            },
+            "model": "fixture",
+            "developerInstructions": "Fixture system instruction",
+        })
+
+    def test_image_generation_disables_host_tools_and_keeps_native_image_generation(self):
+        result, requests = self.generate("image", [terminal(items=[image_item()])], payload={
+            "systemInstruction": "Fixture image instruction",
+            "approvalPolicy": "on-request",
+            "sandbox": "danger-full-access",
+            "config": {"features.view_image": True, "agents.enabled": True},
+        })
+        self.assertIsInstance(result, dict)
+        self.assertEqual(result["imageBase64"], PNG)
+        thread_params = next(params for method, params in requests if method == "thread/start")
+        self.assertEqual(thread_params, {
+            "ephemeral": True,
+            "approvalPolicy": "never",
+            "sandbox": "read-only",
+            "environments": [],
+            "config": {
+                "features.shell_tool": False,
+                "features.stable_environment_tools": False,
+                "features.view_image": False,
+                "features.multi_agent": False,
+                "features.multi_agent_v2": False,
+                "agents.enabled": False,
+                "features.image_generation": True,
+                "web_search": "disabled",
+            },
+            "developerInstructions": "Fixture image instruction",
+        })
+        turn_params = next(params for method, params in requests if method == "turn/start")
+        self.assertIn("image_gen.imagegen", turn_params["input"][0]["text"])
+
+    def assert_policy_refused(self, result, requests):
+        self.assertIsInstance(result, main.HttpError)
+        self.assertEqual(result.code, "runtime_policy_rejected")
+        self.assertEqual(result.status, 502)
+        self.assertNotIn("turn/start", [method for method, _ in requests])
+
+    def test_text_turn_is_refused_when_thread_policy_is_missing(self):
+        # Pre-0.162.1 shape: Codex echoed no effective policy at all.
+        result, requests = self.generate("text", [terminal(items=[text_item()])], started={"thread": {"id": "thread_test"}})
+        self.assert_policy_refused(result, requests)
+        self.assertEqual(result.data, {"approvalPolicy": None, "sandboxType": None, "environmentCount": None})
+
+    def test_image_turn_is_refused_when_sandbox_is_not_read_only(self):
+        result, requests = self.generate("image", [terminal(items=[image_item()])],
+                                         started=thread_started(sandbox={"type": "workspaceWrite"}))
+        self.assert_policy_refused(result, requests)
+        self.assertEqual(result.data["sandboxType"], "workspaceWrite")
+
+    def test_turn_is_refused_when_approval_policy_is_not_never(self):
+        for approval in ("onRequest", "untrusted", {"granular": {}}, None):
+            with self.subTest(approval=approval):
+                result, requests = self.generate("text", [terminal(items=[text_item()])],
+                                                 started=thread_started(approval=approval))
+                self.assert_policy_refused(result, requests)
+
+    def test_turn_is_refused_when_codex_selects_a_host_environment(self):
+        # Codex selects the local environment rooted at "/" when it ignores
+        # the requested empty selection; a missing selection is not proof.
+        local = {"environmentId": "local", "cwd": "/", "runtimeWorkspaceRoots": ["/"]}
+        for kind in ("text", "image"):
+            for environments in ([local], None):
+                with self.subTest(kind=kind, environments=environments):
+                    result, requests = self.generate(kind, [terminal(items=[text_item(), image_item()])],
+                                                     started=thread_started(environments=environments))
+                    self.assert_policy_refused(result, requests)
+
+    def test_policy_rejection_survives_the_real_http_dispatch_boundary(self):
+        started = thread_started(sandbox={"type": "dangerFullAccess", "detail": "x" * 500})
+        with self.session([terminal(items=[text_item()])], started=started) as fixture:
+            payload, status = self.dispatch("/v1/responses/text", {"wpUserId": 123, "input": "Fixture prompt"})
+        self.assertEqual(status, 502)
+        self.assertEqual(payload["error"]["code"], "runtime_policy_rejected")
+        self.assertEqual(payload["error"]["data"], {"approvalPolicy": "never", "sandboxType": "dangerFullAccess",
+                                                    "environmentCount": 0})
+        self.assertNotIn("x" * 100, json.dumps(payload))
+        self.assertNotIn("turn/start", [method for method, _ in fixture.requests])
 
     def test_failed_text_turn_never_returns_partial_success(self):
         result, _ = self.generate("text", [completed_item(text_item("partial")), terminal("failed")])
@@ -139,6 +264,78 @@ class GenerationContractTest(unittest.TestCase):
         result, _ = self.generate("image", [completed_item(image_item()), terminal("interrupted")])
         self.assertIsInstance(result, main.HttpError)
         self.assertEqual(result.code, "generation_interrupted")
+
+    def test_text_turn_wall_clock_timeout_sends_interrupt_and_raises(self):
+        notifications = [
+            {"method": "item/agentMessage/delta", "params": {"threadId": "thread_test", "turnId": "turn_test", "delta": "part1 "}},
+            {"method": "item/agentMessage/delta", "params": {"threadId": "thread_test", "turnId": "turn_test", "delta": "part2"}},
+            terminal(items=[text_item("completed text")]),
+        ]
+        with mock.patch.object(main, "TURN_TIMEOUT", 0.05):
+            result, requests = self.generate(
+                "text",
+                notifications,
+                on_wait=lambda _fix, _to: time.sleep(0.04),
+            )
+        self.assertIsInstance(result, TimeoutError)
+        self.assertIn("timed out", str(result))
+        interrupts = [params for method, params in requests if method == "turn/interrupt"]
+        self.assertEqual(interrupts, [{"threadId": "thread_test", "turnId": "turn_test"}])
+
+    def test_image_turn_wall_clock_timeout_sends_interrupt_and_raises(self):
+        notifications = [
+            completed_item(image_item()),
+            terminal(items=[image_item()]),
+        ]
+        with mock.patch.object(main, "TURN_TIMEOUT", 0.05):
+            result, requests = self.generate(
+                "image",
+                notifications,
+                on_wait=lambda _fix, _to: time.sleep(0.06),
+            )
+        self.assertIsInstance(result, TimeoutError)
+        self.assertIn("timed out", str(result))
+        interrupts = [params for method, params in requests if method == "turn/interrupt"]
+        self.assertEqual(interrupts, [{"threadId": "thread_test", "turnId": "turn_test"}])
+
+    def test_turn_completing_within_deadline_does_not_send_interrupt(self):
+        result, requests = self.generate("text", [terminal(items=[text_item("OK")])])
+        self.assertIsInstance(result, dict)
+        self.assertNotIn("turn/interrupt", [method for method, _ in requests])
+
+    def test_late_queued_completion_cannot_escape_the_wall_clock_deadline(self):
+        # wait_for_notification may find a queued completion before checking
+        # its own timeout. A late wakeup must not turn into partial success.
+        for kind in ("text", "image"):
+            with self.subTest(kind=kind):
+                clock = [0.0]
+
+                def late_wakeup(_fixture, _timeout):
+                    clock[0] = 2.0
+
+                with mock.patch.object(main.time, "monotonic", side_effect=lambda: clock[0]), \
+                    mock.patch.object(main, "TURN_TIMEOUT", 1.0):
+                    result, requests = self.generate(
+                        kind, [terminal(items=[text_item(), image_item()])], on_wait=late_wakeup,
+                    )
+                self.assertIsInstance(result, TimeoutError)
+                self.assertEqual(
+                    [params for method, params in requests if method == "turn/interrupt"],
+                    [{"threadId": "thread_test", "turnId": "turn_test"}],
+                )
+
+    def test_turn_timeout_returns_504_over_http_dispatch(self):
+        notifications = [
+            {"method": "item/agentMessage/delta", "params": {"threadId": "thread_test", "turnId": "turn_test", "delta": "part1"}},
+        ]
+        with mock.patch.object(main, "TURN_TIMEOUT", 0.05):
+            with self.session(notifications, on_wait=lambda _fix, _to: time.sleep(0.06)) as fixture:
+                payload, status = self.dispatch("/v1/responses/text", {"wpUserId": 123, "input": "Fixture prompt"})
+        self.assertEqual(status, 504)
+        self.assertEqual(payload["error"]["code"], "request_timeout")
+        self.assertIn("timed out", payload["error"]["message"])
+        interrupts = [params for method, params in fixture.requests if method == "turn/interrupt"]
+        self.assertEqual(interrupts, [{"threadId": "thread_test", "turnId": "turn_test"}])
 
     def test_completed_notification_requires_completed_status(self):
         for status in (None, "inProgress", "unknown", {}, []):
@@ -386,7 +583,12 @@ class HandshakeContractTest(unittest.TestCase):
             with mock.patch.object(main.subprocess, "Popen") as spawn, mock.patch.object(main.threading, "Thread"), mock.patch.object(session, "request") as request:
                 spawn.return_value.stdin = io.StringIO()
                 session.start()
+            self.assertEqual(
+                spawn.call_args.args[0],
+                [main.CODEX_BIN, "app-server", "--disable", "apps", "--disable", "plugins"],
+            )
             initialize = request.call_args.args[1]
+            self.assertIs(initialize["capabilities"].get("experimentalApi"), True)
             self.assertNotIn("protocolVersion", initialize)
             messages = [json.loads(line) for line in spawn.return_value.stdin.getvalue().splitlines()]
             self.assertEqual([message["method"] for message in messages], ["initialized"])

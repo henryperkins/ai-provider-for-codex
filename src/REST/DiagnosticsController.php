@@ -208,6 +208,12 @@ final class DiagnosticsController {
 				return __( 'Make the storage root writable by the sidecar service user (check CODEX_WP_STORAGE_ROOT ownership and permissions).', 'scriptorium-ai-provider-for-codex' );
 			case 'app_server':
 				return __( 'The Codex CLI could not start its app-server. Verify the codex binary runs, then review the sidecar logs, e.g. "journalctl -u codex-wp-sidecar -e".', 'scriptorium-ai-provider-for-codex' );
+			case 'codex_version':
+				return __( 'Install the Codex CLI release this plugin version was qualified against, or re-run the compatibility smoke test from the plugin source repository for the installed release before relying on it.', 'scriptorium-ai-provider-for-codex' );
+			case 'generation_policy':
+				return __( 'The installed Codex CLI did not confirm the sidecar\'s generation restrictions. Stop using the provider until the Codex version matches the qualified release, then restart the sidecar and run the check again.', 'scriptorium-ai-provider-for-codex' );
+			case 'user_config_overrides':
+				return __( 'Per-user Codex directories should contain only auth and runtime state. Review and remove the listed files: Codex applies them to that user\'s requests, and MCP servers or hooks defined there run as host processes.', 'scriptorium-ai-provider-for-codex' );
 			default:
 				return '';
 		}

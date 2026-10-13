@@ -104,7 +104,7 @@ jobs:
           retention-days: 30
 
   codex:
-    name: Codex 0.155.1 compatibility (no login or generation)
+    name: Codex 0.162.1 compatibility (no login or generation)
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -121,22 +121,22 @@ jobs:
       - name: Install exact Codex release
         run: |
           mkdir -p "$RUNNER_TEMP/codex" "$EVIDENCE_PATH"
-          curl --fail --silent --show-error --location --retry 3 https://github.com/openai/codex/releases/download/rust-v0.155.1/codex-x86_64-unknown-linux-musl.tar.gz --output "$RUNNER_TEMP/codex/codex.tar.gz"
-          printf '%s  %s\n' a0ef8b2debc3bf747e07b1a039354de31300ac0dcc2276498ba281470b5d9115 "$RUNNER_TEMP/codex/codex.tar.gz" | sha256sum --check
+          curl --fail --silent --show-error --location --retry 3 https://github.com/openai/codex/releases/download/rust-v0.162.1/codex-x86_64-unknown-linux-musl.tar.gz --output "$RUNNER_TEMP/codex/codex.tar.gz"
+          printf '%s  %s\n' 86f268d81b898f3e144c5ecff2ad2fda2c5802e042d6195b72538fe0fa125057 "$RUNNER_TEMP/codex/codex.tar.gz" | sha256sum --check
           tar -xzf "$RUNNER_TEMP/codex/codex.tar.gz" -C "$RUNNER_TEMP/codex"
           {
             git rev-parse HEAD
             "$CODEX_BIN" --version
             python3 --version
           } | tee "$EVIDENCE_PATH/environment.txt"
-          printf 'Tested revision: `%s`\n\nCodex: `0.155.1`. This job does not log in or generate content.\n' "$(git rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
+          printf 'Tested revision: `%s`\n\nCodex: `0.162.1`. This job does not log in or generate content.\n' "$(git rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
       - name: Real app-server compatibility smoke test
-        run: python3 sidecar/scripts/test-codex-compatibility.py --version 0.155.1 2>&1 | tee "$EVIDENCE_PATH/codex-compatibility.log"
+        run: python3 sidecar/scripts/test-codex-compatibility.py --version 0.162.1 2>&1 | tee "$EVIDENCE_PATH/codex-compatibility.log"
       - name: Save compatibility evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: codex-0.155.1-${{ github.sha }}
+          name: codex-0.162.1-${{ github.sha }}
           path: ${{ runner.temp }}/verification-evidence
           if-no-files-found: warn
           retention-days: 30
