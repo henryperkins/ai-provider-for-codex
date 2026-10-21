@@ -181,9 +181,13 @@ final class DiagnosticsController {
 		if ( 'pass' === ( $statuses['codex_cli'] ?? null ) ) {
 			$required[] = 'codex_version';
 			$required[] = 'app_server';
+		} elseif ( isset( $statuses['codex_version'] ) || isset( $statuses['app_server'] ) || isset( $statuses['generation_policy'] ) ) {
+			return false;
 		}
 		if ( 'pass' === ( $statuses['app_server'] ?? null ) ) {
 			$required[] = 'generation_policy';
+		} elseif ( isset( $statuses['generation_policy'] ) ) {
+			return false;
 		}
 		foreach ( $required as $id ) {
 			if ( ! isset( $statuses[ $id ] ) ) {

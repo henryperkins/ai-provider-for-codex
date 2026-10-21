@@ -274,6 +274,18 @@ $invalid = $codex_valid_diagnostics; $invalid['checks'][6]['status'] = 'fail'; $
 $invalid = $codex_valid_diagnostics; $invalid['checks'][3]['status'] = 'warn'; $codex_invalid_diagnostics['warning with success aggregate'] = $invalid;
 $invalid = $codex_valid_diagnostics; $invalid['ok'] = false; $codex_invalid_diagnostics['failure aggregate without issues'] = $invalid;
 $invalid = $codex_valid_diagnostics; $invalid['checks'][] = array( 'id' => 'reachable', 'label' => 'Injected reachability', 'status' => 'pass', 'detail' => '' ); $codex_invalid_diagnostics['reserved local check ID'] = $invalid;
+// A failed prerequisite cannot also report results from checks that never ran.
+foreach ( array( 4 => 'version', 5 => 'handshake', 6 => 'policy' ) as $index => $name ) {
+	$invalid = $codex_valid_diagnostics;
+	$invalid['ok'] = false;
+	$invalid['checks'] = array_slice( $invalid['checks'], 0, 4 );
+	$invalid['checks'][1]['status'] = 'fail';
+	$dependent = $codex_valid_diagnostics['checks'][ $index ];
+	$dependent['status'] = 'fail';
+	$invalid['checks'][] = $dependent;
+	$codex_invalid_diagnostics[ 'failed CLI with dependent ' . $name ] = $invalid;
+}
+$invalid = $codex_valid_diagnostics; $invalid['ok'] = false; $invalid['checks'][5]['status'] = 'fail'; $codex_invalid_diagnostics['failed handshake with policy result'] = $invalid;
 foreach ( $codex_invalid_diagnostics as $name => $payload ) {
 	$codex_reply = array( 'body' => json_encode( $payload ), 'response' => array( 'code' => 200, 'message' => 'OK' ) );
 	$diagnostics = AIProviderForCodex\REST\DiagnosticsController::run()->get_data();
