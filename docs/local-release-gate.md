@@ -11,7 +11,7 @@ GitHub Actions and billing resolution are outside this repository's release qual
 | MCP Adapter | 0.7.0 | 54ed266a8c46b71fdb8e5b8a7d35668f90fb8994 |
 | Codex CLI | 0.162.1 | 092d3acd6bec3e3a14bdc7e7a2810ab628ab759d |
 
-Codex 0.163.0-alpha.5 is preview coverage only. Recheck available upstream releases before the next qualification; these pins describe an audited baseline rather than a permanent latest-version claim.
+Codex 0.163.0 passed the credential-free startup/protocol smoke on October 21, 2026, but has not received full release qualification or the tool-surface probe. The qualified pin remains 0.162.1. Recheck available upstream releases before the next qualification; these pins describe an audited baseline rather than a permanent latest-version claim.
 
 ## Local checks
 
@@ -21,9 +21,20 @@ Codex 0.163.0-alpha.5 is preview coverage only. Recheck available upstream relea
 4. Exercise the default logging sink against a real disposable database: persisted success and error entries, disabled logging, failed INSERTs, and duplicate counts. Keep the bridge until the upstream replacement meets these contracts.
 5. Run checksum-verified stable Codex startup/protocol checks without credentials or inference. Cover terminal status, streamed output recovery on ephemeral threads, capability errors, quota/reset failures, and complete-turn usage with deterministic regressions. Save preview results separately.
 6. Run `scripts/package-release.sh`, inspect the exact ZIP against source and exclusions, record SHA-256, and install/activate that ZIP on a disposable site. Run release-style Plugin Check and document any remaining findings.
+7. For sidecar isolation changes or a Codex version bump, also run the [offline tool-surface probe](../sidecar/scripts/offline-tool-surface-probe/README.md). Qualify model-facing and nested code-mode tool names, policy echoes and absence of Apps/Plugins traffic. Its mock sends no tool calls: image-thread surface checks and fixture-based image delivery must be reported separately from real Codex image-tool execution.
 
 ## Intended-host gate
 
 Confirm the intended deployment category before deciding on authentication migration. Select the actual host and service configuration, then validate sidecar startup, loopback/bearer restrictions, per-user isolation, real device-code login, forced refresh, and bounded authorized text/image generation. Record the installed package checksum and Codex version. Do not store credentials in evidence.
 
+Windows requires its own security qualification. Disabling the shell tool does
+not establish confinement of code-mode `functions.exec`; the observational probe
+does not run model-supplied programs. Confirm the actual Windows restrictions and
+process cleanup before relying on the candidate for shared-host generation.
+
 Publication follows successful qualification and explicit release authorization. A local candidate is not a published release.
+
+Windows intended-host qualification for 2.1.4 completed on October 21, 2026.
+See the latest section of [the qualification record](release-qualification-2.1.4.md)
+for the actual code-mode execution checks, managed-auth text/image results and
+requalified package hash. Production verification remains a separate step.

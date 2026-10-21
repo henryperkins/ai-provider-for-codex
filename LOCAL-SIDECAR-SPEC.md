@@ -157,9 +157,10 @@ Default storage root:
 Per-user storage layout:
 
 - `/var/lib/codex-wp/users/<wp_user_id>/auth.json`
-- `/var/lib/codex-wp/users/<wp_user_id>/config.toml`
-- `/var/lib/codex-wp/users/<wp_user_id>/history.jsonl`
-- `/var/lib/codex-wp/users/<wp_user_id>/logs/`
+- `/var/lib/codex-wp/users/<wp_user_id>/state_*.sqlite` (Codex runtime state)
+- `/var/lib/codex-wp/users/<wp_user_id>/models_cache.json`
+
+Codex creates and refreshes `auth.json`; the sidecar uses it as the stored-auth marker and deletes it on disconnect. Codex may also create other runtime state and artifacts. The sidecar never writes per-user configuration such as `config.toml` or `hooks.json`.
 
 If multisite needs stronger isolation later, a site-scoped storage prefix can be introduced.
 
@@ -170,6 +171,29 @@ The sidecar must ensure:
 - data is created outside webroot
 - auth files use owner-only permissions where supported
 - directories use restrictive permissions where supported
+
+### Generation Isolation Contract
+
+Every `codex app-server` subprocess and generation thread enforces isolation across process environment, process features, and thread policies:
+
+1. **Process environment allowlist:** Child processes receive only `PATH`, `PATHEXT`, `SYSTEMROOT`, `WINDIR`, the CA trust paths `SSL_CERT_FILE`, `SSL_CERT_DIR`, and `CODEX_CA_CERTIFICATE`, and the proxy settings `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, and `NO_PROXY` (any letter case) from the parent environment, plus `CODEX_HOME`, `HOME`, and `USERPROFILE` set to the user's directory. Secrets, credentials, and every other variable are strictly excluded.
+2. **Process launch flags:** `codex app-server --disable apps --disable plugins` is used for all child processes. This prevents exposure of ChatGPT account connectors (Apps) and disables synchronizing installed plugins or executing plugin-declared MCP servers on the host. The `--disable` flag fails closed on unrecognized flags; when the child exits during startup, the sidecar reports the exit code together with the last lines Codex wrote to stderr.
+3. **Thread generation policy:** Every ephemeral generation thread is created with:
+   - `approvalPolicy: "never"`
+   - `sandbox: "read-only"`
+   - `environments: []`
+   - `features.shell_tool: false`
+   - `features.stable_environment_tools: false`
+   - `features.view_image: false`
+   - `features.multi_agent: false`
+   - `features.multi_agent_v2: false`
+   - `agents.enabled: false`
+   - `web_search: "disabled"`
+   - `features.image_generation: true` (only for image threads when advertised)
+4. **Policy confirmation enforcement:** The sidecar inspects the `thread/start` result. If Codex does not echo `approvalPolicy: "never"`, `sandbox.type: "readOnly"`, and `thread.environments: []`, the turn is immediately refused with HTTP 502 `runtime_policy_rejected`.
+5. **Turn deadline:** `CODEX_RUNTIME_TURN_TIMEOUT` (default 300s) is the wall-clock budget from `turn/start` through completion. It is not reset by notifications. On expiry the sidecar attempts `turn/interrupt` for up to five seconds, closes the process and returns HTTP 504 `request_timeout` without partial output. Setup and post-turn account reads retain their own RPC budgets.
+
+The host must not define MCP servers, hooks or plugin marketplaces in any applicable Codex configuration layer. Separately configured servers and enabled, trusted or managed hooks run as ordinary host processes outside the thread policy; `--disable plugins` covers account-synced plugins only. Diagnostics warn about per-user `config.toml`, `hooks.json`, `.env`, `AGENTS.md` and `AGENTS.override.md` without reading contents, but do not audit every host configuration layer. Directories under one service account separate state without providing OS-level isolation.
 
 ## Sidecar API Contract
 

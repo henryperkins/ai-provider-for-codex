@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import collections
 import hmac
+import io
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -26,6 +29,20 @@ REQUEST_TIMEOUT = float(os.environ.get("CODEX_RUNTIME_REQUEST_TIMEOUT", "60"))
 TURN_TIMEOUT = float(os.environ.get("CODEX_RUNTIME_TURN_TIMEOUT", "300"))
 LOGIN_TIMEOUT = float(os.environ.get("CODEX_RUNTIME_LOGIN_TIMEOUT", "1800"))
 DIAGNOSTIC_HANDSHAKE_TIMEOUT = 10.0
+# Total budget for the diagnostics policy probe (thread/start plus the feature
+# list). The WordPress diagnostics request allows 30 seconds for the version
+# check, handshake and policy probe, including up to four seconds of child
+# cleanup and response/transport headroom. Other control requests use 20 seconds.
+DIAGNOSTIC_POLICY_TIMEOUT = 4.0
+# How much of a Codex child's stderr the session keeps for error messages. Codex
+# explains launch failures there, such as an unknown `--disable` feature name,
+# and the sidecar would otherwise only see the exit code.
+CHILD_STDERR_TAIL_LINES = 5
+CHILD_STDERR_LINE_LIMIT = 240
+# The Codex CLI release this sidecar release was qualified against with the
+# compatibility smoke test and the offline tool-surface probe. Diagnostics warn
+# when another release is installed. Change it only after re-qualifying.
+QUALIFIED_CODEX_VERSION = "0.162.1"
 INITIALIZE_CAPABILITY_OPTOUTS = [
     "codex/event/agent_message_content_delta",
     "codex/event/reasoning_content_delta",
@@ -34,6 +51,37 @@ INITIALIZE_CAPABILITY_OPTOUTS = [
     "codex/event/task_started",
     "codex/event/task_complete",
 ]
+# Process-wide Codex features that must never exist in a sidecar-owned
+# app-server. Apps and Plugins are account-backed: Apps exposes the connected
+# ChatGPT account's connectors to every turn, and Plugins syncs that account's
+# installed plugins onto this shared host and starts their MCP servers as host
+# processes, outside the per-thread policy. Use `--disable`, not
+# `-c features.<name>=false`: `--disable` refuses to start on an unknown
+# feature name, while `-c` silently ignores one.
+CODEX_DISABLED_FEATURES = ("apps", "plugins")
+# Files Codex 0.162.1 reads from a CODEX_HOME that the sidecar never writes.
+# MCP servers and hooks defined in config.toml or hooks.json run as host
+# processes outside the thread policy, and config.toml can also change where
+# requests go; .env adds variables to the Codex process; the AGENTS files add
+# instructions to every generation for that user.
+USER_CONFIG_OVERRIDE_FILES = ("config.toml", "hooks.json", ".env", "AGENTS.md", "AGENTS.override.md")
+# Features every generation thread must report as disabled: the thread config
+# turns off the first five, the app-server launch flags the last two.
+GENERATION_DISABLED_FEATURES = (
+    "shell_tool",
+    "stable_environment_tools",
+    "view_image",
+    "multi_agent",
+    "multi_agent_v2",
+    *CODEX_DISABLED_FEATURES,
+)
+
+
+def codex_app_server_command() -> list[str]:
+    command = [CODEX_BIN, "app-server"]
+    for feature in CODEX_DISABLED_FEATURES:
+        command.extend(["--disable", feature])
+    return command
 
 
 class JsonRpcError(RuntimeError):
@@ -56,6 +104,8 @@ class JsonRpcSession:
         self._codex_home = codex_home
         self._proc: subprocess.Popen[str] | None = None
         self._reader: threading.Thread | None = None
+        self._stderr_reader: threading.Thread | None = None
+        self._stderr_tail: collections.deque[str] = collections.deque(maxlen=CHILD_STDERR_TAIL_LINES)
         self._write_lock = threading.Lock()
         self._state_lock = threading.RLock()
         self._notification_condition = threading.Condition(self._state_lock)
@@ -70,18 +120,15 @@ class JsonRpcSession:
             return self
 
         ensure_codex_home(self._codex_home)
-        env = os.environ.copy()
-        env["CODEX_HOME"] = str(self._codex_home)
-        env["HOME"] = str(self._codex_home)
 
         self._proc = subprocess.Popen(
-            [CODEX_BIN, "app-server"],
+            codex_app_server_command(),
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
             text=True,
             bufsize=1,
-            env=env,
+            env=codex_process_environment(self._codex_home),
             # Pin to a directory that can't be unlinked under us. Codex calls
             # getcwd() while loading config and aborts if the parent's CWD has
             # been replaced (e.g. a deploy that swapped inodes).
@@ -89,14 +136,19 @@ class JsonRpcSession:
         )
         self._reader = threading.Thread(target=self._reader_loop, daemon=True)
         self._reader.start()
+        self._stderr_reader = threading.Thread(target=self._stderr_loop, daemon=True)
+        self._stderr_reader.start()
         self.request(
             "initialize",
             {
                 "clientInfo": {
                     "name": "codex-wp-sidecar",
-                    "version": "2.1.3",
+                    "version": "2.1.4",
                 },
                 "capabilities": {
+                    # The empty thread environment list is an experimental
+                    # protocol field in the qualified Codex 0.162.1 baseline.
+                    "experimentalApi": True,
                     "optOutNotificationMethods": INITIALIZE_CAPABILITY_OPTOUTS,
                 },
             },
@@ -218,8 +270,17 @@ class JsonRpcSession:
                 proc.stdin.write(line)
                 proc.stdin.flush()
             except Exception as exc:
-                self._set_transport_error(f"Failed writing to Codex app-server: {exc}")
-                raise RuntimeError("Failed writing to Codex app-server.") from exc
+                # A refused launch (for example an unknown `--disable` feature)
+                # can exit before the first request is written. Report the exit
+                # and what Codex printed rather than the broken pipe.
+                return_code = self._wait_for_exit(proc, timeout=2)
+                message = (
+                    self._exit_message(return_code)
+                    if return_code is not None
+                    else f"Failed writing to Codex app-server: {exc}"
+                )
+                self._set_transport_error(message)
+                raise RuntimeError(message) from exc
 
     def _reader_loop(self) -> None:
         proc = self._proc
@@ -251,18 +312,71 @@ class JsonRpcSession:
             self._set_transport_error(f"Codex app-server transport failed: {exc}")
             return
 
-        return_code = proc.poll()
-        self._set_transport_error(
-            f"Codex app-server exited unexpectedly with code {return_code}."
-        )
+        self._set_transport_error(self._exit_message(self._wait_for_exit(proc, timeout=5)))
 
     def _set_transport_error(self, message: str) -> None:
         with self._notification_condition:
+            journal = self._transport_error is None and not self._closed
             if self._transport_error is None:
                 self._transport_error = message
             for waiter in self._pending.values():
                 waiter["event"].set()
             self._notification_condition.notify_all()
+        if journal:
+            # The HTTP handler suppresses request logging; a child that dies
+            # under a live session is worth one line in the service journal.
+            # Never let a broken stderr disturb the session state above.
+            try:
+                print(f"codex-wp-sidecar: {message}", file=sys.stderr, flush=True)
+            except Exception:
+                pass
+
+    @staticmethod
+    def _wait_for_exit(proc: subprocess.Popen[str], timeout: float) -> int | None:
+        try:
+            return proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            return proc.poll()
+
+    def _exit_message(self, return_code: int | None) -> str:
+        # Let the stderr drain finish so the tail is complete before reporting.
+        stderr_reader = self._stderr_reader
+        if stderr_reader is not None and stderr_reader is not threading.current_thread():
+            try:
+                stderr_reader.join(timeout=2)
+            except Exception:
+                pass
+        with self._state_lock:
+            tail = " | ".join(self._stderr_tail)
+        message = f"Codex app-server exited unexpectedly with code {return_code}."
+        if tail:
+            message += f" Codex reported: {tail}"
+        return message
+
+    def _stderr_loop(self) -> None:
+        # Drain the child's stderr so it can never block on a full pipe, keeping
+        # only a short, printable tail for error messages.
+        proc = self._proc
+        stream = proc.stderr if proc is not None else None
+        if not isinstance(stream, io.TextIOBase):
+            return
+        try:
+            for raw_line in stream.buffer:
+                text = "".join(
+                    character
+                    for character in raw_line.decode("utf-8", "replace").strip()
+                    if character.isprintable()
+                )
+                if text:
+                    with self._state_lock:
+                        self._stderr_tail.append(text[:CHILD_STDERR_LINE_LIMIT])
+        except Exception:
+            return
+        finally:
+            try:
+                stream.close()
+            except Exception:
+                pass
 
     def _raise_if_broken(self) -> None:
         if self._transport_error:
@@ -284,6 +398,7 @@ def _check_codex_cli() -> dict[str, Any]:
             capture_output=True,
             text=True,
             timeout=5,
+            env=codex_process_environment(STORAGE_ROOT / "_diagnostics"),
         )
     except FileNotFoundError:
         return {"id": "codex_cli", "label": label, "status": "fail", "detail": f"codex not found at {CODEX_BIN}"}
@@ -298,6 +413,26 @@ def _check_codex_cli() -> dict[str, Any]:
     return {"id": "codex_cli", "label": label, "status": "pass", "detail": f"{version} at {CODEX_BIN}"}
 
 
+def _check_codex_version(cli_check: dict[str, Any]) -> dict[str, Any]:
+    label = "Codex version qualified"
+    match = re.match(r"codex-cli (\S+)", str(cli_check.get("detail") or ""))
+    found = match.group(1) if match else None
+    if found == QUALIFIED_CODEX_VERSION:
+        return {
+            "id": "codex_version",
+            "label": label,
+            "status": "pass",
+            "detail": f"{found} is the release this sidecar was qualified against",
+        }
+    return {
+        "id": "codex_version",
+        "label": label,
+        "status": "warn",
+        "detail": f"{found or 'An unrecognized version'} installed; "
+        f"this sidecar release is qualified against {QUALIFIED_CODEX_VERSION}",
+    }
+
+
 def _check_storage_root() -> dict[str, Any]:
     label = "Storage root writable"
     try:
@@ -310,41 +445,109 @@ def _check_storage_root() -> dict[str, Any]:
     return {"id": "storage_root", "label": label, "status": "pass", "detail": f"{STORAGE_ROOT} is writable"}
 
 
-def _check_app_server() -> dict[str, Any]:
+def _check_user_config_overrides() -> dict[str, Any]:
+    # Per-user directories should hold only auth and runtime state. A
+    # configuration file there was written by something other than the sidecar,
+    # for example an earlier unrestricted Codex run with the same home.
+    row = {"id": "user_config_overrides", "label": "No per-user Codex configuration"}
+    users = STORAGE_ROOT / "users"
+    found: list[Path] = []
+    try:
+        if users.is_dir():
+            for home in sorted(users.iterdir()):
+                if not home.is_dir():
+                    continue
+                for name in USER_CONFIG_OVERRIDE_FILES:
+                    path = home / name
+                    if path.is_symlink() or path.exists():
+                        found.append(path)
+    except OSError as exc:
+        return {**row, "status": "warn", "detail": f"could not scan {users}: {exc}"}
+    if not found:
+        return {**row, "status": "pass", "detail": f"no Codex configuration files under {users}"}
+    detail = ", ".join(str(path) for path in found[:5])
+    if len(found) > 5:
+        detail += f" and {len(found) - 5} more"
+    return {**row, "status": "warn", "detail": detail}
+
+
+def _check_app_server() -> list[dict[str, Any]]:
+    # Returns the handshake row and, once the handshake succeeds, the
+    # generation policy row from the same throwaway app-server.
     label = "app-server handshake"
     started = time.time()
     home = STORAGE_ROOT / "_diagnostics"
     session = JsonRpcSession(home)
     try:
-        session.start(initialize_timeout=DIAGNOSTIC_HANDSHAKE_TIMEOUT)
-    except FileNotFoundError:
-        return {"id": "app_server", "label": label, "status": "fail", "detail": f"codex not found at {CODEX_BIN}"}
-    except Exception as exc:  # noqa: BLE001 - any startup failure is a diagnostic failure
-        return {"id": "app_server", "label": label, "status": "fail", "detail": f"initialize failed: {exc}"}
+        try:
+            session.start(initialize_timeout=DIAGNOSTIC_HANDSHAKE_TIMEOUT)
+        except FileNotFoundError:
+            return [{"id": "app_server", "label": label, "status": "fail", "detail": f"codex not found at {CODEX_BIN}"}]
+        except Exception as exc:  # noqa: BLE001 - any startup failure is a diagnostic failure
+            return [{"id": "app_server", "label": label, "status": "fail", "detail": f"initialize failed: {exc}"}]
+        elapsed = time.time() - started
+        handshake = {
+            "id": "app_server",
+            "label": label,
+            "status": "pass",
+            "detail": f"initialize completed in {elapsed:.1f}s",
+        }
+        return [handshake, _check_generation_policy(session)]
     finally:
         session.close()
         # Probe only: don't leave a throwaway CODEX_HOME behind on disk.
         shutil.rmtree(home, ignore_errors=True)
-    elapsed = time.time() - started
-    return {"id": "app_server", "label": label, "status": "pass", "detail": f"initialize completed in {elapsed:.1f}s"}
+
+
+def _check_generation_policy(session: JsonRpcSession) -> dict[str, Any]:
+    # Starts one ephemeral thread with the exact generation parameters and
+    # reads back what Codex applied. No account or model request is involved.
+    row = {"id": "generation_policy", "label": "Generation policy enforced"}
+    deadline = time.monotonic() + DIAGNOSTIC_POLICY_TIMEOUT
+    try:
+        thread_started = session.request(
+            "thread/start", generation_thread_params(), timeout=DIAGNOSTIC_POLICY_TIMEOUT
+        )
+        mismatch = generation_policy_mismatch(thread_started)
+        if mismatch is not None:
+            return {**row, "status": "fail", "detail": f"Codex did not confirm the requested {mismatch}"}
+        features = thread_feature_states(
+            session,
+            require_nested_string(thread_started, "thread", "id"),
+            timeout=max(0.0, deadline - time.monotonic()),
+        )
+    except Exception as exc:  # noqa: BLE001 - any probe failure is a diagnostic failure
+        return {**row, "status": "fail", "detail": f"policy probe failed: {exc}"}
+    for name in GENERATION_DISABLED_FEATURES:
+        if features.get(name) is not False:
+            return {**row, "status": "fail", "detail": f"The {name} feature is not disabled on generation threads"}
+    return {
+        **row,
+        "status": "pass",
+        "detail": "approval never, read-only sandbox, no environments; "
+        + ", ".join(GENERATION_DISABLED_FEATURES)
+        + " disabled",
+    }
 
 
 def run_diagnostics() -> dict[str, Any]:
     python_check = _check_python_version()
     cli_check = _check_codex_cli()
     storage_check = _check_storage_root()
-    checks = [python_check, cli_check, storage_check]
-    # The app-server handshake spawns codex; skip it when the CLI check already
-    # failed, to avoid a second failure row for the same root cause and a wasted
-    # spawn that would otherwise block on the handshake timeout.
+    checks = [python_check, cli_check, storage_check, _check_user_config_overrides()]
+    # The version row reads the CLI check, and the app-server rows spawn codex;
+    # skip them when the CLI check already failed, to avoid repeated failure
+    # rows for the same root cause and a wasted spawn that would otherwise
+    # block on the handshake timeout.
     if cli_check["status"] == "pass":
-        checks.append(_check_app_server())
+        checks.append(_check_codex_version(cli_check))
+        checks.extend(_check_app_server())
     ok = all(check["status"] == "pass" for check in checks)
     return {"ok": ok, **_server_identity(), "checks": checks}
 
 
 def _server_identity() -> dict[str, Any]:
-    return {"service": "codex-wp-sidecar", "version": "2.1.3"}
+    return {"service": "codex-wp-sidecar", "version": "2.1.4"}
 
 
 def ensure_storage_root() -> None:
@@ -361,6 +564,138 @@ def ensure_codex_home(codex_home: Path) -> None:
     codex_home.mkdir(parents=True, exist_ok=True)
 
 
+def codex_process_environment(codex_home: Path) -> dict[str, str]:
+    # Allow operating-system paths, public CA trust anchors and proxy settings
+    # explicitly: a name-based secret filter cannot catch arbitrary credentials
+    # or future sidecar configuration keys. Proxy variables are operator-owned
+    # network configuration like the CA paths: Codex honors them by default, so
+    # a host that reaches chatgpt.com only through a proxy cannot log in or
+    # generate without them. The enforced thread policy keeps the model from
+    # reading the child's environment, and a `.env` in CODEX_HOME could add
+    # them anyway (diagnostics warn about that file).
+    allowed_variables = {
+        "PATH",
+        "PATHEXT",
+        "SYSTEMROOT",
+        "WINDIR",
+        "SSL_CERT_FILE",
+        "SSL_CERT_DIR",
+        "CODEX_CA_CERTIFICATE",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "NO_PROXY",
+    }
+    # Names match case-insensitively and are copied as spelled, so lowercase
+    # proxy variables (the curl convention) reach Codex unchanged.
+    environment = {key: value for key, value in os.environ.items() if key.upper() in allowed_variables}
+    home = str(codex_home)
+    environment.update({"CODEX_HOME": home, "HOME": home, "USERPROFILE": home})
+    return environment
+
+
+def generation_thread_params(*, image_generation: bool = False) -> dict[str, Any]:
+    # Read-only sandboxing alone does not isolate other users' readable files.
+    # Empty environments block native image references before file access;
+    # disabling stable environment tools also removes apply_patch. New native
+    # image generation does not need a host filesystem environment.
+    return {
+        "ephemeral": True,
+        "approvalPolicy": "never",
+        "sandbox": "read-only",
+        "environments": [],
+        "config": {
+            "features.shell_tool": False,
+            "features.stable_environment_tools": False,
+            "features.view_image": False,
+            "features.multi_agent": False,
+            "features.multi_agent_v2": False,
+            # Model-selected agent backends can bypass the legacy feature flag.
+            "agents.enabled": False,
+            "features.image_generation": image_generation,
+            "web_search": "disabled",
+        },
+    }
+
+
+def thread_policy_echo(thread_started: Any) -> tuple[Any, Any, Any]:
+    # Codex echoes the effective policy in the thread/start result: approval
+    # policy, sandbox type and the thread's environment selection.
+    result = thread_started if isinstance(thread_started, dict) else {}
+    sandbox = result.get("sandbox")
+    thread = result.get("thread")
+    return (
+        result.get("approvalPolicy"),
+        sandbox.get("type") if isinstance(sandbox, dict) else None,
+        thread.get("environments") if isinstance(thread, dict) else None,
+    )
+
+
+def generation_policy_mismatch(thread_started: Any) -> str | None:
+    # A different echo means an unqualified Codex build or a rejected override.
+    # A thread whose environment selection is not empty gets the local host
+    # environment (rooted at "/" for sidecar sessions), so that is checked too.
+    approval, sandbox_type, environments = thread_policy_echo(thread_started)
+    if approval != "never":
+        return "approvalPolicy"
+    if sandbox_type != "readOnly":
+        return "sandbox"
+    if environments != []:
+        return "environments"
+    return None
+
+
+def require_generation_policy(thread_started: Any) -> None:
+    # Starting a turn on a thread whose policy Codex did not confirm would
+    # silently drop the isolation guarantee, so the request fails instead.
+    if generation_policy_mismatch(thread_started) is None:
+        return
+    approval, sandbox_type, environments = thread_policy_echo(thread_started)
+    raise HttpError(
+        "runtime_policy_rejected",
+        "Codex did not apply the sidecar generation policy. Check the Codex version against the qualified release.",
+        HTTPStatus.BAD_GATEWAY,
+        data={
+            "approvalPolicy": policy_echo(approval),
+            "sandboxType": policy_echo(sandbox_type),
+            "environmentCount": len(environments) if isinstance(environments, list) else None,
+        },
+    )
+
+
+def thread_feature_states(session: JsonRpcSession, thread_id: str, *, timeout: float) -> dict[str, Any]:
+    # Lists every experimental feature as one thread sees it, which covers both
+    # the app-server launch flags and the thread's own config overrides.
+    # `timeout` is the budget for all pages together.
+    deadline = time.monotonic() + timeout
+    features: dict[str, Any] = {}
+    cursor: str | None = None
+    for _ in range(20):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError(f"experimentalFeature/list timed out after {timeout:.1f}s")
+        page = session.request(
+            "experimentalFeature/list",
+            {"threadId": thread_id, "limit": 100, "cursor": cursor},
+            timeout=remaining,
+        )
+        data = page.get("data") if isinstance(page, dict) else None
+        if not isinstance(data, list):
+            raise RuntimeError("experimentalFeature/list returned no feature list.")
+        for feature in data:
+            if isinstance(feature, dict) and isinstance(feature.get("name"), str):
+                features[feature["name"]] = feature.get("enabled")
+        cursor = page.get("nextCursor")
+        if not cursor:
+            return features
+    raise RuntimeError("experimentalFeature/list did not finish within 20 pages.")
+
+
+def policy_echo(value: Any) -> str | None:
+    # Bound what reaches the HTTP envelope: only short strings, never payloads.
+    return value[:64] if isinstance(value, str) else None
+
+
 def auth_file_path(codex_home: Path) -> Path:
     return codex_home / "auth.json"
 
@@ -371,8 +706,9 @@ def now_timestamp() -> int:
 
 @contextmanager
 def app_server_session(codex_home: Path) -> Any:
-    session = JsonRpcSession(codex_home).start()
+    session = JsonRpcSession(codex_home)
     try:
+        session.start()
         yield session
     finally:
         session.close()
@@ -391,23 +727,29 @@ class RuntimeState:
 
             auth_session_id = f"auth_{uuid.uuid4().hex[:20]}"
             codex_home = user_codex_home(wp_user_id)
-            session = JsonRpcSession(codex_home).start()
-            response = session.request(
-                "account/login/start",
-                {"type": "chatgptDeviceCode"},
-                timeout=REQUEST_TIMEOUT,
-            )
-
-            if not isinstance(response, dict) or "chatgptDeviceCode" != response.get("type"):
+            session = JsonRpcSession(codex_home)
+            try:
+                session.start()
+                response = session.request(
+                    "account/login/start",
+                    {"type": "chatgptDeviceCode"},
+                    timeout=REQUEST_TIMEOUT,
+                )
+                if not isinstance(response, dict) or "chatgptDeviceCode" != response.get("type"):
+                    raise RuntimeError("Device-code login did not return a device-code response.")
+                login_id = optional_string(response.get("loginId"))
+                verification_url = optional_string(response.get("verificationUrl"))
+                user_code = optional_string(response.get("userCode"))
+                if not login_id or not verification_url or not user_code:
+                    raise RuntimeError("Device-code login response was incomplete.")
+            except BaseException:
+                # Until the watcher thread owns this session, any failure (an
+                # app-server that never answers initialize, a refused launch, a
+                # failed device-code request) must stop the child; otherwise it
+                # keeps running with this user's CODEX_HOME until the sidecar
+                # restarts.
                 session.close()
-                raise RuntimeError("Device-code login did not return a device-code response.")
-
-            login_id = optional_string(response.get("loginId"))
-            verification_url = optional_string(response.get("verificationUrl"))
-            user_code = optional_string(response.get("userCode"))
-            if not login_id or not verification_url or not user_code:
-                session.close()
-                raise RuntimeError("Device-code login response was incomplete.")
+                raise
 
             login_session = {
                 "authSessionId": auth_session_id,
@@ -513,13 +855,14 @@ class RuntimeState:
             system_instruction = f"{system_instruction}\n\n{json_instruction}" if system_instruction else json_instruction
 
         with app_server_session(codex_home) as session:
-            thread_params: dict[str, Any] = {"ephemeral": True}
+            thread_params = generation_thread_params()
             if model:
                 thread_params["model"] = model
             if system_instruction:
                 thread_params["developerInstructions"] = system_instruction
 
             thread_started = session.request("thread/start", thread_params, timeout=REQUEST_TIMEOUT)
+            require_generation_policy(thread_started)
             thread_id = require_nested_string(thread_started, "thread", "id")
             turn_input: list[dict[str, Any]] = []
             if input_text:
@@ -541,54 +884,73 @@ class RuntimeState:
             ):
                 turn_payload["outputSchema"] = response_format["schema"]
 
-            started = session.request("turn/start", turn_payload, timeout=REQUEST_TIMEOUT)
+            deadline = time.monotonic() + TURN_TIMEOUT
+            started = session.request("turn/start", turn_payload, timeout=max(0.0, min(REQUEST_TIMEOUT, TURN_TIMEOUT)))
             turn_id = require_nested_string(started, "turn", "id")
             output_parts: list[str] = []
             output_text: str | None = None
             finish_reason = "stop"
             token_usage: dict[str, Any] | None = None
 
-            while True:
-                notification = session.wait_for_notification(
-                    lambda message: notification_matches_turn(message, turn_id),
-                    timeout=TURN_TIMEOUT,
-                )
-                method = notification.get("method")
-                params = notification.get("params")
+            try:
+                while True:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise TimeoutError(f"Turn timed out after {TURN_TIMEOUT:.1f}s.")
+                    notification = session.wait_for_notification(
+                        lambda message: notification_matches_turn(message, turn_id),
+                        timeout=remaining,
+                    )
+                    # A queued event may be returned after a late wakeup without
+                    # wait_for_notification checking its timeout again.
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError(f"Turn timed out after {TURN_TIMEOUT:.1f}s.")
+                    method = notification.get("method")
+                    params = notification.get("params")
 
-                if "item/agentMessage/delta" == method and isinstance(params, dict):
-                    delta = params.get("delta")
-                    if isinstance(delta, str):
-                        output_parts.append(delta)
-                    continue
+                    if "item/agentMessage/delta" == method and isinstance(params, dict):
+                        delta = params.get("delta")
+                        if isinstance(delta, str):
+                            output_parts.append(delta)
+                        continue
 
-                if "item/completed" == method and isinstance(params, dict):
-                    item = params.get("item")
-                    if isinstance(item, dict) and "agentMessage" == item.get("type"):
-                        item_text = item.get("text")
-                        if isinstance(item_text, str):
-                            output_text = item_text
-                    continue
+                    if "item/completed" == method and isinstance(params, dict):
+                        item = params.get("item")
+                        if isinstance(item, dict) and "agentMessage" == item.get("type"):
+                            item_text = item.get("text")
+                            if isinstance(item_text, str):
+                                output_text = item_text
+                        continue
 
-                if "thread/tokenUsage/updated" == method and isinstance(params, dict):
-                    usage_update = params.get("tokenUsage")
-                    if isinstance(usage_update, dict):
-                        token_usage = usage_update
-                    continue
+                    if "thread/tokenUsage/updated" == method and isinstance(params, dict):
+                        usage_update = params.get("tokenUsage")
+                        if isinstance(usage_update, dict):
+                            token_usage = usage_update
+                        continue
 
-                if "turn/completed" != method or not isinstance(params, dict):
-                    continue
+                    if "turn/completed" != method or not isinstance(params, dict):
+                        continue
 
-                turn = require_completed_turn(params.get("turn"))
-                items = turn.get("items")
-                if isinstance(items, list):
-                    for item in reversed(items):
-                        if isinstance(item, dict) and item.get("type") == "agentMessage":
-                            final_text = optional_string(item.get("text"))
-                            if final_text:
-                                output_text = final_text
-                                break
-                break
+                    turn = require_completed_turn(params.get("turn"))
+                    items = turn.get("items")
+                    if isinstance(items, list):
+                        for item in reversed(items):
+                            if isinstance(item, dict) and item.get("type") == "agentMessage":
+                                final_text = optional_string(item.get("text"))
+                                if final_text:
+                                    output_text = final_text
+                                    break
+                    break
+            except TimeoutError:
+                try:
+                    session.request(
+                        "turn/interrupt",
+                        {"threadId": thread_id, "turnId": turn_id},
+                        timeout=5,
+                    )
+                except Exception:
+                    pass
+                raise
 
             if not output_text:
                 output_text = "".join(output_parts).strip()
@@ -664,20 +1026,22 @@ class RuntimeState:
                     HTTPStatus.CONFLICT,
                 )
 
-            thread_params: dict[str, Any] = {"ephemeral": True}
+            thread_params = generation_thread_params(image_generation=True)
             if system_instruction:
                 thread_params["developerInstructions"] = system_instruction
 
             thread_started = session.request("thread/start", thread_params, timeout=REQUEST_TIMEOUT)
+            require_generation_policy(thread_started)
             thread_id = require_nested_string(thread_started, "thread", "id")
             image_prompt = build_image_generation_prompt(prompt)
+            deadline = time.monotonic() + TURN_TIMEOUT
             started = session.request(
                 "turn/start",
                 {
                     "threadId": thread_id,
                     "input": [{"type": "text", "text": image_prompt}],
                 },
-                timeout=REQUEST_TIMEOUT,
+                timeout=max(0.0, min(REQUEST_TIMEOUT, TURN_TIMEOUT)),
             )
             turn_id = require_nested_string(started, "turn", "id")
             token_usage: dict[str, Any] | None = None
@@ -705,35 +1069,51 @@ class RuntimeState:
                     if failure is not None:
                         image_failure = failure
 
-            while True:
-                notification = session.wait_for_notification(
-                    lambda message: notification_matches_turn(message, turn_id)
-                    or notification_is_image_item(message, turn_id),
-                    timeout=TURN_TIMEOUT,
-                )
-                method = notification.get("method")
-                params = notification.get("params")
+            try:
+                while True:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise TimeoutError(f"Turn timed out after {TURN_TIMEOUT:.1f}s.")
+                    notification = session.wait_for_notification(
+                        lambda message: notification_matches_turn(message, turn_id)
+                        or notification_is_image_item(message, turn_id),
+                        timeout=remaining,
+                    )
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError(f"Turn timed out after {TURN_TIMEOUT:.1f}s.")
+                    method = notification.get("method")
+                    params = notification.get("params")
 
-                if "thread/tokenUsage/updated" == method and isinstance(params, dict):
-                    usage_update = params.get("tokenUsage")
-                    if isinstance(usage_update, dict):
-                        token_usage = usage_update
-                    continue
+                    if "thread/tokenUsage/updated" == method and isinstance(params, dict):
+                        usage_update = params.get("tokenUsage")
+                        if isinstance(usage_update, dict):
+                            token_usage = usage_update
+                        continue
 
-                if "item/completed" == method:
-                    if isinstance(params, dict):
-                        collect_image(params.get("item"))
-                    continue
+                    if "item/completed" == method:
+                        if isinstance(params, dict):
+                            collect_image(params.get("item"))
+                        continue
 
-                if "turn/completed" != method or not isinstance(params, dict):
-                    continue
+                    if "turn/completed" != method or not isinstance(params, dict):
+                        continue
 
-                turn = require_completed_turn(params.get("turn"))
-                items = turn.get("items")
-                if isinstance(items, list):
-                    for item in items:
-                        collect_image(item)
-                break
+                    turn = require_completed_turn(params.get("turn"))
+                    items = turn.get("items")
+                    if isinstance(items, list):
+                        for item in items:
+                            collect_image(item)
+                    break
+            except TimeoutError:
+                try:
+                    session.request(
+                        "turn/interrupt",
+                        {"threadId": thread_id, "turnId": turn_id},
+                        timeout=5,
+                    )
+                except Exception:
+                    pass
+                raise
 
             if image_item is None:
                 if image_failure is not None:
@@ -1126,7 +1506,7 @@ STATE = RuntimeState()
 
 
 class RuntimeHandler(BaseHTTPRequestHandler):
-    server_version = "CodexWPSidecar/2.1.3"
+    server_version = "CodexWPSidecar/2.1.4"
 
     def do_GET(self) -> None:  # noqa: N802
         self._dispatch()

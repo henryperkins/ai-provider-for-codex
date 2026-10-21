@@ -4,7 +4,7 @@ Tags: ai, codex, wordpress-ai-client
 Requires at least: 7.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.1.3
+Stable tag: 2.1.4
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -36,7 +36,7 @@ Runtime requirements:
 * WordPress 7.0 or newer with AI Client SDK 1.0 or newer. If the standalone WordPress AI plugin provides the client, WordPress AI plugin 1.0 or newer is also required.
 * PHP 7.4 or newer
 * Python 3.11 or newer on the same host as WordPress
-* the `codex` CLI installed on the same host
+* the `codex` CLI installed on the same host; this release is qualified against Codex CLI 0.162.1 and can refuse other releases
 * permission to run a localhost-only background service or daemon
 * administrator access to configure the bundled sidecar runtime after plugin install
 
@@ -131,6 +131,15 @@ The sidecar is designed for localhost-only communication between WordPress and t
 Support is limited to documented, self-managed environments that can run the local sidecar runtime and the `codex` CLI on the same host as WordPress.
 
 == Changelog ==
+
+= 2.1.4 =
+* Harden sidecar generation sessions: minimal child-process environment, explicit approval/sandbox/tool policies, ChatGPT Apps and account-synced Plugins disabled for sidecar-owned Codex processes.
+* Refuse generation when Codex does not confirm the requested policy; new diagnostics rows for Codex version qualification, policy enforcement, and per-user configuration overrides.
+* Allow diagnostics 30 seconds so policy failures can be reported after Codex process cleanup; other control requests retain their 20-second timeout.
+* Distinguish proxy, tunnel, and gateway errors from sidecar responses so failed upstream requests no longer pass the sidecar reachability check.
+* Forward CA bundle and proxy variables (HTTP_PROXY, HTTPS_PROXY, ALL_PROXY, NO_PROXY) to Codex; apply the turn timeout as a wall-clock limit.
+* Require the qualified Codex CLI release (0.162.1): other releases can be refused when the app-server launches or when a generation thread starts, and launch errors now include Codex's own error output.
+* Stop a Codex process that was started for device-code login when the app-server fails to start or the login request fails.
 
 = 2.1.3 =
 * Extend WordPress AI's standard image-generation timeout from 90 to 360 seconds when Codex is the first preferred image model.

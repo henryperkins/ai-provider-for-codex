@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Exercise the real sidecar transport against a named, unauthenticated Codex CLI.
 
-Run: CODEX_BIN=/path/to/codex python3 sidecar/scripts/test-codex-compatibility.py --version 0.155.1
+Run: CODEX_BIN=/path/to/codex python3 sidecar/scripts/test-codex-compatibility.py --version 0.162.1
 No login or generation is performed. Existing user credentials are never loaded.
 """
 
@@ -84,9 +84,42 @@ def run(expected_version: str) -> None:
                     main.normalize_capabilities_payload(capabilities)["imageGeneration"] is capabilities["imageGeneration"],
                     "sidecar preserves the advertised image capability",
                 )
+                for image_generation in (False, True):
+                    kind = "image" if image_generation else "text"
+                    thread = session.request("thread/start", main.generation_thread_params(
+                        image_generation=image_generation,
+                    ), timeout=15)
+                    check(thread.get("approvalPolicy") == "never", f"{kind} threads never wait for approval")
+                    check(thread.get("sandbox", {}).get("type") == "readOnly", f"{kind} threads use a read-only sandbox")
+                    check(thread["thread"].get("environments") == [], f"{kind} threads get no host environment")
+                    check(main.generation_policy_mismatch(thread) is None,
+                          f"sidecar accepts the {kind} thread policy echo")
+                    features = main.thread_feature_states(session, thread["thread"]["id"], timeout=15)
+                    # apps and plugins come from the app-server launch flags,
+                    # the rest from the thread policy; both must reach the thread.
+                    # The names are listed here, not read from main, so that
+                    # the smoke test checks the sidecar's own list too.
+                    for name in ("shell_tool", "stable_environment_tools", "view_image", "multi_agent", "multi_agent_v2",
+                                 "apps", "plugins"):
+                        check(features.get(name) is False, f"{kind} thread disables the real {name} feature")
+                    check(features.get("image_generation") is image_generation,
+                          f"{kind} thread {'enables' if image_generation else 'disables'} native image generation")
                 check(not (codex_home / "auth.json").exists(), "smoke test creates no authentication credentials")
             finally:
                 session.close()
+
+            # The sidecar diagnostics run the same probe through their own
+            # throwaway app-server under a separate storage root.
+            with mock.patch.object(main, "STORAGE_ROOT", root / "storage"):
+                rows = {row["id"]: row for row in main.run_diagnostics()["checks"]}
+            check(rows.get("app_server", {}).get("status") == "pass", "diagnostics app-server handshake passes")
+            check(rows.get("generation_policy", {}).get("status") == "pass",
+                  "diagnostics confirm the generation policy on the real app-server")
+            expected_version_status = "pass" if expected_version == main.QUALIFIED_CODEX_VERSION else "warn"
+            check(rows.get("codex_version", {}).get("status") == expected_version_status,
+                  f"diagnostics report {expected_version} as {expected_version_status} against the qualified "
+                  f"{main.QUALIFIED_CODEX_VERSION}")
+            check(not (root / "storage" / "_diagnostics").exists(), "diagnostics remove their throwaway Codex home")
 
             # A second process with the same isolated home catches lifecycle and
             # stale-process failures without depending on an authenticated user.

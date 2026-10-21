@@ -62,7 +62,11 @@ final class DiagnosticsController {
 		$version = '';
 
 		try {
-			$result  = ( new Client() )->diagnostics();
+			$result = ( new Client() )->diagnostics();
+			if ( ! self::is_valid_diagnostics( $result ) ) {
+				throw new RuntimeException( esc_html__( 'The Runtime URL did not return complete, consistent Codex sidecar diagnostics. Verify the Runtime URL and installed sidecar version, then run the check again.', 'scriptorium-ai-provider-for-codex' ) );
+			}
+
 			$version = (string) ( $result['version'] ?? '' );
 			$rows[]  = self::row( 'reachable', __( 'Sidecar reachable', 'scriptorium-ai-provider-for-codex' ), 'pass', '' );
 			$rows[]  = self::row( 'bearer', __( 'Bearer token matches', 'scriptorium-ai-provider-for-codex' ), 'pass', '' );
@@ -85,8 +89,17 @@ final class DiagnosticsController {
 
 			$ok = (bool) ( $result['ok'] ?? false );
 		} catch ( RuntimeRequestException $exception ) {
-			if ( 0 < $exception->get_status_code() ) {
-				// An HTTP response proves reachability, even when its content fails.
+			if ( $exception->is_proxy_response() || 'invalid_json' === $exception->get_runtime_error_code() ) {
+				// A proxy or malformed response does not establish sidecar identity.
+				$rows[] = self::row(
+					'reachable',
+					__( 'Sidecar reachable', 'scriptorium-ai-provider-for-codex' ),
+					'fail',
+					$exception->getMessage(),
+					__( 'The Runtime URL answered, but not from the sidecar. Check that the sidecar service and any gateway or tunnel in front of it (for example cloudflared) are running and pointed at each other, then run the check again.', 'scriptorium-ai-provider-for-codex' )
+				);
+			} elseif ( 0 < $exception->get_status_code() ) {
+				// An HTTP response from the sidecar proves reachability, even when its content fails.
 				$rows[] = self::row( 'reachable', __( 'Sidecar reachable', 'scriptorium-ai-provider-for-codex' ), 'pass', '' );
 				$rows[] = self::runtime_error_row( $exception );
 			} else {
@@ -121,6 +134,68 @@ final class DiagnosticsController {
 				'config'    => self::config_rows( $version ),
 			]
 		);
+	}
+
+	/**
+	 * Validates identity, check shapes and the aggregate before reporting success.
+	 * Dependent checks are legitimately absent when CLI startup or handshake fails.
+	 *
+	 * @param array<string,mixed> $result Runtime response.
+	 * @return bool
+	 */
+	private static function is_valid_diagnostics( array $result ): bool {
+		if (
+			'codex-wp-sidecar' !== ( $result['service'] ?? null )
+			|| ! is_string( $result['version'] ?? null )
+			|| '' === trim( $result['version'] )
+			|| ! is_bool( $result['ok'] ?? null )
+			|| ! is_array( $result['checks'] ?? null )
+			|| [] === $result['checks']
+			|| array_values( $result['checks'] ) !== $result['checks']
+		) {
+			return false;
+		}
+
+		$statuses = [];
+		$all_pass = true;
+		foreach ( $result['checks'] as $check ) {
+			if (
+				! is_array( $check )
+				|| ! is_string( $check['id'] ?? null )
+				|| '' === $check['id']
+				|| sanitize_key( $check['id'] ) !== $check['id']
+				|| in_array( $check['id'], [ 'reachable', 'bearer' ], true )
+				|| isset( $statuses[ $check['id'] ] )
+				|| ! is_string( $check['label'] ?? null )
+				|| '' === trim( $check['label'] )
+				|| ! is_string( $check['detail'] ?? null )
+				|| ! in_array( $check['status'] ?? null, [ 'pass', 'warn', 'fail' ], true )
+			) {
+				return false;
+			}
+			$statuses[ $check['id'] ] = $check['status'];
+			$all_pass = $all_pass && 'pass' === $check['status'];
+		}
+
+		$required = [ 'python_version', 'codex_cli', 'storage_root', 'user_config_overrides' ];
+		if ( 'pass' === ( $statuses['codex_cli'] ?? null ) ) {
+			$required[] = 'codex_version';
+			$required[] = 'app_server';
+		} elseif ( isset( $statuses['codex_version'] ) || isset( $statuses['app_server'] ) || isset( $statuses['generation_policy'] ) ) {
+			return false;
+		}
+		if ( 'pass' === ( $statuses['app_server'] ?? null ) ) {
+			$required[] = 'generation_policy';
+		} elseif ( isset( $statuses['generation_policy'] ) ) {
+			return false;
+		}
+		foreach ( $required as $id ) {
+			if ( ! isset( $statuses[ $id ] ) ) {
+				return false;
+			}
+		}
+
+		return $result['ok'] === $all_pass;
 	}
 
 	/**
@@ -208,6 +283,12 @@ final class DiagnosticsController {
 				return __( 'Make the storage root writable by the sidecar service user (check CODEX_WP_STORAGE_ROOT ownership and permissions).', 'scriptorium-ai-provider-for-codex' );
 			case 'app_server':
 				return __( 'The Codex CLI could not start its app-server. Verify the codex binary runs, then review the sidecar logs, e.g. "journalctl -u codex-wp-sidecar -e".', 'scriptorium-ai-provider-for-codex' );
+			case 'codex_version':
+				return __( 'Install the Codex CLI release this plugin version was qualified against, or re-run the compatibility smoke test from the plugin source repository for the installed release before relying on it.', 'scriptorium-ai-provider-for-codex' );
+			case 'generation_policy':
+				return __( 'The installed Codex CLI did not confirm the sidecar\'s generation restrictions. Stop using the provider until the Codex version matches the qualified release, then restart the sidecar and run the check again.', 'scriptorium-ai-provider-for-codex' );
+			case 'user_config_overrides':
+				return __( 'Per-user Codex directories should contain only auth and runtime state. Review and remove the listed files: Codex applies them to that user\'s requests, and MCP servers or hooks defined there run as host processes.', 'scriptorium-ai-provider-for-codex' );
 			default:
 				return '';
 		}

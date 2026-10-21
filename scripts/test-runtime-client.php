@@ -49,7 +49,8 @@ class WP_REST_Response {
 }
 
 define( 'HOUR_IN_SECONDS', 3600 );
-function set_transient( $name, $value, $expiration ) { return true; }
+$codex_transients = array();
+function set_transient( $name, $value, $expiration ) { global $codex_transients; $codex_transients[ $name ] = $value; return true; }
 
 $codex_reply = array( 'body' => '{"outputText":"fixture"}', 'response' => array( 'code' => 200, 'message' => 'OK' ) );
 $codex_last_args = array();
@@ -107,7 +108,99 @@ if ( $caught instanceof $exception_class ) {
 	$codex_assert( false === strpos( $caught->getMessage(), 'sensitive-test-marker' ), 'JSON: raw invalid body does not leak through the displayed error' );
 }
 
+// A sidecar generation-policy refusal keeps its code and message and never clears authentication.
+$codex_reply = array(
+	'body'     => json_encode(
+		array(
+			'error' => array(
+				'code'    => 'runtime_policy_rejected',
+				'message' => 'Codex did not apply the sidecar generation policy. Check the Codex version against the qualified release.',
+				'data'    => array( 'approvalPolicy' => 'never', 'sandboxType' => null, 'environmentCount' => null ),
+			),
+		)
+	),
+	'response' => array( 'code' => 502, 'message' => 'Bad Gateway' ),
+);
+$caught = null;
+try { $client->post( '/v1/responses/text', array( 'input' => 'fixture' ) ); } catch ( Throwable $error ) { $caught = $error; }
+$codex_assert( $caught instanceof $exception_class, 'policy: refusal reaches the model logging catch as RuntimeRequestException' );
+if ( $caught instanceof $exception_class ) {
+	$codex_assert( 502 === $caught->get_status_code(), 'policy: HTTP status is retained' );
+	$codex_assert( 'runtime_policy_rejected' === $caught->get_runtime_error_code(), 'policy: sidecar error code passes through unchanged' );
+	$codex_assert( false !== strpos( $caught->getMessage(), 'did not apply the sidecar generation policy' ), 'policy: sidecar message passes through unchanged' );
+	$codex_assert( false === $caught->is_auth_required(), 'policy: refusal does not clear account authentication' );
+}
+
+// The sidecar always replies with JSON and an error envelope, so other error
+// responses must name the hop that answered instead of the bare reason phrase.
+$codex_proxy_cases = array(
+	'empty tunnel 502'       => array( '', 502, 'Bad Gateway', 'HTTP 502 Bad Gateway', 'is running' ),
+	'string-error 503'       => array( '{"error":"upstream unavailable"}', 503, 'Service Unavailable', 'HTTP 503 Service Unavailable', 'is running' ),
+	'Cloudflare 524 page'    => array( '<!DOCTYPE html><title>A timeout occurred sensitive-test-marker</title>', 524, '', 'HTTP 524', '125-second default read timeout' ),
+	'gateway 504 page'       => array( '<html>504 Gateway Time-out sensitive-test-marker</html>', 504, 'Gateway Timeout', 'HTTP 504 Gateway Timeout', 'timed out' ),
+	'web server 404 page'    => array( '<html>Not Found sensitive-test-marker</html>', 404, 'Not Found', 'HTTP 404 Not Found', 'points at the sidecar' ),
+	'empty gateway 404'      => array( '', 404, 'Not Found', 'HTTP 404 Not Found', 'points at the sidecar' ),
+	'empty gateway 401'      => array( '', 401, 'Unauthorized', 'HTTP 401 Unauthorized', 'bearer token' ),
+	'access 403 page'        => array( '<html>Forbidden sensitive-test-marker</html>', 403, 'Forbidden', 'HTTP 403 Forbidden', 'bearer token' ),
+	'gateway JSON 401'       => array( '{"error":"unauthorized"}', 401, 'Unauthorized', 'HTTP 401 Unauthorized', 'bearer token' ),
+	'web app JSON 404'       => array( '{"code":"rest_no_route","message":"No route sensitive-test-marker"}', 404, 'Not Found', 'HTTP 404 Not Found', 'points at the sidecar' ),
+);
+foreach ( $codex_proxy_cases as $label => $case ) {
+	Codex_Runtime_Health_Fixture::$status = '';
+	$codex_reply = array( 'body' => $case[0], 'response' => array( 'code' => $case[1], 'message' => $case[2] ) );
+	$caught      = null;
+	try { $client->post( '/v1/responses/image', array( 'prompt' => 'fixture' ) ); } catch ( Throwable $error ) { $caught = $error; }
+	$codex_assert( $caught instanceof $exception_class, "proxy: {$label} reaches the model logging catch as RuntimeRequestException" );
+	if ( $caught instanceof $exception_class ) {
+		$codex_assert( $caught->is_proxy_response(), "proxy: {$label} is classified as answered by something other than the sidecar" );
+		$codex_assert( $case[1] === $caught->get_status_code(), "proxy: {$label} retains its HTTP status" );
+		$codex_assert( false !== strpos( $caught->getMessage(), $case[3] ), "proxy: {$label} names the HTTP status" );
+		$codex_assert( false !== strpos( $caught->getMessage(), '127.0.0.1:4317' ), "proxy: {$label} names the runtime host" );
+		$codex_assert( false !== strpos( $caught->getMessage(), $case[4] ), "proxy: {$label} explains the next step" );
+		$codex_assert( false === strpos( $caught->getMessage(), 'sensitive-test-marker' ), "proxy: {$label} does not leak the raw body" );
+		$codex_assert( false === $caught->is_auth_required(), "proxy: {$label} does not clear account authentication" );
+	}
+	$codex_assert( 'unreachable' === Codex_Runtime_Health_Fixture::$status, "proxy: {$label} marks the runtime unhealthy" );
+}
+
+$codex_reply = array( 'body' => '', 'response' => array( 'code' => 524, 'message' => '' ) );
+$caught      = null;
+try { $client->post( '/v1/responses/text', array( 'input' => 'fixture' ) ); } catch ( Throwable $error ) { $caught = $error; }
+$codex_assert( $caught instanceof $exception_class && false !== strpos( $caught->getMessage(), '30-second write timeout' ), 'proxy: Cloudflare 524 also names the write timeout that slow uploads hit' );
+
+// An older sidecar's envelope-less missing-login 404 stays a sidecar response for ConnectionService recovery.
+Codex_Runtime_Health_Fixture::$status = '';
+$codex_reply = array( 'body' => '{"authSessionId":"fixture","status":"missing","error":"Login session was not found in the local runtime."}', 'response' => array( 'code' => 404, 'message' => 'Not Found' ) );
+$caught      = null;
+try { $client->get( '/v1/login/status' ); } catch ( Throwable $error ) { $caught = $error; }
+$codex_assert( $caught instanceof $exception_class && ! $caught->is_proxy_response(), 'legacy: missing-login 404 is not classified as a proxy response' );
+if ( $caught instanceof $exception_class ) {
+	$codex_assert( 404 === $caught->get_status_code() && 'missing' === ( $caught->get_payload()['status'] ?? null ), 'legacy: missing-login 404 keeps the status and payload ConnectionService recovers from' );
+}
+$codex_assert( '' === Codex_Runtime_Health_Fixture::$status, 'legacy: missing-login 404 does not mark the runtime unhealthy' );
+$caught = null;
+try { $client->diagnostics(); } catch ( Throwable $error ) { $caught = $error; }
+$codex_assert( $caught instanceof $exception_class && $caught->is_proxy_response(), 'legacy: the missing-login exemption applies only to login status' );
+
+foreach ( array(
+	'sidecar 502 envelope' => array( 502, '{"error":{"code":"image_generation_failed","message":"Codex completed the image turn without returning image data."}}', 'image_generation_failed', 'Codex completed the image turn without returning image data.' ),
+	'sidecar 500 message'  => array( 500, '{"error":{"message":"sidecar exploded"}}', '', 'sidecar exploded' ),
+) as $label => $case ) {
+	$codex_reply = array( 'body' => $case[1], 'response' => array( 'code' => $case[0], 'message' => 'Fixture' ) );
+	$caught      = null;
+	try { $client->post( '/v1/responses/image', array( 'prompt' => 'fixture' ) ); } catch ( Throwable $error ) { $caught = $error; }
+	$codex_assert( $caught instanceof $exception_class && ! $caught->is_proxy_response(), "sidecar: {$label} stays a sidecar error" );
+	if ( $caught instanceof $exception_class ) {
+		$codex_assert( $case[2] === $caught->get_runtime_error_code(), "sidecar: {$label} keeps the sidecar error code" );
+		$codex_assert( $case[3] === $caught->getMessage(), "sidecar: {$label} keeps the sidecar message" );
+	}
+}
+
 $codex_reply = array( 'body' => '{"outputText":"fixture"}', 'response' => array( 'code' => 200, 'message' => 'OK' ) );
+$client->diagnostics();
+$codex_assert( 30 === $codex_last_args['timeout'], 'diagnostics: timeout includes CLI, handshake, policy probe, and child cleanup headroom' );
+$client->get( '/v1/account/snapshot' );
+$codex_assert( 20 === $codex_last_args['timeout'], 'options: other control-plane requests keep the existing timeout' );
 $client->post( '/v1/responses/text', array() );
 $codex_assert( 360 === $codex_last_args['timeout'], 'options: unspecified generation timeout retains the existing default' );
 $options = new WordPress\AiClient\Providers\Http\DTO\RequestOptions();
@@ -116,6 +209,8 @@ $options->setMaxRedirects( 0 );
 $client->post( '/v1/responses/text', array(), $options );
 $codex_assert( 7.25 === $codex_last_args['timeout'], 'options: explicit SDK timeout preserves fractional seconds' );
 $codex_assert( 0 === ( $codex_last_args['redirection'] ?? null ), 'options: explicit SDK redirect prohibition reaches WordPress HTTP' );
+$client->request( 'GET', '/v1/diagnostics', array(), array(), false, $options );
+$codex_assert( 7.25 === $codex_last_args['timeout'], 'diagnostics: an explicit SDK timeout still overrides the diagnostic default' );
 $options->setTimeout( 0.0 );
 $options->setMaxRedirects( 2 );
 $client->post( '/v1/responses/image', array(), $options );
@@ -146,7 +241,76 @@ foreach ( array( 401 => 'unauthorized', 404 => 'not_found', 500 => 'internal_err
 
 $codex_reply = array( 'body' => 'malformed fixture', 'response' => array( 'code' => 200, 'message' => 'OK' ) );
 $diagnostics = AIProviderForCodex\REST\DiagnosticsController::run()->get_data();
-$codex_assert( 'pass' === $diagnostics['rows'][0]['status'], 'diagnostics: malformed JSON with HTTP 200 still proves reachability' );
+$codex_assert( 'fail' === $diagnostics['rows'][0]['status'], 'diagnostics: malformed JSON with HTTP 200 does not prove sidecar identity' );
+
+// A tunnel or gateway answering in place of the sidecar must not pass reachability.
+foreach ( array( array( '', 502, 'Bad Gateway' ), array( '<html>A timeout occurred</html>', 524, '' ), array( '', 404, 'Not Found' ), array( '', 401, 'Unauthorized' ) ) as $case ) {
+	$codex_reply = array( 'body' => $case[0], 'response' => array( 'code' => $case[1], 'message' => $case[2] ) );
+	$diagnostics = AIProviderForCodex\REST\DiagnosticsController::run()->get_data();
+	$codex_assert( false === $diagnostics['ok'], "diagnostics: proxy HTTP {$case[1]} fails the verdict" );
+	$codex_assert( 'fail' === $diagnostics['rows'][0]['status'], "diagnostics: proxy HTTP {$case[1]} does not prove the sidecar is reachable" );
+	$codex_assert( false !== strpos( $diagnostics['rows'][0]['detail'], "HTTP {$case[1]}" ), "diagnostics: proxy HTTP {$case[1]} detail names the status" );
+	$codex_assert( false !== strpos( $diagnostics['rows'][0]['remediation'], 'gateway or tunnel' ), "diagnostics: proxy HTTP {$case[1]} points at the gateway or tunnel" );
+	$codex_assert( 1 === count( $diagnostics['rows'] ), "diagnostics: proxy HTTP {$case[1]} does not add a misleading sidecar-response row" );
+}
+
+// Successful HTTP alone must not establish sidecar identity or a passing diagnostic.
+$codex_valid_diagnostics = array( 'service' => 'codex-wp-sidecar', 'version' => '2.1.4', 'ok' => true, 'checks' => array() );
+foreach ( array( 'python_version', 'codex_cli', 'storage_root', 'user_config_overrides', 'codex_version', 'app_server', 'generation_policy' ) as $id ) {
+	$codex_valid_diagnostics['checks'][] = array( 'id' => $id, 'label' => $id, 'status' => 'pass', 'detail' => 'fixture' );
+}
+$codex_invalid_diagnostics = array( 'unrelated success JSON' => array( 'ok' => true ) );
+$invalid = $codex_valid_diagnostics; $invalid['service'] = 'another-service'; $codex_invalid_diagnostics['wrong service identity'] = $invalid;
+$invalid = $codex_valid_diagnostics; unset( $invalid['version'] ); $codex_invalid_diagnostics['missing version'] = $invalid;
+$invalid = $codex_valid_diagnostics; $invalid['ok'] = 'true'; $codex_invalid_diagnostics['non-boolean aggregate'] = $invalid;
+$invalid = $codex_valid_diagnostics; $invalid['checks'] = array(); $codex_invalid_diagnostics['empty checks'] = $invalid;
+$invalid = $codex_valid_diagnostics; unset( $invalid['checks'][6] ); $codex_invalid_diagnostics['missing generation policy'] = $invalid;
+$invalid = $codex_valid_diagnostics; $invalid['checks'][] = $invalid['checks'][0]; $codex_invalid_diagnostics['duplicate check ID'] = $invalid;
+$invalid = $codex_valid_diagnostics; $invalid['checks'][6]['status'] = 'unknown'; $codex_invalid_diagnostics['unknown status'] = $invalid;
+$invalid = $codex_valid_diagnostics; $invalid['checks'][] = 'not a check'; $codex_invalid_diagnostics['non-object check'] = $invalid;
+$invalid = $codex_valid_diagnostics; $invalid['checks'][0]['detail'] = array(); $codex_invalid_diagnostics['non-string detail'] = $invalid;
+$invalid = $codex_valid_diagnostics; unset( $invalid['checks'][0]['label'] ); $codex_invalid_diagnostics['missing label'] = $invalid;
+$invalid = $codex_valid_diagnostics; $invalid['checks'][6]['status'] = 'fail'; $codex_invalid_diagnostics['failed policy with success aggregate'] = $invalid;
+$invalid = $codex_valid_diagnostics; $invalid['checks'][3]['status'] = 'warn'; $codex_invalid_diagnostics['warning with success aggregate'] = $invalid;
+$invalid = $codex_valid_diagnostics; $invalid['ok'] = false; $codex_invalid_diagnostics['failure aggregate without issues'] = $invalid;
+$invalid = $codex_valid_diagnostics; $invalid['checks'][] = array( 'id' => 'reachable', 'label' => 'Injected reachability', 'status' => 'pass', 'detail' => '' ); $codex_invalid_diagnostics['reserved local check ID'] = $invalid;
+// A failed prerequisite cannot also report results from checks that never ran.
+foreach ( array( 4 => 'version', 5 => 'handshake', 6 => 'policy' ) as $index => $name ) {
+	$invalid = $codex_valid_diagnostics;
+	$invalid['ok'] = false;
+	$invalid['checks'] = array_slice( $invalid['checks'], 0, 4 );
+	$invalid['checks'][1]['status'] = 'fail';
+	$dependent = $codex_valid_diagnostics['checks'][ $index ];
+	$dependent['status'] = 'fail';
+	$invalid['checks'][] = $dependent;
+	$codex_invalid_diagnostics[ 'failed CLI with dependent ' . $name ] = $invalid;
+}
+$invalid = $codex_valid_diagnostics; $invalid['ok'] = false; $invalid['checks'][5]['status'] = 'fail'; $codex_invalid_diagnostics['failed handshake with policy result'] = $invalid;
+foreach ( $codex_invalid_diagnostics as $name => $payload ) {
+	$codex_reply = array( 'body' => json_encode( $payload ), 'response' => array( 'code' => 200, 'message' => 'OK' ) );
+	$diagnostics = AIProviderForCodex\REST\DiagnosticsController::run()->get_data();
+	$codex_assert( false === $diagnostics['ok'], "diagnostics schema: {$name} cannot pass overall" );
+	$codex_assert( 'fail' === $diagnostics['rows'][0]['status'] && 1 === count( $diagnostics['rows'] ), "diagnostics schema: {$name} cannot claim reachability or bearer success" );
+	$codex_assert( false === $codex_transients['codex_provider_last_diagnostics']['ok'], "diagnostics schema: {$name} persists a failed verdict" );
+}
+$codex_reply = array( 'body' => json_encode( $codex_valid_diagnostics ), 'response' => array( 'code' => 200, 'message' => 'OK' ) );
+$diagnostics = AIProviderForCodex\REST\DiagnosticsController::run()->get_data();
+$codex_assert( true === $diagnostics['ok'] && 9 === count( $diagnostics['rows'] ), 'diagnostics schema: complete passing sidecar response retains every check' );
+$codex_assert( true === $codex_transients['codex_provider_last_diagnostics']['ok'], 'diagnostics schema: complete passing response stores a passing verdict' );
+
+// A real failed CLI/handshake omits dependent checks; keep the root cause visible.
+foreach ( array( 'codex_cli' => 1, 'app_server' => 5, 'generation_policy' => 6 ) as $failed_id => $index ) {
+	$payload = $codex_valid_diagnostics;
+	$payload['ok'] = false;
+	$payload['checks'][ $index ]['status'] = 'fail';
+	if ( 'codex_cli' === $failed_id ) { $payload['checks'] = array_slice( $payload['checks'], 0, 4 ); }
+	if ( 'app_server' === $failed_id ) { $payload['checks'] = array_slice( $payload['checks'], 0, 6 ); }
+	$codex_reply = array( 'body' => json_encode( $payload ), 'response' => array( 'code' => 200, 'message' => 'OK' ) );
+	$diagnostics = AIProviderForCodex\REST\DiagnosticsController::run()->get_data();
+	$rows = array_column( $diagnostics['rows'], null, 'id' );
+	$codex_assert( false === $diagnostics['ok'] && 'fail' === ( $rows[ $failed_id ]['status'] ?? '' ), "diagnostics schema: genuine {$failed_id} failure remains actionable" );
+	$codex_assert( 'pass' === $rows['reachable']['status'] && 'pass' === $rows['bearer']['status'], "diagnostics schema: genuine {$failed_id} response retains confirmed transport identity" );
+}
 
 echo 0 === $codex_failures ? "OK: {$codex_tests} assertions passed\n" : "{$codex_failures}/{$codex_tests} assertions FAILED\n";
 exit( 0 === $codex_failures ? 0 : 1 );
