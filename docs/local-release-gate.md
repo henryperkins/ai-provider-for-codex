@@ -27,4 +27,9 @@ Codex 0.163.0 passed the credential-free startup/protocol smoke on October 21, 2
 
 Confirm the intended deployment category before deciding on authentication migration. Select the actual host and service configuration, then validate sidecar startup, loopback/bearer restrictions, per-user isolation, real device-code login, forced refresh, and bounded authorized text/image generation. Record the installed package checksum and Codex version. Do not store credentials in evidence.
 
+Windows requires its own security qualification. Disabling the shell tool does
+not establish confinement of code-mode `functions.exec`; the observational probe
+does not run model-supplied programs. Confirm the actual Windows restrictions and
+process cleanup before relying on the candidate for shared-host generation.
+
 Publication follows successful qualification and explicit release authorization. A local candidate is not a published release.

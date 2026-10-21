@@ -297,6 +297,13 @@ If this task grows beyond a focused change, ship 2.1.4 without it and move it to
 
 Implementation, local qualification and commits are complete. The Windows deployment step above remains an operator handoff; no production service restart or authenticated/billable generation was performed.
 
+**Approved October 21 follow-up:** review fixes and PR #6 are now committed and
+pushed on the PR #7 branch. The combined candidate passed the full local matrix
+again; current source and package hashes are in
+[`docs/release-qualification-2.1.4.md`](../../release-qualification-2.1.4.md).
+The earlier no-push/no-PR notes describe the original qualification only.
+Windows access, intended-host validation and production deployment remain pending.
+
 ---
 
 ## Follow-ups (not in 2.1.4)

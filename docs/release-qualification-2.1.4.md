@@ -300,3 +300,85 @@ release matrix, and explicit merge/release/deployment authorization. No billable
 generation, production restart, public release or production plugin removal
 was performed. GitHub Verify remains blocked before runner assignment; all five
 jobs in run `38334462161` have `runner_id: 0` and no executable steps.
+
+## Approved Combined Candidate (October 21, 2026)
+
+The operator authorized committing, pushing, reconciling the PRs and completing
+the release gates. Review fixes were committed and pushed as `6f66591`; merge
+commit `a90fedf` brings PR #6 into the PR #7 branch while retaining both sets of
+runtime-client tests. Subsequent qualification fixes are in tested revision
+`e9b838231a4502485ebf161cc6a5b2db0115d184`. No PR has been merged into `main`.
+
+The final source was frozen with `git archive`. The source archive and hashes,
+qualification harnesses, command exit codes, logs, dependency locks and package
+manifests are retained under `/tmp/opencode/codex-214-final-20261021/`.
+Documentation added after the tested revision does not change shipping files.
+
+### Findings Resolved During Qualification
+
+- The first combined ZIP exposed 13 Plugin Check findings on arguments to the
+  proxy-exception helper. That helper already escapes the displayed message.
+  Three narrowly scoped, explained PHPCS annotations address the helper-call
+  findings without changing status codes, payloads or response behavior.
+- The previous nested-tool regex could miss a second member of a code-mode
+  declaration. The probe now accepts only the audited one-method declaration
+  format and fails closed on extra members, uninspected declarations or unknown
+  shapes. Regressions reproduce the missed-member case and preserve the rejected
+  specs as evidence. The real four-scenario probe still passes.
+- The plan no longer claims disabling the shell tool establishes Windows
+  confinement. Windows behavior remains an unresolved security qualification;
+  the observational probe executes no model-supplied programs.
+- The first focused SDK command selected the locked 1.3.1 SDK because the
+  harness used the wrong override variable. The corrected harness explicitly
+  loads isolated SDK 1.5.0 and checks its reported version. Initial logs and the
+  failed installed-ZIP findings are retained separately under
+  `/tmp/opencode/codex-214-approved-20261021/` rather than counted as final passes.
+
+### Final Local Results
+
+| Configuration | PHP 7.4.33 | PHP 8.3.35 |
+| --- | --- | --- |
+| WordPress 7.0.7, Core SDK 1.3.1 | Pass | Pass |
+| WordPress 7.1.3, Core SDK 1.3.1 | Pass | Pass |
+| WordPress 7.0.7 + AI 1.4.0 + MCP Adapter 0.7.0 | Pass | Pass |
+| WordPress 7.1.3 + AI 1.4.0 + MCP Adapter 0.7.0 | Pass | Pass |
+
+Every configuration passed the complete `scripts/verify.sh`, including 165
+runtime-client assertions, 26 JavaScript tests and 100 Python unittest cases,
+plus the five token-usage assertions. Strict Composer validation, locked installs
+and fresh PHPStan analysis passed on both PHP versions. Isolated SDK 1.5.0 passed
+all 32 contract cases/53 assertions and the 165 runtime-client assertions on both
+versions without replacing Core's SDK.
+
+The four AI/MCP cases each passed 11 persisted logging assertions, with four
+intercepted requests and zero live runtime requests. Disposable databases used
+MySQL 8.4.11 at the CI-pinned image digest. Core and the installed AI/MCP plugins
+passed official checksum verification. All inert Python suites also passed on
+Python 3.11.2 in a network-disabled container.
+
+Codex 0.162.1 passed all 36 compatibility checks and the strict four-scenario
+observational probe in network-disabled containers. The tool counts and approved
+image-delivery limitation remain as recorded above. The qualified pin is unchanged.
+
+### Frozen Package And Remaining Gate
+
+- File: `scriptorium-ai-provider-for-codex-2.1.4.zip`
+- Size: **134,346 bytes**, **48 files**, no duplicate ZIP entries
+- SHA-256: `08fe6a560b131643ecfd053ebdce7f3dba4a348eba95406dc0236917a84e7727`
+
+Every packaged file matches source and a regular-directory installation on
+disposable WordPress 7.1.3 / PHP 8.3.35 / AI 1.4.0 / MCP Adapter 0.7.0. That exact
+ZIP passed complete verification, the 11 persisted logging assertions and Plugin
+Check 2.1.0 with **zero findings**. This supersedes the earlier local candidates,
+not the published v2.1.3 release or the historical production installation.
+
+Windows-host access and the service/install path are not configured in this
+environment. The intended-host security checks, actual production source/version
+verification, managed-auth refresh and bounded authenticated text/image delivery
+remain pending. No production service, plugin installation or account was changed,
+and no billable generation was performed. Merge to `main`, publication and
+deployment remain held at that gate; authorization is recorded, not qualification.
+
+Hosted Verify run `39531463727` on the tested revision again failed all five jobs
+with `runner_id: 0` and zero steps. Local evidence does not turn that run green,
+and no required-check bypass or billing change was attempted.
