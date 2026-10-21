@@ -302,6 +302,6 @@ Implementation, local qualification and commits are complete. The Windows deploy
 ## Follow-ups (not in 2.1.4)
 
 - **Per-user OS isolation.** Separate directories under one account remain a logical boundary. Design options: one service account per WordPress user via `systemd-run --uid`, or a filesystem-confined launcher (bubblewrap / Windows restricted token). Needs its own spec.
-- **Windows sandbox behavior.** The read-only sandbox has no Linux-style backend on Windows; with the shell tool disabled this no longer matters for exposure, but the first Windows run after deployment should confirm no approval requests surface (Task 10 covers it manually).
+- **Windows sandbox behavior remains an unresolved security qualification.** Disabling the shell tool does not establish confinement of the exposed code-mode `functions.exec` surface. The observational probe runs no model-supplied code and no Windows runtime was validated. Confirm the effective Windows restrictions, process cleanup and absence of unintended host access before relying on this candidate for shared-host generation; do not infer that Linux observations establish Windows safety.
 - **Automated re-qualification.** When Codex is bumped, the compatibility smoke plus the probe are the gate; the diagnostics `codex_version` row warns operators in the meantime.
 - **CI.** Resolve the Actions billing lock so the compatibility job runs on every push.

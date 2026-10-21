@@ -188,6 +188,7 @@ final class Client {
 
 			if ( JSON_ERROR_NONE !== json_last_error() ) {
 				if ( $status_code >= 400 ) {
+					// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- The helper escapes the displayed message; these arguments are structured exception metadata.
 					throw self::proxy_response_exception( $status_code, $fallback_status_message, $url, $record_health );
 				}
 
@@ -205,6 +206,7 @@ final class Client {
 				);
 			}
 		} elseif ( $status_code >= 400 ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- The helper escapes the displayed message; these arguments are structured exception metadata.
 			throw self::proxy_response_exception( $status_code, $fallback_status_message, $url, $record_health );
 		}
 
@@ -214,6 +216,7 @@ final class Client {
 			$legacy_login_miss = 404 === $status_code && '/v1/login/status' === $path && 'missing' === ( $payload['status'] ?? null );
 
 			if ( ! isset( $runtime_error['code'] ) && ! isset( $runtime_error['message'] ) && ! $legacy_login_miss ) {
+				// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- The helper escapes the displayed message; these arguments are structured exception metadata.
 				throw self::proxy_response_exception( $status_code, $fallback_status_message, $url, $record_health, is_array( $payload ) ? $payload : [] );
 			}
 

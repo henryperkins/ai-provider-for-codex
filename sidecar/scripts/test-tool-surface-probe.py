@@ -104,6 +104,62 @@ class ProbeEvidenceTest(unittest.TestCase):
                     self.assertEqual(len(failures), 1)
                     self.assertIn(entry["model_request_error"], failures[0])
 
+    def code_mode_body(self, description):
+        return {
+            "model": probe.CODE_MODE_MODEL,
+            "input": [{"type": "additional_tools", "tools": [{
+                "type": "namespace", "name": "functions", "tools": [
+                    {"name": "exec", "description": description},
+                ],
+            }]}],
+        }
+
+    def test_parses_every_supported_code_mode_declaration(self):
+        description = "\n".join((
+            "```ts\ndeclare const tools: { get_goal(args: {}): Promise<unknown>; };\n```",
+            "```ts\ndeclare const tools: { clock__curr_time(args: {}): Promise<{ current_time: string; }>; };\n```",
+        ))
+        self.assertEqual(probe.nested_code_mode_tools(self.code_mode_body(description)),
+                         ["clock__curr_time", "get_goal"])
+
+    def test_rejects_multiple_members_in_one_tools_declaration(self):
+        description = ("```ts\ndeclare const tools: { get_goal(args: {}): Promise<unknown>; "
+                       "unexpected_tool(args: {}): Promise<unknown>; };\n```")
+        with self.assertRaises(ValueError):
+            probe.nested_code_mode_tools(self.code_mode_body(description))
+
+    def test_type_literals_and_comments_do_not_change_declaration_boundaries(self):
+        description = (
+            '```ts\ndeclare const tools: { get_goal(args: {\n'
+            '  // Documentation may contain braces } and parentheses ().\n'
+            '  label?: "curly}(value)";\n'
+            '}): Promise<{ url: "https://example.test/(value)"; }>; };\n```'
+        )
+        self.assertEqual(probe.nested_code_mode_tools(self.code_mode_body(description)), ["get_goal"])
+
+    def test_rejects_unrecognized_code_mode_declaration_shapes(self):
+        declarations = (
+            "declare const tools: { get_goal(args: {}): Promise<unknown>; };",
+            "```ts\ndeclare const tools: { get_goal: () => Promise<unknown>; };\n```",
+            "```ts\ndeclare const tools: { get_goal(args: {}): Promise<unknown>; hidden: OtherCallable; };\n```",
+            "```ts\ndeclare const tools: { get_goal(args: {}): Promise<{ value: string; }>; hidden: OtherCallable; };\n```",
+            "```ts\ndeclare const tools: { get_goal(args: {}): Promise<unknown>; };\n```\n"
+            "declare const tools: { unexpected_tool(args: {}): Promise<unknown>; };",
+            "No inspectable tool declarations",
+        )
+        for description in declarations:
+            with self.subTest(description=description), self.assertRaises(ValueError):
+                probe.nested_code_mode_tools(self.code_mode_body(description))
+
+    def test_unrecognized_nested_surface_is_retained_and_fails_qualification(self):
+        description = ("```ts\ndeclare const tools: { get_goal(args: {}): Promise<unknown>; "
+                       "unexpected_tool(args: {}): Promise<unknown>; };\n```")
+        entry = self.post(self.code_mode_body(description))
+        self.assertTrue(entry["model_request_error"].startswith("ValueError:"))
+        retained = entry["model_request"]["additional_tools"][0]["tools"][0]["tools"][0]
+        self.assertEqual(retained["description"], description)
+        self.assertTrue(any(entry["model_request_error"] in failure for failure in probe.check_scenario(self.report(entry))))
+
 
 if __name__ == "__main__":
     unittest.main()

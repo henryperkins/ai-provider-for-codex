@@ -143,17 +143,63 @@ def tool_names(body: dict) -> list[str]:
     return sorted(set(names))
 
 
+def single_object_type(value: str) -> bool:
+    value = value.strip()
+    if not value.startswith("{") or not value.endswith("}"):
+        return False
+    depth = 0
+    for index, character in enumerate(value):
+        if character == "{":
+            depth += 1
+        elif character == "}":
+            depth -= 1
+        if depth <= 0 and index != len(value) - 1:
+            return False
+    return depth == 0
+
+
+def code_mode_declaration_names(description: str) -> set[str]:
+    # The audited CLI emits one method per fenced declaration, with an object
+    # argument and an unknown/object result. Reject other shapes rather than
+    # accepting only the first name in an expanded tools object.
+    marker = re.compile(r"\bdeclare\s+const\s+tools\b")
+    names: set[str] = set()
+    inspected = 0
+    for block in re.findall(r"```ts[ \t]*\r?\n(.*?)\r?\n```", description, re.DOTALL):
+        if not marker.search(block):
+            continue
+        # Mask quoted type literals and remove comments before counting method
+        # parentheses or checking object boundaries. Braces in prose are data.
+        cleaned = re.sub(
+            r'''"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|//[^\n]*|/\*.*?\*/''',
+            lambda token: '"literal"' if token[0][0] in "\"'" else "",
+            block,
+            flags=re.DOTALL,
+        )
+        declaration = re.fullmatch(
+            r"\s*declare\s+const\s+tools\s*:\s*\{\s*([A-Za-z_][A-Za-z0-9_]*)"
+            r"\s*\(\s*args\s*:\s*(.*?)\s*\)\s*:\s*Promise\s*<\s*(.*?)\s*>\s*;\s*\}\s*;\s*",
+            cleaned,
+            re.DOTALL,
+        )
+        if declaration is None or cleaned.count("(") != 1 or cleaned.count(")") != 1:
+            raise ValueError("Unrecognized or multi-member code-mode tools declaration")
+        name, argument, result = declaration.groups()
+        if not single_object_type(argument) or (result.strip() != "unknown" and not single_object_type(result)):
+            raise ValueError("Unrecognized code-mode declaration types or extra members")
+        names.add(name)
+        inspected += 1
+    if not inspected or inspected != len(marker.findall(description)):
+        raise ValueError("Code-mode tool declarations were missing or not fully inspected")
+    return names
+
+
 def nested_code_mode_tools(body: dict) -> list[str]:
     names: set[str] = set()
     for tool in offered_tools(body):
         for nested in (tool.get("tools") or []) if tool.get("type") == "namespace" else [tool]:
             if nested.get("name") == "exec":
-                names.update(
-                    re.findall(
-                        r"declare const tools: \{ ([A-Za-z0-9_]+)\(",
-                        nested.get("description") or "",
-                    )
-                )
+                names.update(code_mode_declaration_names(nested.get("description") or ""))
     return sorted(names)
 
 

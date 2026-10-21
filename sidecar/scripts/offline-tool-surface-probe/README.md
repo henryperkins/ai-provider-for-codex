@@ -70,6 +70,9 @@ Nested code-mode names are checked separately: `get_goal`, `create_goal`,
 read-only clock helper observed on 0.162.1). Only image threads may include
 `image_gen__imagegen`. Unknown nested names fail the probe even when the outer
 `functions.exec` envelope is allowed.
+The nested parser accepts only the audited one-method TypeScript declaration
+format. Multiple members in one tools declaration, uninspected declarations or
+other unknown shapes fail qualification instead of silently accepting a subset.
 
 Every backend path and response status is recorded, together with the full
 offered specs from both top-level `tools` and `additional_tools` input items.
