@@ -62,7 +62,11 @@ final class DiagnosticsController {
 		$version = '';
 
 		try {
-			$result  = ( new Client() )->diagnostics();
+			$result = ( new Client() )->diagnostics();
+			if ( ! self::is_valid_diagnostics( $result ) ) {
+				throw new RuntimeException( esc_html__( 'The Runtime URL did not return complete, consistent Codex sidecar diagnostics. Verify the Runtime URL and installed sidecar version, then run the check again.', 'scriptorium-ai-provider-for-codex' ) );
+			}
+
 			$version = (string) ( $result['version'] ?? '' );
 			$rows[]  = self::row( 'reachable', __( 'Sidecar reachable', 'scriptorium-ai-provider-for-codex' ), 'pass', '' );
 			$rows[]  = self::row( 'bearer', __( 'Bearer token matches', 'scriptorium-ai-provider-for-codex' ), 'pass', '' );
@@ -85,8 +89,8 @@ final class DiagnosticsController {
 
 			$ok = (bool) ( $result['ok'] ?? false );
 		} catch ( RuntimeRequestException $exception ) {
-			if ( $exception->is_proxy_response() ) {
-				// A proxy, tunnel, or gateway answered, so the sidecar itself was not reached.
+			if ( $exception->is_proxy_response() || 'invalid_json' === $exception->get_runtime_error_code() ) {
+				// A proxy or malformed response does not establish sidecar identity.
 				$rows[] = self::row(
 					'reachable',
 					__( 'Sidecar reachable', 'scriptorium-ai-provider-for-codex' ),
@@ -130,6 +134,64 @@ final class DiagnosticsController {
 				'config'    => self::config_rows( $version ),
 			]
 		);
+	}
+
+	/**
+	 * Validates identity, check shapes and the aggregate before reporting success.
+	 * Dependent checks are legitimately absent when CLI startup or handshake fails.
+	 *
+	 * @param array<string,mixed> $result Runtime response.
+	 * @return bool
+	 */
+	private static function is_valid_diagnostics( array $result ): bool {
+		if (
+			'codex-wp-sidecar' !== ( $result['service'] ?? null )
+			|| ! is_string( $result['version'] ?? null )
+			|| '' === trim( $result['version'] )
+			|| ! is_bool( $result['ok'] ?? null )
+			|| ! is_array( $result['checks'] ?? null )
+			|| [] === $result['checks']
+			|| array_values( $result['checks'] ) !== $result['checks']
+		) {
+			return false;
+		}
+
+		$statuses = [];
+		$all_pass = true;
+		foreach ( $result['checks'] as $check ) {
+			if (
+				! is_array( $check )
+				|| ! is_string( $check['id'] ?? null )
+				|| '' === $check['id']
+				|| sanitize_key( $check['id'] ) !== $check['id']
+				|| in_array( $check['id'], [ 'reachable', 'bearer' ], true )
+				|| isset( $statuses[ $check['id'] ] )
+				|| ! is_string( $check['label'] ?? null )
+				|| '' === trim( $check['label'] )
+				|| ! is_string( $check['detail'] ?? null )
+				|| ! in_array( $check['status'] ?? null, [ 'pass', 'warn', 'fail' ], true )
+			) {
+				return false;
+			}
+			$statuses[ $check['id'] ] = $check['status'];
+			$all_pass = $all_pass && 'pass' === $check['status'];
+		}
+
+		$required = [ 'python_version', 'codex_cli', 'storage_root', 'user_config_overrides' ];
+		if ( 'pass' === ( $statuses['codex_cli'] ?? null ) ) {
+			$required[] = 'codex_version';
+			$required[] = 'app_server';
+		}
+		if ( 'pass' === ( $statuses['app_server'] ?? null ) ) {
+			$required[] = 'generation_policy';
+		}
+		foreach ( $required as $id ) {
+			if ( ! isset( $statuses[ $id ] ) ) {
+				return false;
+			}
+		}
+
+		return $result['ok'] === $all_pass;
 	}
 
 	/**

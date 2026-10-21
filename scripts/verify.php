@@ -3081,9 +3081,14 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 						return $codex_provider_http_json_response(
 							200,
 							[
-								'ok'     => false,
-								'checks' => [
+								'ok'      => false,
+								'service' => 'codex-wp-sidecar',
+								'version' => '2.1.4',
+								'checks'  => [
 									[ 'id' => 'codex_cli', 'label' => 'Codex CLI', 'status' => 'fail', 'detail' => 'codex not found' ],
+									[ 'id' => 'python_version', 'label' => 'Python runtime', 'status' => 'pass', 'detail' => 'Python 3.11.6' ],
+									[ 'id' => 'storage_root', 'label' => 'Storage writable', 'status' => 'pass', 'detail' => 'writable' ],
+									[ 'id' => 'user_config_overrides', 'label' => 'No user configuration', 'status' => 'pass', 'detail' => 'none' ],
 								],
 							]
 						);
@@ -3111,9 +3116,14 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 						return $codex_provider_http_json_response(
 							200,
 							[
-								'ok'     => false,
-								'checks' => [
+								'ok'      => false,
+								'service' => 'codex-wp-sidecar',
+								'version' => '2.1.4',
+								'checks'  => [
 									[ 'id' => 'user_config_overrides', 'label' => 'No per-user Codex configuration', 'status' => 'warn', 'detail' => '/var/lib/codex-wp/users/3/config.toml' ],
+									[ 'id' => 'python_version', 'label' => 'Python runtime', 'status' => 'pass', 'detail' => 'Python 3.11.6' ],
+									[ 'id' => 'storage_root', 'label' => 'Storage writable', 'status' => 'pass', 'detail' => 'writable' ],
+									[ 'id' => 'codex_cli', 'label' => 'Codex CLI', 'status' => 'pass', 'detail' => 'codex-cli 0.163.0' ],
 									[ 'id' => 'codex_version', 'label' => 'Codex version qualified', 'status' => 'warn', 'detail' => '0.163.0 installed; this sidecar release is qualified against 0.162.1' ],
 									[ 'id' => 'app_server', 'label' => 'app-server handshake', 'status' => 'pass', 'detail' => 'initialize completed in 0.1s' ],
 									[ 'id' => 'generation_policy', 'label' => 'Generation policy enforced', 'status' => 'fail', 'detail' => 'The apps feature is not disabled on generation threads' ],

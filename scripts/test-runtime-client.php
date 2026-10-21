@@ -49,7 +49,8 @@ class WP_REST_Response {
 }
 
 define( 'HOUR_IN_SECONDS', 3600 );
-function set_transient( $name, $value, $expiration ) { return true; }
+$codex_transients = array();
+function set_transient( $name, $value, $expiration ) { global $codex_transients; $codex_transients[ $name ] = $value; return true; }
 
 $codex_reply = array( 'body' => '{"outputText":"fixture"}', 'response' => array( 'code' => 200, 'message' => 'OK' ) );
 $codex_last_args = array();
@@ -240,7 +241,7 @@ foreach ( array( 401 => 'unauthorized', 404 => 'not_found', 500 => 'internal_err
 
 $codex_reply = array( 'body' => 'malformed fixture', 'response' => array( 'code' => 200, 'message' => 'OK' ) );
 $diagnostics = AIProviderForCodex\REST\DiagnosticsController::run()->get_data();
-$codex_assert( 'pass' === $diagnostics['rows'][0]['status'], 'diagnostics: malformed JSON with HTTP 200 still proves reachability' );
+$codex_assert( 'fail' === $diagnostics['rows'][0]['status'], 'diagnostics: malformed JSON with HTTP 200 does not prove sidecar identity' );
 
 // A tunnel or gateway answering in place of the sidecar must not pass reachability.
 foreach ( array( array( '', 502, 'Bad Gateway' ), array( '<html>A timeout occurred</html>', 524, '' ), array( '', 404, 'Not Found' ), array( '', 401, 'Unauthorized' ) ) as $case ) {
@@ -251,6 +252,52 @@ foreach ( array( array( '', 502, 'Bad Gateway' ), array( '<html>A timeout occurr
 	$codex_assert( false !== strpos( $diagnostics['rows'][0]['detail'], "HTTP {$case[1]}" ), "diagnostics: proxy HTTP {$case[1]} detail names the status" );
 	$codex_assert( false !== strpos( $diagnostics['rows'][0]['remediation'], 'gateway or tunnel' ), "diagnostics: proxy HTTP {$case[1]} points at the gateway or tunnel" );
 	$codex_assert( 1 === count( $diagnostics['rows'] ), "diagnostics: proxy HTTP {$case[1]} does not add a misleading sidecar-response row" );
+}
+
+// Successful HTTP alone must not establish sidecar identity or a passing diagnostic.
+$codex_valid_diagnostics = array( 'service' => 'codex-wp-sidecar', 'version' => '2.1.4', 'ok' => true, 'checks' => array() );
+foreach ( array( 'python_version', 'codex_cli', 'storage_root', 'user_config_overrides', 'codex_version', 'app_server', 'generation_policy' ) as $id ) {
+	$codex_valid_diagnostics['checks'][] = array( 'id' => $id, 'label' => $id, 'status' => 'pass', 'detail' => 'fixture' );
+}
+$codex_invalid_diagnostics = array( 'unrelated success JSON' => array( 'ok' => true ) );
+$invalid = $codex_valid_diagnostics; $invalid['service'] = 'another-service'; $codex_invalid_diagnostics['wrong service identity'] = $invalid;
+$invalid = $codex_valid_diagnostics; unset( $invalid['version'] ); $codex_invalid_diagnostics['missing version'] = $invalid;
+$invalid = $codex_valid_diagnostics; $invalid['ok'] = 'true'; $codex_invalid_diagnostics['non-boolean aggregate'] = $invalid;
+$invalid = $codex_valid_diagnostics; $invalid['checks'] = array(); $codex_invalid_diagnostics['empty checks'] = $invalid;
+$invalid = $codex_valid_diagnostics; unset( $invalid['checks'][6] ); $codex_invalid_diagnostics['missing generation policy'] = $invalid;
+$invalid = $codex_valid_diagnostics; $invalid['checks'][] = $invalid['checks'][0]; $codex_invalid_diagnostics['duplicate check ID'] = $invalid;
+$invalid = $codex_valid_diagnostics; $invalid['checks'][6]['status'] = 'unknown'; $codex_invalid_diagnostics['unknown status'] = $invalid;
+$invalid = $codex_valid_diagnostics; $invalid['checks'][] = 'not a check'; $codex_invalid_diagnostics['non-object check'] = $invalid;
+$invalid = $codex_valid_diagnostics; $invalid['checks'][0]['detail'] = array(); $codex_invalid_diagnostics['non-string detail'] = $invalid;
+$invalid = $codex_valid_diagnostics; unset( $invalid['checks'][0]['label'] ); $codex_invalid_diagnostics['missing label'] = $invalid;
+$invalid = $codex_valid_diagnostics; $invalid['checks'][6]['status'] = 'fail'; $codex_invalid_diagnostics['failed policy with success aggregate'] = $invalid;
+$invalid = $codex_valid_diagnostics; $invalid['checks'][3]['status'] = 'warn'; $codex_invalid_diagnostics['warning with success aggregate'] = $invalid;
+$invalid = $codex_valid_diagnostics; $invalid['ok'] = false; $codex_invalid_diagnostics['failure aggregate without issues'] = $invalid;
+$invalid = $codex_valid_diagnostics; $invalid['checks'][] = array( 'id' => 'reachable', 'label' => 'Injected reachability', 'status' => 'pass', 'detail' => '' ); $codex_invalid_diagnostics['reserved local check ID'] = $invalid;
+foreach ( $codex_invalid_diagnostics as $name => $payload ) {
+	$codex_reply = array( 'body' => json_encode( $payload ), 'response' => array( 'code' => 200, 'message' => 'OK' ) );
+	$diagnostics = AIProviderForCodex\REST\DiagnosticsController::run()->get_data();
+	$codex_assert( false === $diagnostics['ok'], "diagnostics schema: {$name} cannot pass overall" );
+	$codex_assert( 'fail' === $diagnostics['rows'][0]['status'] && 1 === count( $diagnostics['rows'] ), "diagnostics schema: {$name} cannot claim reachability or bearer success" );
+	$codex_assert( false === $codex_transients['codex_provider_last_diagnostics']['ok'], "diagnostics schema: {$name} persists a failed verdict" );
+}
+$codex_reply = array( 'body' => json_encode( $codex_valid_diagnostics ), 'response' => array( 'code' => 200, 'message' => 'OK' ) );
+$diagnostics = AIProviderForCodex\REST\DiagnosticsController::run()->get_data();
+$codex_assert( true === $diagnostics['ok'] && 9 === count( $diagnostics['rows'] ), 'diagnostics schema: complete passing sidecar response retains every check' );
+$codex_assert( true === $codex_transients['codex_provider_last_diagnostics']['ok'], 'diagnostics schema: complete passing response stores a passing verdict' );
+
+// A real failed CLI/handshake omits dependent checks; keep the root cause visible.
+foreach ( array( 'codex_cli' => 1, 'app_server' => 5, 'generation_policy' => 6 ) as $failed_id => $index ) {
+	$payload = $codex_valid_diagnostics;
+	$payload['ok'] = false;
+	$payload['checks'][ $index ]['status'] = 'fail';
+	if ( 'codex_cli' === $failed_id ) { $payload['checks'] = array_slice( $payload['checks'], 0, 4 ); }
+	if ( 'app_server' === $failed_id ) { $payload['checks'] = array_slice( $payload['checks'], 0, 6 ); }
+	$codex_reply = array( 'body' => json_encode( $payload ), 'response' => array( 'code' => 200, 'message' => 'OK' ) );
+	$diagnostics = AIProviderForCodex\REST\DiagnosticsController::run()->get_data();
+	$rows = array_column( $diagnostics['rows'], null, 'id' );
+	$codex_assert( false === $diagnostics['ok'] && 'fail' === ( $rows[ $failed_id ]['status'] ?? '' ), "diagnostics schema: genuine {$failed_id} failure remains actionable" );
+	$codex_assert( 'pass' === $rows['reachable']['status'] && 'pass' === $rows['bearer']['status'], "diagnostics schema: genuine {$failed_id} response retains confirmed transport identity" );
 }
 
 echo 0 === $codex_failures ? "OK: {$codex_tests} assertions passed\n" : "{$codex_failures}/{$codex_tests} assertions FAILED\n";
