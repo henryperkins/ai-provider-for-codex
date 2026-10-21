@@ -85,8 +85,17 @@ final class DiagnosticsController {
 
 			$ok = (bool) ( $result['ok'] ?? false );
 		} catch ( RuntimeRequestException $exception ) {
-			if ( 0 < $exception->get_status_code() ) {
-				// An HTTP response proves reachability, even when its content fails.
+			if ( $exception->is_proxy_response() ) {
+				// A proxy, tunnel, or gateway answered, so the sidecar itself was not reached.
+				$rows[] = self::row(
+					'reachable',
+					__( 'Sidecar reachable', 'scriptorium-ai-provider-for-codex' ),
+					'fail',
+					$exception->getMessage(),
+					__( 'The Runtime URL answered, but not from the sidecar. Check that the sidecar service and any gateway or tunnel in front of it (for example cloudflared) are running and pointed at each other, then run the check again.', 'scriptorium-ai-provider-for-codex' )
+				);
+			} elseif ( 0 < $exception->get_status_code() ) {
+				// An HTTP response from the sidecar proves reachability, even when its content fails.
 				$rows[] = self::row( 'reachable', __( 'Sidecar reachable', 'scriptorium-ai-provider-for-codex' ), 'pass', '' );
 				$rows[] = self::runtime_error_row( $exception );
 			} else {

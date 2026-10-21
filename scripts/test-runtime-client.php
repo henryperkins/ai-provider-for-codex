@@ -130,6 +130,71 @@ if ( $caught instanceof $exception_class ) {
 	$codex_assert( false === $caught->is_auth_required(), 'policy: refusal does not clear account authentication' );
 }
 
+// The sidecar always replies with JSON and an error envelope, so other error
+// responses must name the hop that answered instead of the bare reason phrase.
+$codex_proxy_cases = array(
+	'empty tunnel 502'       => array( '', 502, 'Bad Gateway', 'HTTP 502 Bad Gateway', 'is running' ),
+	'string-error 503'       => array( '{"error":"upstream unavailable"}', 503, 'Service Unavailable', 'HTTP 503 Service Unavailable', 'is running' ),
+	'Cloudflare 524 page'    => array( '<!DOCTYPE html><title>A timeout occurred sensitive-test-marker</title>', 524, '', 'HTTP 524', '125-second default read timeout' ),
+	'gateway 504 page'       => array( '<html>504 Gateway Time-out sensitive-test-marker</html>', 504, 'Gateway Timeout', 'HTTP 504 Gateway Timeout', 'timed out' ),
+	'web server 404 page'    => array( '<html>Not Found sensitive-test-marker</html>', 404, 'Not Found', 'HTTP 404 Not Found', 'points at the sidecar' ),
+	'empty gateway 404'      => array( '', 404, 'Not Found', 'HTTP 404 Not Found', 'points at the sidecar' ),
+	'empty gateway 401'      => array( '', 401, 'Unauthorized', 'HTTP 401 Unauthorized', 'bearer token' ),
+	'access 403 page'        => array( '<html>Forbidden sensitive-test-marker</html>', 403, 'Forbidden', 'HTTP 403 Forbidden', 'bearer token' ),
+	'gateway JSON 401'       => array( '{"error":"unauthorized"}', 401, 'Unauthorized', 'HTTP 401 Unauthorized', 'bearer token' ),
+	'web app JSON 404'       => array( '{"code":"rest_no_route","message":"No route sensitive-test-marker"}', 404, 'Not Found', 'HTTP 404 Not Found', 'points at the sidecar' ),
+);
+foreach ( $codex_proxy_cases as $label => $case ) {
+	Codex_Runtime_Health_Fixture::$status = '';
+	$codex_reply = array( 'body' => $case[0], 'response' => array( 'code' => $case[1], 'message' => $case[2] ) );
+	$caught      = null;
+	try { $client->post( '/v1/responses/image', array( 'prompt' => 'fixture' ) ); } catch ( Throwable $error ) { $caught = $error; }
+	$codex_assert( $caught instanceof $exception_class, "proxy: {$label} reaches the model logging catch as RuntimeRequestException" );
+	if ( $caught instanceof $exception_class ) {
+		$codex_assert( $caught->is_proxy_response(), "proxy: {$label} is classified as answered by something other than the sidecar" );
+		$codex_assert( $case[1] === $caught->get_status_code(), "proxy: {$label} retains its HTTP status" );
+		$codex_assert( false !== strpos( $caught->getMessage(), $case[3] ), "proxy: {$label} names the HTTP status" );
+		$codex_assert( false !== strpos( $caught->getMessage(), '127.0.0.1:4317' ), "proxy: {$label} names the runtime host" );
+		$codex_assert( false !== strpos( $caught->getMessage(), $case[4] ), "proxy: {$label} explains the next step" );
+		$codex_assert( false === strpos( $caught->getMessage(), 'sensitive-test-marker' ), "proxy: {$label} does not leak the raw body" );
+		$codex_assert( false === $caught->is_auth_required(), "proxy: {$label} does not clear account authentication" );
+	}
+	$codex_assert( 'unreachable' === Codex_Runtime_Health_Fixture::$status, "proxy: {$label} marks the runtime unhealthy" );
+}
+
+$codex_reply = array( 'body' => '', 'response' => array( 'code' => 524, 'message' => '' ) );
+$caught      = null;
+try { $client->post( '/v1/responses/text', array( 'input' => 'fixture' ) ); } catch ( Throwable $error ) { $caught = $error; }
+$codex_assert( $caught instanceof $exception_class && false !== strpos( $caught->getMessage(), '30-second write timeout' ), 'proxy: Cloudflare 524 also names the write timeout that slow uploads hit' );
+
+// An older sidecar's envelope-less missing-login 404 stays a sidecar response for ConnectionService recovery.
+Codex_Runtime_Health_Fixture::$status = '';
+$codex_reply = array( 'body' => '{"authSessionId":"fixture","status":"missing","error":"Login session was not found in the local runtime."}', 'response' => array( 'code' => 404, 'message' => 'Not Found' ) );
+$caught      = null;
+try { $client->get( '/v1/login/status' ); } catch ( Throwable $error ) { $caught = $error; }
+$codex_assert( $caught instanceof $exception_class && ! $caught->is_proxy_response(), 'legacy: missing-login 404 is not classified as a proxy response' );
+if ( $caught instanceof $exception_class ) {
+	$codex_assert( 404 === $caught->get_status_code() && 'missing' === ( $caught->get_payload()['status'] ?? null ), 'legacy: missing-login 404 keeps the status and payload ConnectionService recovers from' );
+}
+$codex_assert( '' === Codex_Runtime_Health_Fixture::$status, 'legacy: missing-login 404 does not mark the runtime unhealthy' );
+$caught = null;
+try { $client->diagnostics(); } catch ( Throwable $error ) { $caught = $error; }
+$codex_assert( $caught instanceof $exception_class && $caught->is_proxy_response(), 'legacy: the missing-login exemption applies only to login status' );
+
+foreach ( array(
+	'sidecar 502 envelope' => array( 502, '{"error":{"code":"image_generation_failed","message":"Codex completed the image turn without returning image data."}}', 'image_generation_failed', 'Codex completed the image turn without returning image data.' ),
+	'sidecar 500 message'  => array( 500, '{"error":{"message":"sidecar exploded"}}', '', 'sidecar exploded' ),
+) as $label => $case ) {
+	$codex_reply = array( 'body' => $case[1], 'response' => array( 'code' => $case[0], 'message' => 'Fixture' ) );
+	$caught      = null;
+	try { $client->post( '/v1/responses/image', array( 'prompt' => 'fixture' ) ); } catch ( Throwable $error ) { $caught = $error; }
+	$codex_assert( $caught instanceof $exception_class && ! $caught->is_proxy_response(), "sidecar: {$label} stays a sidecar error" );
+	if ( $caught instanceof $exception_class ) {
+		$codex_assert( $case[2] === $caught->get_runtime_error_code(), "sidecar: {$label} keeps the sidecar error code" );
+		$codex_assert( $case[3] === $caught->getMessage(), "sidecar: {$label} keeps the sidecar message" );
+	}
+}
+
 $codex_reply = array( 'body' => '{"outputText":"fixture"}', 'response' => array( 'code' => 200, 'message' => 'OK' ) );
 $client->diagnostics();
 $codex_assert( 30 === $codex_last_args['timeout'], 'diagnostics: timeout includes CLI, handshake, policy probe, and child cleanup headroom' );
@@ -176,6 +241,17 @@ foreach ( array( 401 => 'unauthorized', 404 => 'not_found', 500 => 'internal_err
 $codex_reply = array( 'body' => 'malformed fixture', 'response' => array( 'code' => 200, 'message' => 'OK' ) );
 $diagnostics = AIProviderForCodex\REST\DiagnosticsController::run()->get_data();
 $codex_assert( 'pass' === $diagnostics['rows'][0]['status'], 'diagnostics: malformed JSON with HTTP 200 still proves reachability' );
+
+// A tunnel or gateway answering in place of the sidecar must not pass reachability.
+foreach ( array( array( '', 502, 'Bad Gateway' ), array( '<html>A timeout occurred</html>', 524, '' ), array( '', 404, 'Not Found' ), array( '', 401, 'Unauthorized' ) ) as $case ) {
+	$codex_reply = array( 'body' => $case[0], 'response' => array( 'code' => $case[1], 'message' => $case[2] ) );
+	$diagnostics = AIProviderForCodex\REST\DiagnosticsController::run()->get_data();
+	$codex_assert( false === $diagnostics['ok'], "diagnostics: proxy HTTP {$case[1]} fails the verdict" );
+	$codex_assert( 'fail' === $diagnostics['rows'][0]['status'], "diagnostics: proxy HTTP {$case[1]} does not prove the sidecar is reachable" );
+	$codex_assert( false !== strpos( $diagnostics['rows'][0]['detail'], "HTTP {$case[1]}" ), "diagnostics: proxy HTTP {$case[1]} detail names the status" );
+	$codex_assert( false !== strpos( $diagnostics['rows'][0]['remediation'], 'gateway or tunnel' ), "diagnostics: proxy HTTP {$case[1]} points at the gateway or tunnel" );
+	$codex_assert( 1 === count( $diagnostics['rows'] ), "diagnostics: proxy HTTP {$case[1]} does not add a misleading sidecar-response row" );
+}
 
 echo 0 === $codex_failures ? "OK: {$codex_tests} assertions passed\n" : "{$codex_failures}/{$codex_tests} assertions FAILED\n";
 exit( 0 === $codex_failures ? 0 : 1 );
