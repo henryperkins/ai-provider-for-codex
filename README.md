@@ -46,6 +46,7 @@ WordPress AI Client provider plugin for Codex text models and capability-gated C
 ## Verification
 
 - `WP_PATH=/path/to/site ./scripts/verify.sh`
+- `CODEX_VERIFY_FLAVOR_AGENT=1 WP_PATH=/path/to/disposable-site ./scripts/verify.sh` also verifies Codex, Flavor Agent, and WordPress AI together. Activate all three plugins and AI Request Logging first. The test uses real SDK results and database persistence with intercepted sidecar HTTP, then removes its fixture data. It checks request/log correlation, request IDs, outcome attribution, failures, disabled logging, and rejected inserts without making live model requests.
 - `wp --path=/path/to/site eval-file wp-content/plugins/scriptorium-ai-provider-for-codex/scripts/verify.php`
 - `python3 sidecar/scripts/test-image-generation.py`
 

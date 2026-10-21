@@ -127,3 +127,8 @@ python3 "$ROOT_DIR/sidecar/scripts/test-generation-contract.py"
 python3 "$ROOT_DIR/sidecar/scripts/test-process-security.py"
 python3 "$ROOT_DIR/sidecar/scripts/test-tool-surface-probe.py"
 wp --path="$WP_PATH" eval-file "$ROOT_DIR/scripts/verify.php"
+
+# Opt in on a disposable site with Flavor Agent and AI Request Logging active.
+if [[ "${CODEX_VERIFY_FLAVOR_AGENT:-0}" == "1" ]]; then
+	wp --path="$WP_PATH" eval-file "$ROOT_DIR/scripts/test-flavor-agent-integration.php"
+fi

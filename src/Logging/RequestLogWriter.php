@@ -175,6 +175,15 @@ final class RequestLogWriter {
 				return false;
 			}
 
+			// Explicit log writes bypass the AI plugin's HTTP response extractor.
+			// Honor its context hook so consumers can correlate the persisted row.
+			// There is no raw provider response here; pass only the safe log data.
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Consumes WordPress AI's public request-log context hook.
+			$context = apply_filters( 'wpai_request_log_context', $entry['context'] ?? array(), array(), $entry );
+			if ( is_array( $context ) && ( array() !== $context || isset( $entry['context'] ) ) ) {
+				$entry['context'] = $context;
+			}
+
 			return false !== $sink( $entry );
 		} catch ( \Throwable $e ) {
 			return false;

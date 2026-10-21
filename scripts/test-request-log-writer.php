@@ -63,8 +63,10 @@ function get_option( $name, $default = false ) {
 	return $codex_options[ $name ] ?? $default;
 }
 
-function apply_filters( $name, $value ) {
-	return $value;
+$codex_filters = array();
+function apply_filters( $name, $value, ...$args ) {
+	global $codex_filters;
+	return isset( $codex_filters[ $name ] ) ? $codex_filters[ $name ]( $value, ...$args ) : $value;
 }
 
 $codex_failures = 0;
@@ -251,6 +253,32 @@ if ( $codex_modern_logging ) {
 	$codex_options['wpai_feature_ai-request-logging_enabled'] = true;
 }
 
+// Explicit writes must honor the AI plugin's context hook just like its HTTP transporter.
+$context_calls = 0;
+$codex_filters['wpai_request_log_context'] = static function ( array $context, array $decoded, array $log_data ) use ( &$context_calls, $codex_assert ): array {
+	++$context_calls;
+	$codex_assert( array() === $decoded, 'context: no fabricated raw provider response' );
+	$codex_assert( 'codex' === $log_data['provider'], 'context: receives the complete log entry' );
+	$context['consumer'] = 'active-request-token';
+	return $context;
+};
+foreach ( array( $entry, $image, $err ) as $outcome ) {
+	$before = count( Codex_Log_Manager_Fixture::$entries );
+	$codex_assert( $writer::record( $outcome ), 'context: enriched outcome is accepted' );
+	$stored = Codex_Log_Manager_Fixture::$entries[ $before ] ?? array();
+	$codex_assert( $before + 1 === count( Codex_Log_Manager_Fixture::$entries ), 'context: exactly one write per outcome' );
+	$codex_assert( 'active-request-token' === ( $stored['context']['consumer'] ?? null ), 'context: consumer correlation reaches storage' );
+	unset( $stored['context']['consumer'] );
+	$codex_assert( $outcome === $stored, 'context: existing request ID and safe metadata are preserved' );
+}
+$codex_assert( 3 === $context_calls, 'context: one enrichment per success, image and error' );
+$codex_filters['wpai_request_log_context'] = static function () { return null; };
+$codex_assert( $writer::record( $entry, $sink ) && $entry === $captured, 'context: malformed filter result preserves the original entry' );
+$codex_filters['wpai_request_log_context'] = static function () { throw new RuntimeException( 'broken observer' ); };
+$captured = null;
+$codex_assert( false === $writer::record( $entry, $sink ) && null === $captured, 'context: observer failure never escapes or invokes the sink' );
+unset( $codex_filters['wpai_request_log_context'] );
+
 // Leave legacy options enabled so this also catches discarded storage failures.
 $codex_options['wpai_features_enabled'] = true;
 Codex_Log_Manager_Fixture::$fail = true;
@@ -258,8 +286,11 @@ $codex_assert( false === $writer::record( $entry ), 'default: persistence reject
 Codex_Log_Manager_Fixture::$fail = false;
 if ( $codex_modern_logging ) {
 	Codex_Logging_Integration_Fixture::$manager = null;
+	$codex_filters['wpai_request_log_context'] = static function () use ( &$context_calls ) { ++$context_calls; return array(); };
+	$before_calls = $context_calls;
 	$codex_assert( false === $writer::is_logging_enabled(), 'current: inactive shared manager overrides legacy enabled options' );
 	$codex_assert( false === $writer::record( $entry ), 'current: inactive experiment skips the default sink' );
+	$codex_assert( $before_calls === $context_calls, 'current: inactive experiment does not collect context' );
 }
 
 echo 0 === $codex_failures

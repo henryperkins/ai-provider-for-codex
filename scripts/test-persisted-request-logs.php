@@ -119,6 +119,11 @@ try {
 	$result = $model->generateTextResult( $prompt );
 	$codex_assert( 'Persisted fixture output.' === $result->toText(), 'Persistence failure preserves a successful consumer result.' );
 	$codex_assert( 4 === $codex_requests && 2 === $codex_count(), 'Persistence failure does not retry generation or duplicate rows.' );
+	if ( isset( $codex_flavor_checks ) && is_callable( $codex_flavor_checks ) ) {
+		remove_filter( 'query', $codex_reject_insert );
+		$wpdb->suppress_errors( $codex_prior_suppress );
+		$codex_flavor_checks( $codex_assert, $codex_model_id, $codex_token, $codex_user_id, $codex_table, $codex_reply_kind );
+	}
 } finally {
 	remove_filter( 'pre_http_request', $codex_http, PHP_INT_MAX );
 	remove_filter( 'query', $codex_reject_insert );
