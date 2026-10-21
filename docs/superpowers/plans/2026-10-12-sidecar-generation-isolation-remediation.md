@@ -122,12 +122,15 @@ def require_generation_policy(thread_started: Any) -> None:
     approval = thread_started.get("approvalPolicy") if isinstance(thread_started, dict) else None
     sandbox = thread_started.get("sandbox") if isinstance(thread_started, dict) else None
     sandbox_type = sandbox.get("type") if isinstance(sandbox, dict) else None
-    if approval != "never" or sandbox_type != "readOnly":
+    thread = thread_started.get("thread") if isinstance(thread_started, dict) else None
+    environments = thread.get("environments") if isinstance(thread, dict) else None
+    if approval != "never" or sandbox_type != "readOnly" or environments != []:
         raise HttpError(
             "runtime_policy_rejected",
             "Codex did not apply the sidecar generation policy. Check the Codex version against the qualified release.",
             HTTPStatus.BAD_GATEWAY,
-            data={"approvalPolicy": approval, "sandboxType": sandbox_type},
+            data={"approvalPolicy": approval, "sandboxType": sandbox_type,
+                  "environmentCount": len(environments) if isinstance(environments, list) else None},
         )
 ```
 
@@ -135,7 +138,7 @@ Call it immediately after both `thread_started = session.request("thread/start",
 
 - [x] **Step 2: Update the fixture and add cases**
 
-In the fixture's `thread/start` reply (line ~65 of `test-generation-contract.py`) return the 0.162.1 shape: `{"thread": {"id": "thread_test"}, "approvalPolicy": "never", "sandbox": {"type": "readOnly"}}`. Add:
+In the fixture's `thread/start` reply (line ~65 of `test-generation-contract.py`) return the 0.162.1 shape: `{"thread": {"id": "thread_test", "environments": []}, "approvalPolicy": "never", "sandbox": {"type": "readOnly"}}`. Add:
 
 - `test_text_turn_is_refused_when_thread_policy_is_missing`: fixture returns the old `{"thread": {"id": ...}}`; expect `HttpError` with code `runtime_policy_rejected`, status 502, and **no** `turn/start` in `requests`.
 - `test_image_turn_is_refused_when_sandbox_is_not_read_only`: fixture returns `sandbox: {"type": "workspaceWrite"}`; same expectations.
@@ -238,7 +241,7 @@ If this task grows beyond a focused change, ship 2.1.4 without it and move it to
    1. Process environment: the exact passthrough set (Task 5), including operator-owned proxy settings and CA trust paths; provider keys, sidecar bearer tokens and database credentials stay excluded.
   2. Process features: `codex app-server --disable apps --disable plugins`; why each matters; `--disable` fails closed.
   3. Thread policy: approval `never`, sandbox `read-only`, `environments: []`, disabled tool features, `web_search` disabled, native image generation only on image threads; the sidecar refuses the turn if `thread/start` does not echo the policy.
-  Then the boundary statement: model tools cannot read host files or run commands, **but** anything defined in Codex configuration on the host (MCP servers, hooks) runs as a host process; keep the sidecar host free of such configuration. Per-user directories under one OS account are not an OS boundary.
+  Then the boundary statement: the qualified tool surface disables shell/file tools; any claim about code-mode host access requires execution evidence from the actual platform and configuration. Keep the Windows qualification caveat until those checks pass. Codex configuration on the host (MCP servers, hooks) can launch host processes, so keep the sidecar host free of such configuration. Per-user directories under one OS account are not an OS boundary. See the October 21 Windows execution evidence in the qualification record for the observed restrictions and their limits.
 
 - [x] **Step 2: `readme.txt` changelog** for 2.1.4:
   - Harden sidecar generation sessions: minimal child-process environment, explicit approval/sandbox/tool policies, ChatGPT Apps and account-synced Plugins disabled for sidecar-owned Codex processes.
@@ -261,7 +264,7 @@ If this task grows beyond a focused change, ship 2.1.4 without it and move it to
 `sidecar/scripts/` is already excluded from the release zip, so this ships nowhere.
 
 - [x] **Step 1: Scope** — the probe is observational and fixed-allowlist. It runs the real sidecar generation code against the real `codex` binary inside `docker run --network none`, with a loopback HTTPS mock standing in for the ChatGPT backend. It uses a synthetic, unsigned token file and never contacts real endpoints. For each scenario it records: tool specs offered to the model (top-level `tools` and `additional_tools` items), nested code-mode tool names, every backend path requested, and the generation result. It asserts:
-  - offered tools ⊆ allowlist `{request_user_input, request_user_input_async, get_goal, create_goal, update_goal, list_mcp_resources, list_mcp_resource_templates, read_mcp_resource, clock.sleep, functions.exec, functions.wait}` plus `image_gen.imagegen` on image threads only;
+  - offered tools ⊆ allowlist `{request_user_input, request_user_input_async, get_goal, create_goal, update_goal, list_mcp_resources, list_mcp_resource_templates, read_mcp_resource, clock.sleep, clock__curr_time, functions.exec, functions.wait}` plus `image_gen.imagegen` on image threads only;
   - no request path under `/ps/` or `/plugins/`;
    - no successful websocket or upgrade outside the model endpoint; no `/ps/mcp` traffic;
    - text generation returns successfully for one direct-tool model and one code-mode model; image threads expose the expected restricted tools and reject the mock's text-only completion (see approved scope correction above).
@@ -302,13 +305,13 @@ pushed on the PR #7 branch. The combined candidate passed the full local matrix
 again; current source and package hashes are in
 [`docs/release-qualification-2.1.4.md`](../../release-qualification-2.1.4.md).
 The earlier no-push/no-PR notes describe the original qualification only.
-Windows access, intended-host validation and production deployment remain pending.
+Windows access and intended-host validation subsequently passed on October 21, including actual code-mode canaries and managed-auth text/image requests. Production deployment and its checks are recorded separately in the qualification record.
 
 ---
 
 ## Follow-ups (not in 2.1.4)
 
 - **Per-user OS isolation.** Separate directories under one account remain a logical boundary. Design options: one service account per WordPress user via `systemd-run --uid`, or a filesystem-confined launcher (bubblewrap / Windows restricted token). Needs its own spec.
-- **Windows sandbox behavior remains an unresolved security qualification.** Disabling the shell tool does not establish confinement of the exposed code-mode `functions.exec` surface. The observational probe runs no model-supplied code and no Windows runtime was validated. Confirm the effective Windows restrictions, process cleanup and absence of unintended host access before relying on this candidate for shared-host generation; do not infer that Linux observations establish Windows safety.
+- **Windows qualification is specific to the tested binary and configuration.** Disabling the shell tool alone does not establish confinement of `functions.exec`. The October 21 intended-host gate added actual execution canaries, deadline/process cleanup checks and authenticated delivery; see the qualification record. The observational probe still executes no model-supplied code. Requalify platform or configuration changes rather than extending these observations into an unconditional OS-isolation guarantee.
 - **Automated re-qualification.** When Codex is bumped, the compatibility smoke plus the probe are the gate; the diagnostics `codex_version` row warns operators in the meantime.
 - **CI.** Resolve the Actions billing lock so the compatibility job runs on every push.
