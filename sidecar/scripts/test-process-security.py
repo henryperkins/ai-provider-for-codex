@@ -118,7 +118,9 @@ class ProcessSecurityTest(unittest.TestCase):
             "HTTPS_PROXY": "https://fixture-credential@proxy.example.test",
             "HTTP_PROXY": "http://proxy.example.test:3128",
             "ALL_PROXY": "socks5://proxy.example.test:1080",
-            "no_proxy": "127.0.0.1,localhost",
+            # Windows os.environ canonicalizes names to uppercase; POSIX keeps
+            # the operator's original spelling.
+            ("NO_PROXY" if os.name == "nt" else "no_proxy"): "127.0.0.1,localhost",
             "HOME": str(self.home),
             "USERPROFILE": str(self.home),
             "CODEX_HOME": str(self.home),

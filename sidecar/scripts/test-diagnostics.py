@@ -236,7 +236,9 @@ class UserConfigOverridesCheckTest(unittest.TestCase):
         self.assertEqual(row["status"], "warn")
         self.assertEqual(
             row["detail"],
-            "<root>/users/3/config.toml, <root>/users/8/hooks.json, <root>/users/9/.env, <root>/users/9/AGENTS.md",
+            ", ".join(str(Path("<root>") / relative) for relative in (
+                "users/3/config.toml", "users/8/hooks.json", "users/9/.env", "users/9/AGENTS.md",
+            )),
         )
 
     def test_lists_at_most_five_paths(self):
