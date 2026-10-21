@@ -33,3 +33,8 @@ does not run model-supplied programs. Confirm the actual Windows restrictions an
 process cleanup before relying on the candidate for shared-host generation.
 
 Publication follows successful qualification and explicit release authorization. A local candidate is not a published release.
+
+Windows intended-host qualification for 2.1.4 completed on October 21, 2026.
+See the latest section of [the qualification record](release-qualification-2.1.4.md)
+for the actual code-mode execution checks, managed-auth text/image results and
+requalified package hash. Production verification remains a separate step.

@@ -382,3 +382,99 @@ deployment remain held at that gate; authorization is recorded, not qualificatio
 Hosted Verify run `39531463727` on the tested revision again failed all five jobs
 with `runner_id: 0` and zero steps. Local evidence does not turn that run green,
 and no required-check bypass or billing change was attempted.
+
+## Windows Host Qualified And Candidate Rebuilt (October 21, 2026)
+
+The operator identified this Windows PC as the intended host and completed a
+fresh device-code sign-in in separate staged storage. The Windows gate passed;
+merge, release and deployment authorization remains in effect. Production
+promotion and its final checks are recorded separately below when completed.
+
+### Source And Requalification
+
+Tested revision: `e80426cdf273fee726df5f53e0886f8edb03e631`. Windows exposed two
+test portability errors: a diagnostic expectation used POSIX path separators,
+and an environment expectation ignored Windows uppercasing `NO_PROXY`. The fixes
+change only those assertions. The first Windows failures are retained; the 38
+affected tests passed after correction, alongside 62 unchanged passing cases
+and five token-usage assertions.
+
+The previous frozen ZIP was invalidated after the test-source edits. A fresh
+eight-configuration matrix passed on WordPress 7.0.7/7.1.3, PHP 7.4.33/8.3.35,
+both with and without AI 1.4.0 plus MCP Adapter 0.7.0. Complete verification,
+PHPStan, locked installs, isolated SDK 1.5.0 contracts, persisted logging,
+Python 3.11.2, Codex compatibility and the offline observational probe passed.
+The first SSH invocation omitted Node from PATH; its exit-127 logs are retained
+outside the corrected run. No candidate defect was inferred from that failure.
+
+Fresh evidence: `/tmp/opencode/codex-214-windows-final-20261021/qualified/`.
+This includes source and package manifests, actual command exit codes, environment
+versions, the matrix, installed-package report and `windows-evidence.zip`.
+
+The new frozen `scriptorium-ai-provider-for-codex-2.1.4.zip` has **48 files**,
+**134,346 bytes**, SHA-256
+`d669531b7fabed583ed7f792f77177dad8362515e4e70fc4b493b30845ac8311`.
+All 48 extracted files are byte-for-byte identical to the Windows-tested ZIP and
+to committed source. A fresh regular-directory installation passed complete
+verification, 11 persisted logging assertions and Plugin Check 2.1.0 with zero
+findings. This new archive supersedes the prior archive for publication.
+
+### Windows Runtime And Security Evidence
+
+The installation is `C:\Users\htper\CodexWpRuntime`. Three limited, interactive
+user-logon scheduled tasks manage the runtime, separate gateway and Cloudflare
+tunnel. Their listeners bind to 127.0.0.1 on ports 4317, 4318 and 4319. Runtime
+configuration and per-user storage remain in this private installation.
+
+Python 3.14.6 and official Codex **0.162.1** were used. The official Windows
+archive digest is `4b17206ed3045de64064b2016627d51fba3bde386d03838312054882a64d781d`.
+All 47 extracted binary/resource files match the installed runtime distribution.
+The installed gateway passed all 14 fixture tests. The exact staged sidecar
+passed 36 compatibility checks and 18 host checks covering startup, bearer and
+loopback rejection, invalid user IDs, cross-user state, configuration overrides,
+effective policy and listener cleanup. The reported system config path is absent.
+
+The four-scenario Windows observational probe passed with synthetic auth and a
+loopback mock. As before, it sends no tool calls. A separate execution probe
+actually invoked code-mode `functions.exec` in text and image threads: the clock
+control succeeded; process/require/fetch/Deno/Bun/XMLHttpRequest/WebSocket were
+unavailable; shell, file, patch and web tools were unavailable; node:fs import
+was rejected. A nonterminating canary hit its two-second deadline in 2.33 seconds,
+with no staged Codex processes remaining. These are concrete restrictions of the
+qualified binary/configuration, not a claim of a separate Windows account or
+general-purpose OS sandbox. The Windows mock was not OS-network-isolated.
+
+### Authenticated Staged Delivery
+
+Fresh staged device login completed without using production auth. The account
+snapshot requested `refreshToken: true`, returned managed ChatGPT authentication,
+eight models and image capability. Exactly one text attempt and one image attempt
+were made. Text returned the expected marker in 4.10 seconds. Real native image
+generation completed in 17.43 seconds and returned a visually checked, valid
+877,642-byte PNG, SHA-256
+`f6fb0ec39d96c93c4703073114b4c99661f1c9fcef76f81511668e5bca9f8cb2`.
+The sanitized report and image are retained; credentials are outside evidence.
+No staged child processes remained afterward.
+
+### Production Baseline And Rollback
+
+Read-only verification found sidecar 2.1.2, active WordPress plugin 2.1.4 and an
+inactive `ai-provider-for-codex` 2.1.3 duplicate. The installed active plugin has
+48 files; five differ from the qualified package. The visible version alone
+therefore did not establish deployed-source identity. WordPress is 7.1.3 and PHP
+is 8.4. The existing SSH key connection was verified without changing credentials.
+
+Before promotion, both plugin directories were archived under the hosting user's
+private `codex-214-release-20261021` directory; the archive SHA-256 is
+`d58ffe0e438e7a12ad0d8549e6fba140e2ab49005793dd15c15c387398d600c2`.
+Original Windows launch/control files and the 2.1.2 package were copied to a
+separate rollback directory. Promotion uses a versioned 2.1.4 directory; rollback
+restores the original launch/control files and restarts the existing runtime
+task. Gateway, tunnel, auth.json, runtime configuration and user storage are
+preserved. The inactive duplicate is retained.
+
+Hosted Verify remains blocked before runner assignment. The observed five-job
+run `39531848815` has runner ID zero and no steps. GitHub reported no required
+checks, no main-branch protection and no applicable branch rules. A normal merge
+can proceed after local and intended-host qualification; no admin merge,
+required-check override, Actions rerun or billing change is authorized or needed.
