@@ -205,9 +205,9 @@ The sidecar owns `${CODEX_WP_STORAGE_ROOT}/users/<id>/` and never writes `config
 - [x] **Step 1:** In `codex_process_environment()`, extend the allowlist to `{"PATH", "PATHEXT", "SYSTEMROOT", "WINDIR", "SSL_CERT_FILE", "SSL_CERT_DIR", "CODEX_CA_CERTIFICATE"}`. These are file paths to public trust anchors, not credentials; proxies stay excluded (proxy URLs can embed credentials and would redirect the user's traffic).
   - **Superseded 2026-10-12 after review:** `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY` and `NO_PROXY` are forwarded after all. Codex 0.162.1 honors them by default and 2.1.3 forwarded the whole environment, so withholding them silently broke proxy-only hosts. See `docs/release-qualification-2.1.4.md`, "Post-Qualification Changes".
 
-- [x] **Step 2:** Tests: add the three variables to the parent environment in `test_app_server_child_receives_only_runtime_paths_and_scoped_homes` and expect them in the child; keep `HTTPS_PROXY`, `OPENAI_API_KEY`, `CODEX_WP_BEARER_TOKEN` and the unclassified credential excluded.
+- [x] **Step 2:** Tests: add the three CA variables and `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY` and `NO_PROXY` (case-insensitive) to the parent environment in `test_app_server_child_receives_only_runtime_paths_and_scoped_homes` and expect them in the child; keep `OPENAI_API_KEY`, `CODEX_WP_BEARER_TOKEN` and the unclassified credential excluded.
 
-- [x] **Step 3:** Document in `config.example.env` (commented lines) and `sidecar/README.md`: "If the host requires a private CA, set `SSL_CERT_FILE` (or `CODEX_CA_CERTIFICATE`) in the sidecar's environment; these are forwarded. Proxy variables are not forwarded; put the sidecar host on a network path that reaches `chatgpt.com` directly."
+- [x] **Step 3:** Document in `config.example.env` (commented lines) and `sidecar/README.md`: "If the host requires a private CA, set `SSL_CERT_FILE` (or `CODEX_CA_CERTIFICATE`) in the sidecar's environment; these are forwarded. `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY` and `NO_PROXY` are also forwarded in any letter case so proxy-only hosts can reach `chatgpt.com`. Treat proxy configuration, including any embedded credentials, as operator-owned."
 
 ---
 
@@ -235,7 +235,7 @@ If this task grows beyond a focused change, ship 2.1.4 without it and move it to
 - Create: `docs/release-qualification-2.1.4.md`
 
 - [x] **Step 1: `sidecar/HOW-IT-WORKS.md` and `sidecar/README.md`** — replace the candidate's paragraphs with an accurate statement of the three layers:
-  1. Process environment: the exact passthrough set (Task 5); no secrets, no proxy settings.
+   1. Process environment: the exact passthrough set (Task 5), including operator-owned proxy settings and CA trust paths; provider keys, sidecar bearer tokens and database credentials stay excluded.
   2. Process features: `codex app-server --disable apps --disable plugins`; why each matters; `--disable` fails closed.
   3. Thread policy: approval `never`, sandbox `read-only`, `environments: []`, disabled tool features, `web_search` disabled, native image generation only on image threads; the sidecar refuses the turn if `thread/start` does not echo the policy.
   Then the boundary statement: model tools cannot read host files or run commands, **but** anything defined in Codex configuration on the host (MCP servers, hooks) runs as a host process; keep the sidecar host free of such configuration. Per-user directories under one OS account are not an OS boundary.

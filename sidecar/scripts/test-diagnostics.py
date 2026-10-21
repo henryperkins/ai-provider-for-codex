@@ -357,9 +357,10 @@ class GenerationPolicyCheckTest(unittest.TestCase):
         self.assertIn("timed out", row["detail"])
 
     def test_diagnostic_limits_fit_the_wordpress_request_timeout(self):
-        # codex --version (5 s) + handshake + policy probe must finish inside
-        # Runtime\Client::DEFAULT_TIMEOUT (20 s) on the WordPress side.
-        self.assertLess(5 + main.DIAGNOSTIC_HANDSHAKE_TIMEOUT + main.DIAGNOSTIC_POLICY_TIMEOUT, 20)
+        # close() can wait two seconds after terminate and two after kill.
+        # Include both waits, not just the successful-probe budgets, inside
+        # Runtime\Client::DIAGNOSTICS_TIMEOUT (30 s). PHP regressions pin it.
+        self.assertLess(5 + main.DIAGNOSTIC_HANDSHAKE_TIMEOUT + main.DIAGNOSTIC_POLICY_TIMEOUT + 4, 30)
 
 
 if __name__ == "__main__":

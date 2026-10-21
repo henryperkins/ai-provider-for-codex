@@ -157,15 +157,23 @@ def nested_code_mode_tools(body: dict) -> list[str]:
     return sorted(names)
 
 
-def observed_request(body: dict) -> dict:
+def model_request_metadata(body: dict) -> dict:
     # Save the offered specs and routing data, not auth headers or full prompt
-    # histories. Everything here comes from synthetic probe requests.
+    # histories. Keep them even if a malformed tool prevents name extraction.
+    items = body.get("input")
+    items = items if isinstance(items, list) else []
     return {
         "model": body.get("model"),
         "tools": body.get("tools") or [],
-        "additional_tools": [item for item in body.get("input") or []
+        "additional_tools": [item for item in items
                              if isinstance(item, dict) and item.get("type") == "additional_tools"],
-        "input_types": [item.get("type") for item in body.get("input") or [] if isinstance(item, dict)],
+        "input_types": [item.get("type") for item in items if isinstance(item, dict)],
+    }
+
+
+def observed_request(body: dict) -> dict:
+    return {
+        **model_request_metadata(body),
         "tool_names": tool_names(body),
         "code_mode_nested_tools": nested_code_mode_tools(body),
     }
@@ -188,10 +196,17 @@ class MockBackend(http.server.BaseHTTPRequestHandler):
             "path": self.path,
             "upgrade": self.headers.get("upgrade"),
             "content_encoding": self.headers.get("content-encoding"),
-            "model_request": observed_request(body) if isinstance(body, dict) and "input" in body else None,
+            "model_request": None,
+            "model_request_error": None,
             "invalid_json": isinstance(body, dict) and body.get("parse_error") is True,
             "status": None,
         }
+        if isinstance(body, dict) and "input" in body:
+            try:
+                entry["model_request"] = observed_request(body)
+            except (ValueError, TypeError, AttributeError) as error:
+                entry["model_request"] = model_request_metadata(body)
+                entry["model_request_error"] = f"{type(error).__name__}: {error}"
         self.entry = entry
         with LOCK:
             STATE["requests"].append(entry)
@@ -403,6 +418,8 @@ def check_scenario(report: dict) -> list[str]:
         failures.append(f"contacted Apps/Plugins endpoints: {report['forbidden_traffic']}")
     for req in report["backend_requests"]:
         path = req["path"].split("?")[0]
+        if req.get("model_request_error"):
+            failures.append(f"could not inspect model request: {req['model_request_error']}")
         if path not in EXPECTED_PATHS:
             failures.append(f"unexpected backend endpoint: {req['method']} {path}")
         if req.get("invalid_json") or req.get("content_encoding") not in (None, "identity"):

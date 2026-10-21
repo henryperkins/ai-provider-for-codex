@@ -240,3 +240,63 @@ until that host runs the 2.1.4 sidecar.
 
 Still not performed: Windows sidecar validation and authenticated text/image
 generation.
+
+## Local Review Follow-Up (October 21, 2026)
+
+Resumed from `f1afcd2d81d9f4000bfd35bc80ed3d2e2fa81bf6` with local,
+uncommitted review fixes. Evidence is retained under
+`/tmp/opencode/codex-214-resume-20261021/`, including the candidate patch,
+source hashes, command logs/exit codes, tool and container versions, and probe
+reports. This is a revised local candidate, not a publication or production update.
+
+- Diagnostics now uses a 30-second WordPress HTTP budget. The CLI version,
+  handshake and policy checks can consume 19 seconds, and child cleanup can add
+  four more. The previous 20-second budget could hide the policy failure behind
+  a transport timeout. Other control requests remain at 20 seconds, generation
+  remains at 360 seconds, and explicit SDK timeouts still take precedence.
+- Malformed tool specs no longer drop the mock's request record or response.
+  Offered specs and parsing errors are retained and explicitly fail qualification.
+  A new Docker-free regression suite covers both direct and additional-tool
+  specs and runs in `scripts/verify.sh`. These regressions and the diagnostic
+  timeout assertion failed before their fixes and passed afterward.
+- The submission checklist now names the 2.1.4 candidate. The remediation plan's
+  test and documentation steps now consistently describe proxy forwarding.
+  The stderr-cleanup review comments did not require a production change:
+  `_stderr_loop()` already closes the stream in `finally`, and the six process
+  security tests passed with `ResourceWarning` promoted to an error.
+
+Fresh verification passed on disposable WordPress 7.1.3 / PHP 8.4.26 / Core SDK
+1.3.1, both without and with AI 1.4.0 + MCP Adapter 0.7.0, using MySQL 8.4.11.
+The complete `scripts/verify.sh`, strict Composer validation, locked dependency
+dry-run and PHPStan passed. Persisted logging passed all 11 assertions with four
+intercepted requests and zero live runtime requests. All inert Python suites also
+passed on Python 3.11.2 in a network-disabled container. Core and the installed
+AI/MCP/Plugin Check plugins passed official checksum verification. The older
+PHP and WordPress matrix legs documented above were not rerun in this follow-up.
+
+Official checksum-verified Codex 0.162.1 passed all 36 compatibility checks and
+the four-scenario observational tool-surface probe in network-disabled containers.
+The observed surfaces match the table above. Codex 0.163.0 separately passed the
+36-check credential-free host smoke; it has not received full qualification or
+the tool-surface probe, and the qualified pin remains 0.162.1.
+
+A temporary combined tree of PRs #6 and #7 had one adjacent-insertion conflict
+in `scripts/test-runtime-client.php`. Keeping both test blocks and including the
+30-second diagnostics fix passed the complete verification script, including
+165 runtime-client assertions. Neither branch nor `main` was merged or pushed.
+
+The rebuilt local ZIP contains **48 files**, **132,861 bytes**, SHA-256
+`8cb2536eb47e97c4d397dd57643026a13b3021cf40d3b3c57c14bca99952c3a4`.
+Every file matches the working tree and its regular-directory installation on
+the disposable site; there are no duplicate ZIP entries. The installed ZIP
+passed integration, the 11 persisted logging assertions and Plugin Check 2.1.0
+with no findings. The source check had only the excluded `.github` warning.
+This ZIP supersedes the October 13 package **for local candidate testing only**;
+it was not installed on production.
+
+Still pending: Windows sidecar validation, current production-runtime verification,
+real account login/refresh and authorized text/image generation, the remaining
+release matrix, and explicit merge/release/deployment authorization. No billable
+generation, production restart, public release or production plugin removal
+was performed. GitHub Verify remains blocked before runner assignment; all five
+jobs in run `38334462161` have `runner_id: 0` and no executable steps.

@@ -131,6 +131,10 @@ if ( $caught instanceof $exception_class ) {
 }
 
 $codex_reply = array( 'body' => '{"outputText":"fixture"}', 'response' => array( 'code' => 200, 'message' => 'OK' ) );
+$client->diagnostics();
+$codex_assert( 30 === $codex_last_args['timeout'], 'diagnostics: timeout includes CLI, handshake, policy probe, and child cleanup headroom' );
+$client->get( '/v1/account/snapshot' );
+$codex_assert( 20 === $codex_last_args['timeout'], 'options: other control-plane requests keep the existing timeout' );
 $client->post( '/v1/responses/text', array() );
 $codex_assert( 360 === $codex_last_args['timeout'], 'options: unspecified generation timeout retains the existing default' );
 $options = new WordPress\AiClient\Providers\Http\DTO\RequestOptions();
@@ -139,6 +143,8 @@ $options->setMaxRedirects( 0 );
 $client->post( '/v1/responses/text', array(), $options );
 $codex_assert( 7.25 === $codex_last_args['timeout'], 'options: explicit SDK timeout preserves fractional seconds' );
 $codex_assert( 0 === ( $codex_last_args['redirection'] ?? null ), 'options: explicit SDK redirect prohibition reaches WordPress HTTP' );
+$client->request( 'GET', '/v1/diagnostics', array(), array(), false, $options );
+$codex_assert( 7.25 === $codex_last_args['timeout'], 'diagnostics: an explicit SDK timeout still overrides the diagnostic default' );
 $options->setTimeout( 0.0 );
 $options->setMaxRedirects( 2 );
 $client->post( '/v1/responses/image', array(), $options );

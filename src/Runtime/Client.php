@@ -29,6 +29,12 @@ final class Client {
 	private const DEFAULT_TIMEOUT = 20;
 
 	/**
+	 * Diagnostics include CLI version, handshake, policy probe, and child cleanup
+	 * (5 + 10 + 4 + up to 4 seconds), plus response/transport headroom.
+	 */
+	private const DIAGNOSTICS_TIMEOUT = 30;
+
+	/**
 	 * Text generation requests can block while Codex waits for a turn.
 	 */
 	private const TEXT_GENERATION_TIMEOUT = 360;
@@ -229,6 +235,9 @@ final class Client {
 		$timeout = 0 === strpos( $path, '/v1/responses/' )
 			? self::TEXT_GENERATION_TIMEOUT
 			: self::DEFAULT_TIMEOUT;
+		if ( '/v1/diagnostics' === $path ) {
+			$timeout = self::DIAGNOSTICS_TIMEOUT;
+		}
 
 		/**
 		 * Filters the timeout used for runtime HTTP requests.

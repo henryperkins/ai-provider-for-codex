@@ -30,8 +30,9 @@ TURN_TIMEOUT = float(os.environ.get("CODEX_RUNTIME_TURN_TIMEOUT", "300"))
 LOGIN_TIMEOUT = float(os.environ.get("CODEX_RUNTIME_LOGIN_TIMEOUT", "1800"))
 DIAGNOSTIC_HANDSHAKE_TIMEOUT = 10.0
 # Total budget for the diagnostics policy probe (thread/start plus the feature
-# list). Together with the version and handshake limits it stays inside the
-# WordPress control-plane timeout for the diagnostics request.
+# list). The WordPress diagnostics request allows 30 seconds for the version
+# check, handshake and policy probe, including up to four seconds of child
+# cleanup and response/transport headroom. Other control requests use 20 seconds.
 DIAGNOSTIC_POLICY_TIMEOUT = 4.0
 # How much of a Codex child's stderr the session keeps for error messages. Codex
 # explains launch failures there, such as an unknown `--disable` feature name,

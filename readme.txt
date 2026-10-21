@@ -135,6 +135,7 @@ Support is limited to documented, self-managed environments that can run the loc
 = 2.1.4 =
 * Harden sidecar generation sessions: minimal child-process environment, explicit approval/sandbox/tool policies, ChatGPT Apps and account-synced Plugins disabled for sidecar-owned Codex processes.
 * Refuse generation when Codex does not confirm the requested policy; new diagnostics rows for Codex version qualification, policy enforcement, and per-user configuration overrides.
+* Allow diagnostics 30 seconds so policy failures can be reported after Codex process cleanup; other control requests retain their 20-second timeout.
 * Forward CA bundle and proxy variables (HTTP_PROXY, HTTPS_PROXY, ALL_PROXY, NO_PROXY) to Codex; apply the turn timeout as a wall-clock limit.
 * Require the qualified Codex CLI release (0.162.1): other releases can be refused when the app-server launches or when a generation thread starts, and launch errors now include Codex's own error output.
 * Stop a Codex process that was started for device-code login when the app-server fails to start or the login request fails.

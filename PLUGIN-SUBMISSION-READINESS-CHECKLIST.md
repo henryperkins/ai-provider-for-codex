@@ -5,11 +5,11 @@ This checklist is specific to `scriptorium-ai-provider-for-codex`.
 Use it before submitting a zip to the WordPress.org plugin directory and again before publishing the first approved SVN release.
 
 Last reviewed: 2026-07-02
-Version and requirement references refreshed: 2026-09-21
+Version and requirement references refreshed: 2026-10-21
 
 ## Current Status Summary
 
-- `[pass]` Header version and readme stable tag currently match: `2.1.3`
+- `[pass]` Header version and readme stable tag currently match: `2.1.4` (unreleased candidate; qualification and deployment limits are recorded in [`docs/release-qualification-2.1.4.md`](./docs/release-qualification-2.1.4.md))
 - `[pass]` `Requires at least` and `Requires PHP` are aligned between the main plugin file and `readme.txt`
 - `[pass]` Local verification script currently passes
 - `[pass]` Plugin Check has been run locally against the release-style file set and currently reports no findings
@@ -57,8 +57,8 @@ Repo notes:
 
 Repo notes:
 
-- `Version: 2.1.3` in [`scriptorium-ai-provider-for-codex.php`](./scriptorium-ai-provider-for-codex.php)
-- `Stable tag: 2.1.3` in [`readme.txt`](./readme.txt)
+- `Version: 2.1.4` in [`scriptorium-ai-provider-for-codex.php`](./scriptorium-ai-provider-for-codex.php)
+- `Stable tag: 2.1.4` in [`readme.txt`](./readme.txt)
 - `Text Domain: scriptorium-ai-provider-for-codex` in [`scriptorium-ai-provider-for-codex.php`](./scriptorium-ai-provider-for-codex.php)
 - `Requires at least: 7.0` in [`scriptorium-ai-provider-for-codex.php`](./scriptorium-ai-provider-for-codex.php)
 - `Requires PHP: 7.4` in [`scriptorium-ai-provider-for-codex.php`](./scriptorium-ai-provider-for-codex.php)

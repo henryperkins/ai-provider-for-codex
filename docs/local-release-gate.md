@@ -11,7 +11,7 @@ GitHub Actions and billing resolution are outside this repository's release qual
 | MCP Adapter | 0.7.0 | 54ed266a8c46b71fdb8e5b8a7d35668f90fb8994 |
 | Codex CLI | 0.162.1 | 092d3acd6bec3e3a14bdc7e7a2810ab628ab759d |
 
-Codex 0.163.0-alpha.5 is preview coverage only. Recheck available upstream releases before the next qualification; these pins describe an audited baseline rather than a permanent latest-version claim.
+Codex 0.163.0 passed the credential-free startup/protocol smoke on October 21, 2026, but has not received full release qualification or the tool-surface probe. The qualified pin remains 0.162.1. Recheck available upstream releases before the next qualification; these pins describe an audited baseline rather than a permanent latest-version claim.
 
 ## Local checks
 

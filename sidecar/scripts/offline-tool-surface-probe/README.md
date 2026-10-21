@@ -86,6 +86,13 @@ Outputs are `probe-report.json` (observations and assertions) and
 `probe-summary.md` (qualification table). Auth headers are not logged. Exit 1
 means an assertion failed; retain that evidence when investigating.
 
+Malformed tool specs retain the offered specs and an explicit observation error
+in the report while the mock still completes its response. Any such error fails
+qualification. The credential-free handler/checker regressions run as part of
+`scripts/verify.sh`, or separately with
+`python3 sidecar/scripts/test-tool-surface-probe.py`; they do not require Docker
+or the external Codex/model inputs.
+
 ## Mock Setup Details
 
 - Workspace routing requires **HTTPS**; a plain HTTP mock does not follow the
