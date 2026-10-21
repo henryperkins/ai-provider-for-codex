@@ -482,30 +482,34 @@ required-check override, Actions rerun or billing change is authorized or needed
 ## Final Diagnostics Review And Release Artifact (October 21, 2026)
 
 A review arriving before merge reproduced a false diagnostic success for HTTP
-200 JSON such as `{"ok":true}` from an unrelated service. Revision `ee36149b812165bdc3a88791065220781a8bfdae`
-now validates the sidecar service/version, typed and unique check records,
-required checks and a consistent boolean aggregate before reporting success.
-Genuine CLI or handshake failures may omit their dependent checks and still
-retain their actionable rows. Malformed JSON no longer proves sidecar identity.
-The regressions failed before the fix and now pass **218 runtime-client
-assertions** on PHP 7.4 and 8.3; existing WordPress fixtures now use complete
-wire responses.
+200 JSON such as `{"ok":true}` from an unrelated service. The final tested
+revision `234cdd0962f4ed6177b52f0204ec265a14b01917` validates the sidecar service/version, typed and unique check
+records, required checks and a consistent boolean aggregate before reporting
+success. Genuine CLI or handshake failures may omit dependent checks and still
+retain actionable rows. Impossible dependent results after a failed prerequisite
+are rejected. Malformed JSON no longer proves sidecar identity.
 
-This shipping change invalidated the preceding frozen archive. A fresh full
+The original false-success regressions and four dependency regressions failed
+before their fixes. The final suite passes **230 runtime-client assertions**
+on PHP 7.4 and 8.3. WordPress integration fixtures now use complete wire responses.
+The intermediate fix and its requalification remain separately recorded under
+`/tmp/opencode/codex-214-diagnostics-final-20261021/`.
+
+These shipping changes invalidated the preceding frozen archives. A fresh full
 matrix passed all eight configurations, together with PHPStan, locked installs,
 isolated SDK 1.5.0, persisted logging, Python 3.11.2, 36 compatibility checks and
 the network-isolated observational probe. The rebuilt ZIP passed a fresh
 regular-directory install, complete verification, 11 persisted logging assertions
-and Plugin Check 2.1.0 with zero findings. Evidence is retained under
-`/tmp/opencode/codex-214-diagnostics-final-20261021/`.
+and Plugin Check 2.1.0 with zero findings. Final evidence is retained under
+`/tmp/opencode/codex-214-qualified-20261021/`.
 
-The final artifact is **48 files**, **134,872 bytes**, SHA-256
-`3e9d4474df28052d6874230043f18f9ffdddc32f4726c22a8b419d08c8027af4`. All files match the tested revision. Relative to the
+The final artifact is **48 files**, **134,902 bytes**, SHA-256
+`9b85178eedf590a27abe236ce82b9fe5556af130d2956b0c01118677ec810a6d`. All files match the tested revision. Relative to the
 Windows-authenticated package, only `src/REST/DiagnosticsController.php` changed;
-the sidecar and Codex binaries are identical. The new exact ZIP also passed all
+the sidecar and Codex binaries are identical. The final exact ZIP also passed all
 18 Windows host checks again in fresh synthetic storage. Existing code-mode,
-managed-auth and real text/image evidence therefore remains tied to identical
-runtime bytes, without repeating billable staged requests.
+managed-auth and real text/image evidence remains tied to identical runtime
+bytes, without repeating billable staged requests.
 
 All earlier 2.1.4 candidate archive hashes are superseded for publication.
 Production remains at the recorded baseline until the approved promotion.
